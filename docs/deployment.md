@@ -74,6 +74,24 @@ algum dia isso mudar, o pub/sub do Redis já é a peça que permitiria
 múltiplas instâncias do backend compartilhando broadcast — não precisa de
 mudança de arquitetura, só de compose.
 
+### O domínio é `.app` — o que isso muda
+
+`.app` está na **lista de HSTS preload** embutida nos navegadores: eles se
+recusam a falar HTTP com o domínio, antes mesmo de qualquer resposta do
+servidor. Consequências práticas:
+
+- **TLS válido é pré-requisito, não polimento.** Sem certificado o site
+  simplesmente não abre — não existe "acessa por http enquanto configuro".
+  O Traefik com Let's Encrypt resolve, mas o DNS precisa estar apontando
+  antes, senão o desafio ACME falha.
+- Os routers de porta 80 no override existem só para clientes que não
+  aplicam preload (curl, links antigos): redirecionam pra https.
+- O `Strict-Transport-Security` que já mandamos (`rolai-headers`) continua
+  valendo pra subdomínios — `api.rolai.app` incluído.
+
+DNS: dois registros A (ou CNAME) apontando pro VPS — `rolai.app` e
+`api.rolai.app`.
+
 ## Deploy na Hostinger (imagens do GHCR)
 
 O CI publica as imagens a cada push no `main` e a cada tag

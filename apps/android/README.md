@@ -140,3 +140,24 @@ app/src/main/assets/headless/
   rolai-headless.js     GERADO (npm run build:headless) — não editar
   systems.json          GERADO — fonte do seletor de sistema
 ```
+
+## TWA em tela cheia exige keystore fixo
+
+O `assetlinks.json` (em `apps/web/public/.well-known/`) precisa do SHA-256 da
+chave que assinou o APK. O APK publicado nas Releases é **debug**, e o CI
+assina com uma chave de debug gerada na hora — **fingerprint efêmero, muda a
+cada build**, então não dá pra registrar no assetlinks e a TWA abre com a
+barra de URL visível.
+
+Pra tela cheia, mesmo sem Play Store, é preciso uma chave estável:
+
+```bash
+keytool -genkey -v -keystore rolai.jks -alias rolai \
+  -keyalg RSA -keysize 2048 -validity 10000
+keytool -list -v -keystore rolai.jks -alias rolai | grep SHA256   # vai pro assetlinks
+base64 -i rolai.jks | pbcopy                                       # vira secret no CI
+```
+
+Depois: `signingConfig` lendo senha/alias de env, os secrets no GitHub
+(`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`)
+e `assembleRelease` no workflow. **A chave nunca entra no repositório.**
