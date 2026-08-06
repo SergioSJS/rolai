@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
@@ -100,6 +101,10 @@ class OverlayService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_RELOAD && overlayAttached) {
+            applySettings()
+            return START_STICKY
+        }
         // START_STICKY: se o sistema matar o processo, o overlay volta
         // quando houver recurso — foi o usuario que pediu o botao.
         return START_STICKY
@@ -192,6 +197,36 @@ class OverlayService : Service() {
         viewAttached = true
     }
 
+    /**
+     * Reaplica a config sem o usuario ter que desligar e religar o botao.
+     *
+     * A aparencia do dado, a sala e a escala viram parametros na URL do
+     * palco, montada uma unica vez no `attach` — mudar a preferencia nao
+     * mexia em nada ate o servico renascer. Aqui o palco e remontado com a
+     * URL nova e a sala reconecta (o `style` do handshake tambem mudou).
+     */
+    private fun applySettings() {
+        val settings = RolaiSettings.load(this)
+        diceStage.detach()
+        diceStage.attach(
+            windowManager,
+            settings.webBaseUrl,
+            settings.roomCode,
+            settings.dicePreset,
+            settings.diceScalePercent,
+            settings.quality,
+            settings,
+        )
+        overlay.setQuickNotation(settings.notation)
+        roomClient?.disconnect()
+        roomClient = null
+        if (RolaiSettings.hasRoom(settings)) {
+            connectRoom(settings)
+        } else {
+            overlay.setStatus(getString(R.string.status_disconnected))
+        }
+    }
+
     // ---------- sala (WebSocket) ----------
 
     private fun connectRoom(settings: RolaiSettings) {
@@ -199,6 +234,7 @@ class OverlayService : Service() {
             settings.wsBaseUrl,
             settings.roomCode,
             settings.playerName,
+            settings,
         )
         overlay.setStatus(getString(R.string.status_connecting))
         roomClient = RoomClient(roomListener).also { it.connect(url) }
@@ -297,6 +333,19 @@ class OverlayService : Service() {
     companion object {
         const val ACTION_START = "app.meioorc.rolai.action.START"
         const val ACTION_STOP = "app.meioorc.rolai.action.STOP"
+
+        /** Config mudou: remonta palco e sala sem religar o botao. */
+        const val ACTION_RELOAD = "app.meioorc.rolai.action.RELOAD"
+
+        /** Avisa o servico, se estiver de pe. Sem overlay ativo, nao faz nada. */
+        fun notifySettingsChanged(context: Context) {
+            if (!RolaiSettings.isOverlayEnabled(context)) return
+            runCatching {
+                context.startService(
+                    Intent(context, OverlayService::class.java).setAction(ACTION_RELOAD),
+                )
+            }
+        }
         private const val CHANNEL_ID = "overlay"
 
         /**

@@ -16,6 +16,7 @@ import android.widget.EditText
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 
 /**
@@ -67,6 +68,7 @@ class SettingsActivity : Activity() {
 
         switchOverlay = findViewById(R.id.switch_overlay)
         editRoomCode = findViewById(R.id.edit_room_code)
+        findViewById<Button>(R.id.button_create_room).setOnClickListener(::createRoom)
         editName = findViewById(R.id.edit_name)
         editNotation = findViewById(R.id.edit_notation)
         spinnerSystem = findViewById(R.id.spinner_system)
@@ -297,6 +299,35 @@ class SettingsActivity : Activity() {
         setSwitchChecked(RolaiSettings.isOverlayEnabled(this))
     }
 
+    /**
+     * Cria a sala no backend e joga o codigo no campo. Sem isto o app so
+     * conseguia ENTRAR numa sala criada na web — comecar uma mesa exigia um
+     * navegador aberto.
+     */
+    private fun createRoom(button: android.view.View) {
+        val server = editServer.text.toString().trim()
+        val wsBase = if (RolaiSettings.isValidWsBaseUrl(server)) server
+        else RolaiSettings.DEFAULT_WS_BASE_URL
+        button.isEnabled = false
+        Toast.makeText(this, R.string.create_room_working, Toast.LENGTH_SHORT).show()
+        RoomCreator.create(
+            wsBase,
+            onSuccess = { code ->
+                button.isEnabled = true
+                editRoomCode.setText(code)
+                saveFromViews()
+            },
+            onError = { message ->
+                button.isEnabled = true
+                Toast.makeText(
+                    this,
+                    getString(R.string.create_room_failed, message),
+                    Toast.LENGTH_LONG,
+                ).show()
+            },
+        )
+    }
+
     private fun saveFromViews() {
         val position = spinnerSystem.selectedItemPosition.coerceIn(0, systemIds.size - 1)
         val server = editServer.text.toString().trim()
@@ -335,6 +366,10 @@ class SettingsActivity : Activity() {
                 ],
             ),
         )
+        // Toda mudanca vale na hora: sem isto so tinha efeito depois de
+        // desligar e religar o botao flutuante, porque a URL do palco e o
+        // handshake da sala sao montados no start do servico.
+        OverlayService.notifySettingsChanged(this)
     }
 
     // ---------- seletor de sistema ----------

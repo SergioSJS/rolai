@@ -127,6 +127,20 @@ data class RolaiSettings(
         // Sala e opcional: sem codigo valido o overlay rola so local.
         fun hasRoom(settings: RolaiSettings): Boolean = isValidRoomCode(settings.roomCode)
 
+        /**
+         * Base HTTP derivada da base WS — o REST (criar sala) e o WS moram
+         * no mesmo host. Uma config so pro usuario: quem troca o servidor
+         * troca um campo, nao dois.
+         */
+        fun httpBaseUrl(wsBaseUrl: String): String {
+            val base = wsBaseUrl.trimEnd('/')
+            return when {
+                base.startsWith("wss://") -> "https://" + base.removePrefix("wss://")
+                base.startsWith("ws://") -> "http://" + base.removePrefix("ws://")
+                else -> base
+            }
+        }
+
         fun load(context: Context): RolaiSettings {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             return RolaiSettings(

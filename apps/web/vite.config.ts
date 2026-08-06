@@ -17,7 +17,10 @@ export default defineConfig({
       // do workbox nao cobre. Sem sala obviamente nao ha (rede e so relay).
       includeAssets: ["texture-felt.png"],
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,webp,webmanifest}"],
+        // mp3 entra: a lib faz `throw` no initialize() se um arquivo de som
+        // faltar. Sem precache, o app offline perderia o renderer inteiro —
+        // nao so o audio.
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webp,webmanifest,mp3}"],
         // config.js e resolvido em RUNTIME pelo container (entrypoint le as
         // envs); precachear congelaria a URL do backend do build.
         globIgnores: ["**/config.js"],

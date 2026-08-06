@@ -217,7 +217,11 @@ export class DiceBoxRenderer implements RollRenderer {
       assetPath: "./",
       shadows: this.options.shadows,
       light_intensity: this.options.lightIntensity,
-      sounds: false,
+      // Os mp3 vivem em public/sounds (copiados do pacote, igual as
+      // texturas). CUIDADO: com `sounds: true` a lib faz `throw` no
+      // initialize() se qualquer arquivo faltar — sem os assets no lugar,
+      // ligar isto derruba o renderer inteiro, nao so o audio.
+      sounds: true,
       baseScale: Math.round(100 * this.options.scale),
       theme_customColorset: toColorset(this.options.style),
     }));
@@ -241,8 +245,17 @@ export class DiceBoxRenderer implements RollRenderer {
     // antes de criar os dados, pra mesa toda ver o dado de quem rolou.
     const wanted = style ?? this.options.style;
     if (JSON.stringify(wanted) !== JSON.stringify(this.currentStyle)) {
-      await this.box.updateConfig({ theme_customColorset: toColorset(wanted) });
-      this.currentStyle = wanted;
+      // Trocar a cor NAO pode custar a animacao. Antes, uma falha aqui subia
+      // pro catch de quem chamou e a rolagem inteira sumia — e so acontecia
+      // com rolagem de OUTRO jogador (a propria nao troca o colorset), com
+      // cara de "so aparece o meu dado". Dado na cor errada e muito melhor
+      // que dado nenhum.
+      try {
+        await this.box.updateConfig({ theme_customColorset: toColorset(wanted) });
+        this.currentStyle = wanted;
+      } catch (err) {
+        console.warn("troca de estilo falhou, rolando com a cor atual:", err);
+      }
     }
     await this.box.roll(buildBoxNotation(dice));
   }

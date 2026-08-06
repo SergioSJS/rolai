@@ -158,11 +158,23 @@ class RoomClient(private val listener: Listener) {
         const val ERROR_ROOM_NOT_FOUND = "room_not_found"
 
         /**
-         * Monta a URL do handshake: {base}/rooms/{code}?name={apelido}.
-         * `style` e `spectator` ficam de fora de proposito — o overlay e
-         * jogador (rola) e nao tem aparencia de dado propria (tier texto).
+         * Monta a URL do handshake:
+         * `{base}/rooms/{code}?name={apelido}[&style={json}]`.
+         *
+         * O `style` e a aparencia de dado DESTE aparelho. O backend guarda
+         * por conexao e manda junto de cada rolagem, pra mesa inteira ver o
+         * dado de quem rolou com a cor de quem rolou. Sem ele o backend
+         * registra `style: null` e os outros clientes animam a nossa rolagem
+         * com a cor DELES — era o que acontecia.
+         *
+         * `spectator` continua de fora: o overlay e jogador, ele rola.
          */
-        fun buildHandshakeUrl(wsBaseUrl: String, roomCode: String, playerName: String): String {
+        fun buildHandshakeUrl(
+            wsBaseUrl: String,
+            roomCode: String,
+            playerName: String,
+            style: RolaiSettings? = null,
+        ): String {
             require(RolaiSettings.isValidRoomCode(roomCode)) {
                 "codigo de sala invalido: $roomCode"
             }
@@ -170,7 +182,30 @@ class RoomClient(private val listener: Listener) {
                 "URL de WS invalida: $wsBaseUrl"
             }
             val name = URLEncoder.encode(RolaiSettings.sanitizeName(playerName), "UTF-8")
-            return "${wsBaseUrl.trimEnd('/')}/rooms/$roomCode?name=$name"
+            val styleParam = style?.let {
+                "&style=" + URLEncoder.encode(styleJson(it), "UTF-8")
+            } ?: ""
+            return "${wsBaseUrl.trimEnd('/')}/rooms/$roomCode?name=$name$styleParam"
+        }
+
+        /**
+         * Formato do `DiceStyle` do backend (services/backend/app/schemas.py):
+         * as tres cores em `#rrggbb`, textura e material em minusculo. O
+         * backend valida com `extra="forbid"` — campo a mais derruba o
+         * handshake, entao o formato aqui e exatamente esse.
+         */
+        fun styleJson(settings: RolaiSettings): String =
+            JSONObject()
+                .put("body", hex(settings.diceBody))
+                .put("number", hex(settings.diceNumber))
+                .put("outline", hex(settings.diceOutline))
+                .put("texture", settings.diceTexture.lowercase())
+                .put("material", settings.diceMaterial.lowercase())
+                .toString()
+
+        private fun hex(color: String): String {
+            val bare = color.removePrefix("#").lowercase()
+            return "#$bare"
         }
 
         private fun parseRosterNames(message: JSONObject): List<String> {

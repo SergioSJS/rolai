@@ -16,8 +16,8 @@ android {
         applicationId = "app.meioorc.rolai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -113,6 +113,10 @@ dependencies {
 
     // Testes JVM locais (logica pura: backoff, validacao, URL do WS).
     testImplementation("junit:junit:4.13.2")
+    // org.json no android.jar e stub: com isReturnDefaultValues=true todo
+    // metodo devolve null, e `JSONObject().put(...)` encadeado estoura NPE.
+    // Esta e a implementacao de verdade, so no classpath de teste.
+    testImplementation("org.json:json:20240303")
 
     // Testes instrumentados (specs/04-android-overlay.md). NAO rodam sem
     // SDK/emulador — ver apps/android/README.md.

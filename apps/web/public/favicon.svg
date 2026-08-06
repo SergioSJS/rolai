@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <!-- Mesmo desenho do icone do APK (apps/android/.../ic_launcher_*.xml):
+       fundo com gradiente radial da marca + d20 branco. Portado a mao — o
+       pathData do VectorDrawable usa a mesma sintaxe do `d` do SVG. -->
+  <defs>
+    <radialGradient id="bg" cx="54" cy="30" r="78" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1D9E75"/>
+      <stop offset="1" stop-color="#0D2B22"/>
+    </radialGradient>
+  </defs>
+  <rect width="108" height="108" rx="24" fill="#0D1013"/>
+  <rect width="108" height="108" rx="24" fill="url(#bg)"/>
+  <g transform="translate(22.8 22.8) scale(2.6)">
+    <path fill="#FFFFFF" d="M12,1.4 L22,7.1 L22,16.9 L12,22.6 L2,16.9 L2,7.1 Z"/>
+    <path fill="#0C3527" fill-opacity="0.55" d="M12,5.6 L17.3,16.1 L6.7,16.1 Z"/>
+    <path fill="#0C3527" fill-opacity="0.3" d="M2,7.1 L6.7,16.1 L2,16.9 Z M22,7.1 L17.3,16.1 L22,16.9 Z M12,1.4 L17.3,16.1 L12,5.6 Z"/>
+  </g>
+</svg>

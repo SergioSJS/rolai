@@ -10,6 +10,9 @@
 
     <string name="room_code_label">Código da sala (opcional)</string>
     <string name="room_code_hint">ex: a1B2-c3D</string>
+    <string name="create_room">Criar</string>
+    <string name="create_room_working">criando sala…</string>
+    <string name="create_room_failed">nao deu pra criar a sala: %1$s</string>
     <string name="name_label">Apelido</string>
     <string name="notation_label">Rolagem rápida do botão</string>
     <string name="system_label">Sistema de regras</string>

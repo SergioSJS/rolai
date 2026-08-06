@@ -156,6 +156,21 @@ describe("texturas dos dados", () => {
     }
   });
 
+  // Som e mais critico que textura: textura que falta vira 404 silencioso,
+  // mas com `sounds: true` a lib faz `throw` no initialize() se um mp3
+  // faltar — derruba o renderer inteiro, nao so o audio. A lib pede
+  // `sounds/dicehit/dicehit_<material><n>.mp3` e `sounds/surfaces/...`.
+  it("os sons da lib estao em public/sounds", () => {
+    expect(existsSync("public/sounds/dicehit"), "public/sounds/dicehit sumiu").toBe(true);
+    expect(existsSync("public/sounds/surfaces"), "public/sounds/surfaces sumiu").toBe(true);
+    for (const material of ["plastic", "metal", "wood", "coin"]) {
+      expect(
+        existsSync(`public/sounds/dicehit/dicehit_${material}1.mp3`),
+        `sem som pro material "${material}"`,
+      ).toBe(true);
+    }
+  });
+
   it("todo preset usa textura e material validos", () => {
     for (const preset of DICE_PRESETS) {
       expect(DICE_TEXTURES).toContain(preset.style.texture);
