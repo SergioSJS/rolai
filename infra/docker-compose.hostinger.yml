@@ -30,6 +30,18 @@ services:
       - "traefik.http.middlewares.rolai-headers.headers.frameDeny=true"
       - "traefik.http.routers.rolai-backend.middlewares=rolai-ratelimit,rolai-buffer,rolai-headers"
 
+  web:
+    networks:
+      - default
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rolai-web.rule=Host(`${ROLAI_WEB_HOST}`)"
+      - "traefik.http.routers.rolai-web.entrypoints=websecure"
+      - "traefik.http.routers.rolai-web.tls.certresolver=${LETSENCRYPT_RESOLVER}"
+      - "traefik.http.services.rolai-web.loadbalancer.server.port=80"
+      - "traefik.http.routers.rolai-web.middlewares=rolai-headers"
+
 networks:
   traefik:
     name: ${TRAEFIK_NETWORK}

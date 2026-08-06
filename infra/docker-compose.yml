@@ -6,6 +6,10 @@
 # no maximo o Rolaí, nunca o host inteiro.
 services:
   backend:
+    # Imagem publicada pelo CI (.github/workflows/images.yml). Em producao e
+    # so `docker compose pull && up -d` — nada compila no servidor. O `build`
+    # continua aqui pro caminho local (`docker compose up --build`).
+    image: ghcr.io/sergiosjs/rolai-backend:${ROLAI_TAG:-latest}
     build:
       context: ../services/backend
     environment:
@@ -34,6 +38,20 @@ services:
       - postgres
     restart: unless-stopped
     mem_limit: 512m
+
+  web:
+    image: ghcr.io/sergiosjs/rolai-web:${ROLAI_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Inlinado no bundle em tempo de build — trocar exige rebuild da
+        # imagem, nao basta reiniciar o container.
+        VITE_WS_URL: ${VITE_WS_URL:-wss://api.rolai.app}
+    depends_on:
+      - backend
+    restart: unless-stopped
+    mem_limit: 128m
 
   redis:
     image: redis:7-alpine

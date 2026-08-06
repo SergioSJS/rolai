@@ -73,3 +73,29 @@ pro volume de uso esperado (mesa de RPG, poucas salas simultâneas). Se
 algum dia isso mudar, o pub/sub do Redis já é a peça que permitiria
 múltiplas instâncias do backend compartilhando broadcast — não precisa de
 mudança de arquitetura, só de compose.
+
+## Deploy na Hostinger (imagens do GHCR)
+
+O CI publica as imagens a cada push no `main` e a cada tag
+(`.github/workflows/images.yml`), então **nada compila no servidor**:
+
+```bash
+# no VPS, na pasta do projeto (só o infra/ e o .env precisam estar lá)
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostinger.yml pull
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostinger.yml up -d
+```
+
+`.env` precisa de: `POSTGRES_PASSWORD` (obrigatória, sem default),
+`ROLAI_WEB_HOST`, `ROLAI_BACKEND_HOST`, `TRAEFIK_NETWORK`,
+`LETSENCRYPT_RESOLVER`, `CORS_ORIGINS` (a origem do front, para CORS **e**
+para a checagem de Origin do WebSocket) e `TRUST_PROXY_HEADERS=true` (o
+override de Hostinger já define). `ROLAI_TAG` fixa a versão das imagens —
+`latest` segue o `main`, ou aponte para `v0.1.0`.
+
+Detalhe que morde: a URL do backend é **inlinada no bundle** pelo Vite em
+tempo de build. Trocar de domínio exige rebuildar a imagem `web` com o novo
+`VITE_WS_URL` (é uma repository variable no GitHub), não basta reiniciar o
+container.
+
+Imagens: `ghcr.io/sergiosjs/rolai-backend` e `ghcr.io/sergiosjs/rolai-web`.
+
