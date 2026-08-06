@@ -79,7 +79,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
     const scale = options.scale > 0 ? options.scale : loadDiceScale(window.localStorage);
     const renderer = createRenderer(tier, style, scale);
     renderer.init(stage).catch((err: unknown) => {
-      console.warn("renderer falhou, caindo pra texto puro:", err);
+      console.warn("[rolai] renderer falhou, caindo pra texto puro:", err);
       if (disposed) return;
       const fallback = new TextRenderer();
       rendererRef.current = fallback;
@@ -111,7 +111,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       setLastResult(result);
       if (!exceedsAnimationCap(result)) {
         rendererRef.current?.roll(result, style).catch((err: unknown) => {
-          console.warn("animacao falhou:", err);
+          console.warn("[rolai] animacao falhou:", err);
         });
       }
       scheduleClear();

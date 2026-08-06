@@ -45,6 +45,10 @@ const OUTLINE_WIDTH_BOOST = 3.5;
 // estourar, o palco sobe sem audio (ver init).
 const SOUND_INIT_TIMEOUT_MS = 2500;
 
+// Teto pra troca de tema entre rolagens (carrega a imagem da textura de
+// quem rolou). Curto: e o intervalo entre pedir a rolagem e ver o dado.
+const THEME_SWAP_TIMEOUT_MS = 1200;
+
 type DiceBoxInstance = {
   DiceFactory?: DiceFactoryLike;
   initialize(): Promise<unknown>;
@@ -244,7 +248,7 @@ export class DiceBoxRenderer implements RollRenderer {
       new Promise<boolean>((resolve) => setTimeout(() => resolve(false), SOUND_INIT_TIMEOUT_MS)),
     ]).catch(() => false);
     if (!withSound) {
-      console.warn("audio nao carregou a tempo, seguindo sem som");
+      console.warn("[rolai] audio nao carregou a tempo, seguindo sem som");
       container.replaceChildren();
       box = build(false);
       await box.initialize();
@@ -268,16 +272,24 @@ export class DiceBoxRenderer implements RollRenderer {
     // antes de criar os dados, pra mesa toda ver o dado de quem rolou.
     const wanted = style ?? this.options.style;
     if (JSON.stringify(wanted) !== JSON.stringify(this.currentStyle)) {
-      // Trocar a cor NAO pode custar a animacao. Antes, uma falha aqui subia
-      // pro catch de quem chamou e a rolagem inteira sumia — e so acontecia
-      // com rolagem de OUTRO jogador (a propria nao troca o colorset), com
-      // cara de "so aparece o meu dado". Dado na cor errada e muito melhor
-      // que dado nenhum.
-      try {
-        await this.box.updateConfig({ theme_customColorset: toColorset(wanted) });
+      // Trocar a cor NAO pode custar a animacao — e aqui `try/catch` nao
+      // basta, precisa de relogio.
+      //
+      // updateConfig chama loadTheme -> makeColorSet, que CARREGA A IMAGEM
+      // da textura. Se esse carregamento nao resolve, a promise fica
+      // pendente pra sempre: nao ha excecao pra pegar, o `await` simplesmente
+      // nunca volta e a rolagem nunca e desenhada. Como so rolagem de OUTRO
+      // jogador troca o colorset, o sintoma e exatamente "so aparece o meu
+      // dado" — e so depois de customizar a aparencia, que e o que faz o
+      // estilo dos outros passar a divergir do meu.
+      const trocou = await Promise.race([
+        this.box.updateConfig({ theme_customColorset: toColorset(wanted) }).then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), THEME_SWAP_TIMEOUT_MS)),
+      ]).catch(() => false);
+      if (trocou) {
         this.currentStyle = wanted;
-      } catch (err) {
-        console.warn("troca de estilo falhou, rolando com a cor atual:", err);
+      } else {
+        console.warn("[rolai] troca de estilo nao completou; rolando com a cor atual");
       }
     }
     await this.box.roll(buildBoxNotation(dice));
