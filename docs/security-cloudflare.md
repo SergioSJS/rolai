@@ -5,18 +5,18 @@ no `rolai.app`. Complementa `docs/security.md`, que descreve o modelo atual —
 leia aquele primeiro. Aqui só o que a Cloudflare quebra, o que ela ganha, e o
 que precisa mudar no código antes.
 
-Estado de hoje: **os dois domínios estão em nuvem cinza (DNS only)**. O
-código já está pronto pra laranja — `client_ip()` prefere
-`CF-Connecting-IP` (item 1) e o WebSocket tem heartbeat (item 3). O que
-falta é só infra/DNS: ligar a laranja, trocar a label do rate limit
-(item 2) e fechar o bypass direto ao VPS (item 1). A ordem importa —
-ver "Ordem de execução".
+Estado de hoje: **laranja ativa nos dois domínios** (migração concluída em
+2026-08-06 — a "Ordem de execução" registra o passo a passo seguido).
+`client_ip()` prefere `CF-Connecting-IP`, o WebSocket tem heartbeat, o
+rate limit de borda usa `requestHeaderName=CF-Connecting-IP` e os dois
+routers têm `ipAllowList` com os ranges da CF.
 
 ## Topologia atual
 
 ```
-navegador ──TLS──> Traefik (rede host, VPS Hostinger) ──> rolai-web   (nginx)
-                                                     └──> rolai-backend (FastAPI)
+navegador ──TLS──> Cloudflare (borda) ──TLS Full(strict)──> Traefik (rede host, VPS Hostinger) ──> rolai-web   (nginx)
+                                                              ▲                                └──> rolai-backend (FastAPI)
+                                                              └── só os ranges da CF passam (ipAllowList nos routers do rolai)
 ```
 
 - `rolai.app` — app estático (PWA)
@@ -65,15 +65,21 @@ na transição). Coberto por teste
 (`tests/test_limits.py::test_cf_connecting_ip_takes_precedence_over_x_forwarded_for`).
 
 **Não basta.** `CF-Connecting-IP` também é forjável por quem alcançar o VPS
-direto, pulando a CF. Duas defesas, e o ideal é as duas:
+direto, pulando a CF. Duas defesas:
 
-- **Firewall no VPS**: aceitar 80/443 só dos ranges da Cloudflare
-  (`https://www.cloudflare.com/ips/`). Fecha o bypass de vez.
-- **Traefik**: `ipAllowList` nos ranges da CF nos dois routers, ou
-  `forwardedHeaders.trustedIPs` com esses ranges.
+- **Traefik `ipAllowList`** nos ranges da CF nos dois routers do rolai
+  (`rolai-cfonly` no `infra/docker-compose.hostinger.yml`). Foi a escolha
+  deste deploy: o VPS hospeda outros sites fora da Cloudflare, e firewall
+  global em 80/443 derrubaria eles.
+- **Firewall no VPS** (80/443 só dos ranges de
+  `https://www.cloudflare.com/ips/`) — mais forte (camada de rede), mas só
+  cabe se **tudo** no VPS estiver atrás da CF.
+- Complemento opcional: `forwardedHeaders.trustedIPs` com os ranges da CF na
+  config estática do Traefik, pro `X-Forwarded-For` voltar a ser íntegro
+  (logs e usos futuros).
 
-Sem pelo menos uma delas, trocar `X-Forwarded-For` por `CF-Connecting-IP` só
-troca um header forjável por outro.
+Sem pelo menos uma das duas primeiras, trocar `X-Forwarded-For` por
+`CF-Connecting-IP` só troca um header forjável por outro.
 
 ### 2. Rate limit de borda do Traefik
 
@@ -153,11 +159,11 @@ válido é pré-requisito, não polimento.
 
 ## Ordem de execução
 
-A versão anterior desta lista mandava o firewall primeiro **e** mantinha o
-api em cinza — as duas coisas juntas não funcionam: com o VPS respondendo
-só pros ranges da CF, um `api.rolai.app` em DNS-only fica inalcançável.
-Com o heartbeat implementado o api vai pra laranja junto, e a ordem que não
-derruba nada é:
+**Estado em 2026-08-06: migração concluída.** Laranja ativa nos dois
+domínios, `requestHeaderName=CF-Connecting-IP` no rate limit de borda e
+`ipAllowList` (`rolai-cfonly`) nos dois routers. O firewall ficou de fora
+de propósito: o VPS hospeda outros sites fora da Cloudflare. A lista
+abaixo fica como referência caso seja preciso refazer do zero:
 
 1. **Deploy do código novo** (heartbeat + `CF-Connecting-IP`): push no
    `main`, o CI publica as imagens, e no VPS
@@ -166,25 +172,23 @@ derruba nada é:
    mudanças são inertes sem CF no caminho.
 2. **Cloudflare dashboard**: SSL/TLS em modo **Full (strict)** — nunca
    Flexible (fala HTTP com a origem). "Always Use HTTPS" é dispensável: o
-   redirect do Traefik já cobre, e `.app` é HSTS preload.
+   redirect do Traefik já cobre, e `.app` é HSTS preload. Não ativar —
+   com ele, a renovação HTTP-01 do Let's Encrypt pode falhar (item 5).
 3. **Ligar a laranja nos dois registros** (`rolai.app` e `api.rolai.app`).
    O heartbeat segura o WS; o `CF-Connecting-IP` já passa a chegar e o
    backend já prefere ele.
-4. **Trocar a label do rate limit** no `infra/docker-compose.hostinger.yml`
-   (bloco "MODO LARANJA" comentado): comentar `ipStrategy.depth=1`,
-   descomentar `requestHeaderName=CF-Connecting-IP`, e subir de novo.
+4. **Trocar a label do rate limit** no `infra/docker-compose.hostinger.yml`:
+   comentar `ipStrategy.depth=1`, ativar
+   `requestHeaderName=CF-Connecting-IP`, e subir de novo.
 5. **Fechar o bypass direto ao VPS** — só agora, com a laranja já ligada
-   (antes disso isto derruba o site). Uma das duas:
-   - Firewall (recomendado): liberar 80/443 só pros ranges de
-     `https://www.cloudflare.com/ips/` (a lista muda — vale um cron de
-     sync), cuidando pra não trancar o próprio SSH. Ex. com ufw: um
-     `ufw allow from <range> to any port 80,443 proto tcp` por range,
-     depois `ufw deny 80,443 proto tcp`.
-   - Ou `ipAllowList` com os ranges da CF nos dois routers (label comentada
-     no mesmo bloco "MODO LARANJA" do compose).
-   - Complemento opcional na config estática do Traefik do VPS (fora deste
-     repo): `entryPoints.websecure.forwardedHeaders.trustedIPs=<ranges CF>`,
-     pro `X-Forwarded-For` voltar a ser íntegro (logs e usos futuros).
+   (antes disso isto derruba o site):
+   - VPS só com rolai (ou tudo atrás da CF): firewall com os ranges de
+     `https://www.cloudflare.com/ips/`, cuidando pra não trancar o SSH.
+   - VPS compartilhado (o caso atual): `ipAllowList` com os ranges da CF
+     nos dois routers (middleware `rolai-cfonly` no compose). Protege só o
+     rolai e não encosta nos outros sites.
+   - Os ranges mudam raramente, mas mudam — revisitar a lista de tempos em
+     tempos, em qualquer das duas opções.
 6. **Verificar** (seção abaixo) — principalmente o teste dos 40 POSTs.
 
 ## Como verificar

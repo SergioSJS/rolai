@@ -30,25 +30,23 @@ services:
       # por sala) fica no backend — ver docs/security.md.
       - "traefik.http.middlewares.rolai-ratelimit.rateLimit.average=20"
       - "traefik.http.middlewares.rolai-ratelimit.rateLimit.burst=50"
-      - "traefik.http.middlewares.rolai-ratelimit.rateLimit.sourceCriterion.ipStrategy.depth=1"
-      # --- MODO LARANJA (Cloudflare proxied) — docs/security-cloudflare.md ---
-      # As trocas abaixo so entram DEPOIS de ligar a nuvem laranja no
-      # api.rolai.app: com o api em cinza (DNS only) nenhuma requisicao traz
-      # CF-Connecting-IP e o rate limit agruparia todo mundo no mesmo balde.
-      # 1) Comentar a linha ipStrategy.depth=1 acima e descomentar:
-      #- "traefik.http.middlewares.rolai-ratelimit.rateLimit.sourceCriterion.requestHeaderName=CF-Connecting-IP"
-      # 2) Fechar o bypass direto ao VPS, senao CF-Connecting-IP continua
-      #    forjavel: firewall nos ranges da CF (https://www.cloudflare.com/ips/)
-      #    ou ipAllowList neste router e no do web:
-      #- "traefik.http.middlewares.rolai-cfonly.ipallowlist.sourcerange=<ranges IPv4+IPv6 da CF>"
-      #    e adicionar "rolai-cfonly" aos middlewares dos dois routers.
+      # MODO LARANJA ATIVO (docs/security-cloudflare.md): com a Cloudflare no
+      # caminho, o IP do cliente vem no CF-Connecting-IP — depth=1 pegaria o
+      # IP da borda da CF e agruparia todo mundo errado.
+      #- "traefik.http.middlewares.rolai-ratelimit.rateLimit.sourceCriterion.ipStrategy.depth=1"
+      - "traefik.http.middlewares.rolai-ratelimit.rateLimit.sourceCriterion.requestHeaderName=CF-Connecting-IP"
+      # Bypass direto ao VPS fechado POR ROUTER (este VPS hospeda outros
+      # sites fora da CF — firewall global em 80/443 derrubaria eles): so
+      # trafego vindo dos ranges da Cloudflare chega nos routers do rolai.
+      # Lista: https://www.cloudflare.com/ips/ (muda raramente; revisitar).
+      - "traefik.http.middlewares.rolai-cfonly.ipallowlist.sourcerange=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22"
       # Corpo grande morre no proxy, nao na app.
       - "traefik.http.middlewares.rolai-buffer.buffering.maxRequestBodyBytes=131072"
       - "traefik.http.middlewares.rolai-headers.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.rolai-headers.headers.stsIncludeSubdomains=true"
       - "traefik.http.middlewares.rolai-headers.headers.contentTypeNosniff=true"
       - "traefik.http.middlewares.rolai-headers.headers.frameDeny=true"
-      - "traefik.http.routers.rolai-backend.middlewares=rolai-ratelimit,rolai-buffer,rolai-headers"
+      - "traefik.http.routers.rolai-backend.middlewares=rolai-ratelimit,rolai-buffer,rolai-headers,rolai-cfonly"
 
   web:
     labels:
@@ -57,4 +55,4 @@ services:
       - "traefik.http.routers.rolai-web.entrypoints=websecure"
       - "traefik.http.routers.rolai-web.tls.certresolver=${LETSENCRYPT_RESOLVER}"
       - "traefik.http.services.rolai-web.loadbalancer.server.port=80"
-      - "traefik.http.routers.rolai-web.middlewares=rolai-headers"
+      - "traefik.http.routers.rolai-web.middlewares=rolai-headers,rolai-cfonly"
