@@ -4,9 +4,10 @@
 FROM node:20-alpine AS build
 WORKDIR /repo
 
-# A URL do backend entra em tempo de BUILD (Vite inlina no bundle), nao em
-# runtime — por isso vem como build-arg e nao como env do container.
-ARG VITE_WS_URL=wss://api.rolai.app
+# Fallback de build. O caminho normal e a env de RUNTIME (ROLAI_WS_URL, via
+# entrypoint) — esta ARG so define o que o bundle usa se o container subir
+# sem essa env.
+ARG VITE_WS_URL=
 ARG VITE_API_URL
 ENV VITE_WS_URL=$VITE_WS_URL
 ENV VITE_API_URL=$VITE_API_URL
@@ -22,5 +23,9 @@ RUN npm run build -w @rolai/web
 
 FROM nginx:1.27-alpine
 COPY infra/nginx.conf /etc/nginx/conf.d/default.conf
+COPY infra/web-entrypoint.sh /docker-entrypoint.d/99-rolai-config.sh
 COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
+
+# Reescreve /config.js com as envs a cada start e entrega pro nginx.
+ENTRYPOINT ["/docker-entrypoint.d/99-rolai-config.sh"]

@@ -3,7 +3,7 @@ import type { RollResult } from "@rolai/rules-engine";
 import { initialRoomState, roomReducer } from "../room/reducer";
 import { PendingRolls } from "../room/echo";
 import { parseServerMessage } from "../room/client";
-import { roomWsUrl } from "../config";
+import { apiBaseUrl, roomWsUrl, wsBaseUrl } from "../config";
 
 function makeResult(overrides: Partial<RollResult> = {}): RollResult {
   return {
@@ -226,5 +226,32 @@ describe("roomWsUrl", () => {
   it("sem estilo, nao manda o parametro", () => {
     const url = new URL(roomWsUrl("abc123", "Ana"));
     expect(url.searchParams.has("style")).toBe(false);
+  });
+});
+
+// Config de runtime: a MESMA imagem serve qualquer dominio, entao
+// window.__ROLAI_CONFIG__ (escrito pelo entrypoint do container) tem que
+// vencer o que o Vite inlinou no bundle.
+describe("config de runtime", () => {
+  const env = { VITE_WS_URL: "wss://build.example", VITE_API_URL: "https://build.example" };
+
+  it("runtime vence o valor de build", () => {
+    const runtime = { wsUrl: "wss://runtime.example", apiUrl: "https://api.runtime.example" };
+    expect(wsBaseUrl(env, runtime)).toBe("wss://runtime.example");
+    expect(apiBaseUrl(env, runtime)).toBe("https://api.runtime.example");
+  });
+
+  it("string vazia conta como ausente (o entrypoint sempre escreve a chave)", () => {
+    expect(wsBaseUrl(env, { wsUrl: "" })).toBe("wss://build.example");
+    expect(apiBaseUrl(env, { apiUrl: "" })).toBe("https://build.example");
+  });
+
+  it("sem runtime nem build, cai no backend de dev", () => {
+    expect(wsBaseUrl({}, {})).toBe("ws://localhost:8420");
+    expect(apiBaseUrl({}, {})).toBe("http://localhost:8420");
+  });
+
+  it("api deriva do ws de runtime quando so o ws vem", () => {
+    expect(apiBaseUrl({}, { wsUrl: "wss://sala.example" })).toBe("https://sala.example");
   });
 });

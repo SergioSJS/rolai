@@ -44,10 +44,12 @@ services:
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
-      args:
-        # Inlinado no bundle em tempo de build — trocar exige rebuild da
-        # imagem, nao basta reiniciar o container.
-        VITE_WS_URL: ${VITE_WS_URL:-wss://api.rolai.app}
+    environment:
+      # Config de RUNTIME: o entrypoint escreve /config.js com isto a cada
+      # start. Trocar de dominio = trocar a env e reiniciar — a imagem e a
+      # mesma (ver apps/web/src/config.ts).
+      ROLAI_WS_URL: ${ROLAI_WS_URL:-wss://api.rolai.app}
+      ROLAI_API_URL: ${ROLAI_API_URL:-}
     depends_on:
       - backend
     restart: unless-stopped

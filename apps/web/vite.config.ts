@@ -18,6 +18,9 @@ export default defineConfig({
       includeAssets: ["texture-felt.png"],
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,webp,webmanifest}"],
+        // config.js e resolvido em RUNTIME pelo container (entrypoint le as
+        // envs); precachear congelaria a URL do backend do build.
+        globIgnores: ["**/config.js"],
         // O chunk da dice-box-threejs passa de 500KB; texturas somam alguns
         // MB. O teto padrao (2MB/arquivo) ja basta, mas deixamos folga.
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,

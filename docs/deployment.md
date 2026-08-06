@@ -92,10 +92,14 @@ para a checagem de Origin do WebSocket) e `TRUST_PROXY_HEADERS=true` (o
 override de Hostinger já define). `ROLAI_TAG` fixa a versão das imagens —
 `latest` segue o `main`, ou aponte para `v0.1.0`.
 
-Detalhe que morde: a URL do backend é **inlinada no bundle** pelo Vite em
-tempo de build. Trocar de domínio exige rebuildar a imagem `web` com o novo
-`VITE_WS_URL` (é uma repository variable no GitHub), não basta reiniciar o
-container.
+A URL do backend é **runtime**, não build: o entrypoint do container escreve
+`/config.js` a partir de `ROLAI_WS_URL` (e `ROLAI_API_URL`, opcional) a cada
+start, e o app lê isso antes do bundle. Trocar de domínio é trocar a env e
+reiniciar — a imagem publicada é a mesma pra qualquer ambiente.
+
+Cuidado ao mexer nisso: o `config.js` fica **fora do precache** do service
+worker (`globIgnores` no `vite.config.ts`). Se entrar no precache, o SW passa
+a servir a versão do build e a env do container deixa de valer.
 
 Imagens: `ghcr.io/sergiosjs/rolai-backend` e `ghcr.io/sergiosjs/rolai-web`.
 

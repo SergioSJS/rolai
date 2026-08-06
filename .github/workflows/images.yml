@@ -57,8 +57,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # A URL do backend e inlinada no bundle do Vite em tempo de build.
-          build-args: |
-            VITE_WS_URL=${{ vars.VITE_WS_URL || 'wss://api.rolai.app' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

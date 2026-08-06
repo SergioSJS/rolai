@@ -366,6 +366,14 @@ vez do pessoal.
   privada não entra em git e o CI não precisa de segredo.
 - Primeira publicada: **v0.1.0** com `rolai-0.1.0.apk` (3,8 MB).
 
+A URL do backend é resolvida em **runtime**, não no build: o entrypoint do
+container escreve `/config.js` a partir de `ROLAI_WS_URL`/`ROLAI_API_URL` e o
+app lê `window.__ROLAI_CONFIG__` antes do bundle (precedência em
+`apps/web/src/config.ts`: runtime > build > default). A mesma imagem serve
+qualquer domínio. **Cuidado**: `config.js` está no `globIgnores` do workbox —
+se entrar no precache, o service worker passa a servir a versão do build e a
+env do container deixa de valer.
+
 Um percalço que vale lembrar: `pip install .` no CI deixa cópia do pacote em
 `build/lib` e o mypy acusa módulo `app` duplicado — resolvido com
 `exclude = ["^build/"]`. Local não aparece porque usamos `uv`.
