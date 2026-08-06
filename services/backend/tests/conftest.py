@@ -24,7 +24,17 @@ def make_client(redis_client: FakeRedis) -> Callable[..., TestClient]:
     """Factory de TestClient com settings customizaveis por teste."""
 
     def _make(**settings_overrides: object) -> TestClient:
-        settings = Settings(room_ttl_seconds=3600, **settings_overrides)  # type: ignore[arg-type]
+        # Expurgo de profiles desligado por padrao no teste: ele roda numa
+        # task de fundo no boot e o sqlite em memoria usa StaticPool (UMA
+        # conexao compartilhada), entao a transacao do expurgo interfere na
+        # do teste e a linha recem-inserida some — falha intermitente vista
+        # no CI. `purge_old_profiles` tem teste proprio, chamado direto.
+        defaults: dict[str, object] = {
+            "room_ttl_seconds": 3600,
+            "profile_purge_interval_seconds": 0,
+        }
+        defaults.update(settings_overrides)
+        settings = Settings(**defaults)  # type: ignore[arg-type]
         engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
         app = create_app(
             settings=settings,
