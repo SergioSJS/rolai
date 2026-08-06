@@ -323,6 +323,14 @@ async def room_ws(
     settings = _settings_of(websocket)
     store = _store_of(websocket)
 
+    # Aceitar ANTES de qualquer validacao: um close pre-accept rejeita o
+    # handshake com um HTTP de erro e o codigo NUNCA chega ao cliente — o
+    # navegador reporta 1006 (erro generico de rede) e o OkHttp cai no
+    # onFailure, entao "sala inexistente"/"origem proibida"/"limite" nao
+    # apareciam e os clientes retentavam como se fosse queda de rede.
+    # So um close DEPOIS do accept entrega 4404/4403/4429 de verdade.
+    await websocket.accept()
+
     if not ROOM_CODE_PATTERN.match(code):
         await websocket.close(code=4404)
         return
@@ -378,8 +386,6 @@ async def room_ws(
     # Apelido cru vem da query string: corta no limite antes de guardar e
     # retransmitir (o front ja limita, um bot nao).
     name = name.strip()[: settings.max_name_length] or "anonymous"
-
-    await websocket.accept()
 
     member_id = uuid.uuid4().hex
     dice_style = _parse_style(style)

@@ -42,6 +42,11 @@ export type RoomEvent =
   | { type: "roster"; roster: RosterMember[] }
   | { type: "roll"; player: string; result: RollResult; style?: DiceStyle | null }
   | { type: "serverError"; message: string }
+  // Recusa no handshake (sala inexistente, cheia, origem barrada): nunca
+  // chegamos a entrar, entao o estado de sala tem que sumir — senao a UI
+  // mostra "em sala - CODIGO" desconectado pra uma sala em que nunca
+  // estivemos, sem saida a nao ser recarregar.
+  | { type: "rejected"; message: string }
   | { type: "disconnected"; willReconnect: boolean }
   | { type: "left" };
 
@@ -83,6 +88,8 @@ export function roomReducer(state: RoomState, event: RoomEvent): RoomState {
     }
     case "serverError":
       return { ...state, error: event.message };
+    case "rejected":
+      return { ...initialRoomState, error: event.message };
     case "disconnected":
       if (state.code === null) return state;
       return {

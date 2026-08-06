@@ -3,10 +3,9 @@
 # por IP, gente por sala, apelido e codigo de sala fora do formato.
 from collections.abc import Callable
 
-import pytest
 from starlette.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
+from tests.conftest import assert_ws_rejected
 from tests.test_rooms import next_event
 
 PROFILE = {
@@ -68,12 +67,7 @@ def test_ws_connections_capped_per_ip(make_client: Callable[..., TestClient]) ->
             next_event(ws_a)
             with client.websocket_connect(f"/rooms/{code}") as ws_b:
                 next_event(ws_b)
-                with (
-                    pytest.raises(WebSocketDisconnect) as exc_info,
-                    client.websocket_connect(f"/rooms/{code}"),
-                ):
-                    pass
-                assert exc_info.value.code == 4429
+                assert_ws_rejected(client, f"/rooms/{code}", 4429)
 
 
 def test_room_membership_is_capped(make_client: Callable[..., TestClient]) -> None:
@@ -86,12 +80,7 @@ def test_room_membership_is_capped(make_client: Callable[..., TestClient]) -> No
         ):
             next_event(ws_a)
             next_event(ws_b)
-            with (
-                pytest.raises(WebSocketDisconnect) as exc_info,
-                client.websocket_connect(f"/rooms/{code}?name=c"),
-            ):
-                pass
-            assert exc_info.value.code == 4429
+            assert_ws_rejected(client, f"/rooms/{code}?name=c", 4429)
 
 
 def test_long_nickname_is_truncated(client: TestClient) -> None:
@@ -102,12 +91,7 @@ def test_long_nickname_is_truncated(client: TestClient) -> None:
 
 
 def test_malformed_room_code_is_refused(client: TestClient) -> None:
-    with (
-        pytest.raises(WebSocketDisconnect) as exc_info,
-        client.websocket_connect("/rooms/" + "x" * 500),
-    ):
-        pass
-    assert exc_info.value.code == 4404
+    assert_ws_rejected(client, "/rooms/" + "x" * 500, 4404)
 
 
 def test_ws_origin_must_be_allowed_when_present(
@@ -117,12 +101,9 @@ def test_ws_origin_must_be_allowed_when_present(
     conexao usando o navegador de quem visita."""
     with make_client(cors_origins=["https://rolai.app"]) as client:
         code = client.post("/rooms").json()["code"]
-        with (
-            pytest.raises(WebSocketDisconnect) as exc_info,
-            client.websocket_connect(f"/rooms/{code}", headers={"origin": "https://evil.example"}),
-        ):
-            pass
-        assert exc_info.value.code == 4403
+        assert_ws_rejected(
+            client, f"/rooms/{code}", 4403, headers={"origin": "https://evil.example"}
+        )
 
         with client.websocket_connect(
             f"/rooms/{code}", headers={"origin": "https://rolai.app"}

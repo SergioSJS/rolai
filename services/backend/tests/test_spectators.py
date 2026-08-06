@@ -4,11 +4,9 @@
 from collections.abc import Callable
 from typing import Any
 
-import pytest
 from starlette.testclient import TestClient, WebSocketTestSession
-from starlette.websockets import WebSocketDisconnect
 
-from tests.conftest import make_roll_message
+from tests.conftest import assert_ws_rejected, make_roll_message
 
 
 def next_event(ws: WebSocketTestSession, skip_roster: bool = True) -> dict[str, Any]:
@@ -31,12 +29,7 @@ def test_spectator_does_not_count_toward_member_cap(
             with client.websocket_connect(f"/rooms/{code}?spectator=1") as ws_s:
                 assert next_event(ws_s)["type"] == "snapshot"
             # Segundo JOGADOR continua barrado.
-            with (
-                pytest.raises(WebSocketDisconnect) as exc_info,
-                client.websocket_connect(f"/rooms/{code}?name=Beto"),
-            ):
-                pass
-            assert exc_info.value.code == 4429
+            assert_ws_rejected(client, f"/rooms/{code}?name=Beto", 4429)
 
 
 def test_spectator_cap_is_separate(make_client: Callable[..., TestClient]) -> None:
@@ -44,12 +37,7 @@ def test_spectator_cap_is_separate(make_client: Callable[..., TestClient]) -> No
         code = client.post("/rooms").json()["code"]
         with client.websocket_connect(f"/rooms/{code}?spectator=1") as ws_s:
             next_event(ws_s)
-            with (
-                pytest.raises(WebSocketDisconnect) as exc_info,
-                client.websocket_connect(f"/rooms/{code}?spectator=1"),
-            ):
-                pass
-            assert exc_info.value.code == 4429
+            assert_ws_rejected(client, f"/rooms/{code}?spectator=1", 4429)
 
 
 def test_spectator_never_appears_in_roster(client: TestClient) -> None:

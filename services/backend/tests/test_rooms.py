@@ -12,7 +12,7 @@ from fakeredis.aioredis import FakeRedis
 from starlette.testclient import TestClient, WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
-from tests.conftest import make_roll_message
+from tests.conftest import assert_ws_rejected, make_roll_message
 
 ROOM_CODE_ALPHABET = re.compile(r"^[A-Za-z0-9_-]{8}$")  # token_urlsafe(6) -> 8 chars
 
@@ -43,12 +43,7 @@ def test_create_room_returns_unpredictable_code(client: TestClient) -> None:
 
 
 def test_join_nonexistent_room_is_refused(client: TestClient) -> None:
-    with (
-        pytest.raises(WebSocketDisconnect) as exc_info,
-        client.websocket_connect("/rooms/inexistente"),
-    ):
-        pass
-    assert exc_info.value.code == 4404
+    assert_ws_rejected(client, "/rooms/inexistente", 4404)
 
 
 def test_join_sends_snapshot_with_roster_and_history(client: TestClient) -> None:

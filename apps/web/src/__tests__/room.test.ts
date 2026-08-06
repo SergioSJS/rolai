@@ -266,3 +266,28 @@ describe("config de runtime", () => {
     expect(apiBaseUrl({}, { wsUrl: "wss://sala.example" })).toBe("https://sala.example");
   });
 });
+
+describe("recusa no handshake", () => {
+  it("limpa o estado de sala — nunca chegamos a entrar", () => {
+    // Entrou numa sala e depois foi recusado ao reconectar (sala expirou):
+    // manter o codigo faria a UI mostrar "em sala" desconectado, sem saida.
+    const entrou = roomReducer(
+      { ...initialRoomState, code: "a1B2-c3D", status: "connected" },
+      { type: "rejected", message: "sala não encontrada" },
+    );
+    expect(entrou.code).toBeNull();
+    expect(entrou.status).toBe("idle");
+    expect(entrou.error).toBe("sala não encontrada");
+  });
+
+  it("erro de sessao NAO derruba a sala", () => {
+    // serverError e outra coisa: acontece com a sala ja estabelecida
+    // (ex: espectador tentando rolar) e nao pode tirar ninguem de lugar.
+    const depois = roomReducer(
+      { ...initialRoomState, code: "a1B2-c3D", status: "connected" },
+      { type: "serverError", message: "spectator_cannot_roll" },
+    );
+    expect(depois.code).toBe("a1B2-c3D");
+    expect(depois.status).toBe("connected");
+  });
+});

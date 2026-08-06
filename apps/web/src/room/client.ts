@@ -169,14 +169,20 @@ export class RoomClient {
 
     ws.onclose = (event: CloseEvent) => {
       if (this.manualClose) return;
-      // 4404 = sala inexistente; 1008 = rate limit — nao reconecta.
-      if (event.code === 4404 || event.code === 1008) {
-        this.onEvent({
-          type: "serverError",
-          message:
-            event.code === 4404 ? "sala não encontrada" : "rate limit excedido",
-        });
-        this.onEvent({ type: "disconnected", willReconnect: false });
+      // Recusa DEFINITIVA do servidor: reconectar seria loop infinito, e
+      // ainda comeria cota do limite de conexao. O backend aceita o
+      // handshake antes de validar justamente pra estes codigos chegarem
+      // aqui — fechar antes do accept vira 1006 (erro generico) e o cliente
+      // nao consegue distinguir de queda de rede (services/backend/app/rooms.py).
+      const fatal: Record<number, string> = {
+        4404: "sala não encontrada",
+        4403: "origem não autorizada",
+        4429: "sala cheia ou limite de conexões atingido",
+        1008: "rate limit excedido",
+      };
+      const motivo = fatal[event.code];
+      if (motivo !== undefined) {
+        this.onEvent({ type: "rejected", message: motivo });
         return;
       }
       if (this.attempts >= MAX_RECONNECT_ATTEMPTS) {
