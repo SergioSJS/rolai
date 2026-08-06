@@ -4,6 +4,11 @@
 #
 # Os tetos de memoria existem pra que um flood (ver docs/security.md) derrube
 # no maximo o Rolaí, nunca o host inteiro.
+
+# Sem isto o nome do projeto sai do diretorio do primeiro -f (`infra`), e os
+# containers virariam `infra-backend-1` numa rede `infra_default`.
+name: rolai
+
 services:
   backend:
     # Imagem publicada pelo CI (.github/workflows/images.yml). Em producao e

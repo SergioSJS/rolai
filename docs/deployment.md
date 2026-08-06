@@ -5,9 +5,9 @@ muda o compose file e como o roteamento HTTP é resolvido.
 
 ## Hostinger VPS (atrás do Traefik já existente)
 
-`infra/docker-compose.hostinger.yml` assume que já existe uma rede externa
-do Traefik (mesmo padrão usado por outros serviços já rodando no VPS, ex.
-Savestate/Whishper). Não sobe Traefik de novo — só anexa labels.
+`infra/docker-compose.hostinger.yml` não sobe Traefik de novo — só anexa
+labels no Traefik que já roda no VPS (mesmo padrão dos outros serviços de
+lá: Savestate, Whishper, Hermes).
 
 ```bash
 docker compose --env-file .env -f infra/docker-compose.yml \
@@ -21,9 +21,16 @@ O `--env-file .env` é necessário ao rodar da raiz do repo: o compose procura
 
 Variáveis esperadas em `.env` (ver `.env.example`):
 
-- `TRAEFIK_NETWORK` — nome da rede externa do Traefik já em uso
+- `ROLAI_WEB_HOST` — domínio do app (produção: `rolai.app`)
 - `ROLAI_BACKEND_HOST` — subdomínio do relay (produção: `api.rolai.app`)
 - `LETSENCRYPT_RESOLVER` — nome do resolver ACME já configurado no Traefik
+  (no VPS atual: `letsencrypt`)
+
+Não há `TRAEFIK_NETWORK`: o Traefik do VPS roda em **rede host**, e de lá
+alcança o IP de bridge de qualquer container do host. Cada app fica na
+própria rede default do seu compose — mesmo padrão dos outros serviços já
+rodando lá. O provider está com `exposedbydefault=false`, então só entra no
+Traefik quem tem `traefik.enable=true` (o override já põe).
 
 Frontend (`apps/web`) sobe no **mesmo compose**, como imagem própria (nginx
 servindo o build estático) atrás do mesmo Traefik: **rolai.app** pro app e
@@ -86,8 +93,9 @@ servidor. Consequências práticas:
   simplesmente não abre — não existe "acessa por http enquanto configuro".
   O Traefik com Let's Encrypt resolve, mas o DNS precisa estar apontando
   antes, senão o desafio ACME falha.
-- Os routers de porta 80 no override existem só para clientes que não
-  aplicam preload (curl, links antigos): redirecionam pra https.
+- O redirect http -> https já vem do próprio Traefik, no nível do
+  entrypoint (`entrypoints.web.http.redirections`), então o override não
+  precisa declarar router de porta 80.
 - O `Strict-Transport-Security` que já mandamos (`rolai-headers`) continua
   valendo pra subdomínios — `api.rolai.app` incluído.
 
@@ -106,7 +114,7 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostinger.yml
 ```
 
 `.env` precisa de: `POSTGRES_PASSWORD` (obrigatória, sem default),
-`ROLAI_WEB_HOST`, `ROLAI_BACKEND_HOST`, `TRAEFIK_NETWORK`,
+`ROLAI_WEB_HOST`, `ROLAI_BACKEND_HOST`,
 `LETSENCRYPT_RESOLVER`, `CORS_ORIGINS` (a origem do front, para CORS **e**
 para a checagem de Origin do WebSocket) e `TRUST_PROXY_HEADERS=true` (o
 override de Hostinger já define). `ROLAI_TAG` fixa a versão das imagens —

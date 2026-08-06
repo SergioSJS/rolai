@@ -1,16 +1,25 @@
-# Override para Hostinger — assume rede externa do Traefik ja existente
-# (mesmo padrao usado por outros servicos ja rodando no VPS). Ver
-# docs/deployment.md.
+# Override para Hostinger. Ver docs/deployment.md.
+#
+# O Traefik do VPS roda em **rede host** (nao numa bridge compartilhada):
+# `--providers.docker=true --providers.docker.exposedbydefault=false`, com
+# entrypoints web(:80) e websecure(:443) e redirect global web -> websecure.
+# Em modo host ele alcanca o IP de bridge de qualquer container do host, entao
+# NAO existe (nem e preciso) uma rede externa comum — cada app fica na propria
+# rede default do seu compose, que e o padrao dos outros servicos do VPS
+# (save-state, whishper, hermes-webui). Por isso este arquivo nao declara
+# `networks`: so anexa labels.
+#
+# Tambem nao ha routers de porta 80 aqui: o proprio Traefik ja redireciona
+# web -> websecure no nivel do entrypoint, o que cobre `.app` (HSTS preload) e
+# qualquer cliente que ainda tente http.
 services:
   backend:
     environment:
       # Traefik na frente: o IP real do cliente chega em X-Forwarded-For, e
       # so aqui da pra confiar nesse header (docs/security.md).
       TRUST_PROXY_HEADERS: "true"
-    networks:
-      - default
-      - traefik
     labels:
+      # exposedbydefault=false no provider: sem esta linha o Traefik ignora.
       - "traefik.enable=true"
       - "traefik.http.routers.rolai-backend.rule=Host(`${ROLAI_BACKEND_HOST}`)"
       - "traefik.http.routers.rolai-backend.entrypoints=websecure"
@@ -29,19 +38,8 @@ services:
       - "traefik.http.middlewares.rolai-headers.headers.contentTypeNosniff=true"
       - "traefik.http.middlewares.rolai-headers.headers.frameDeny=true"
       - "traefik.http.routers.rolai-backend.middlewares=rolai-ratelimit,rolai-buffer,rolai-headers"
-      # `.app` esta na lista de HSTS preload dos navegadores: o navegador
-      # NUNCA tenta http. O redirect existe pra quem chega por link antigo,
-      # curl ou outro cliente que nao aplica preload.
-      - "traefik.http.middlewares.rolai-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.rolai-https.redirectscheme.permanent=true"
-      - "traefik.http.routers.rolai-backend-http.rule=Host(`${ROLAI_BACKEND_HOST}`)"
-      - "traefik.http.routers.rolai-backend-http.entrypoints=web"
-      - "traefik.http.routers.rolai-backend-http.middlewares=rolai-https"
 
   web:
-    networks:
-      - default
-      - traefik
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.rolai-web.rule=Host(`${ROLAI_WEB_HOST}`)"
@@ -49,11 +47,3 @@ services:
       - "traefik.http.routers.rolai-web.tls.certresolver=${LETSENCRYPT_RESOLVER}"
       - "traefik.http.services.rolai-web.loadbalancer.server.port=80"
       - "traefik.http.routers.rolai-web.middlewares=rolai-headers"
-      - "traefik.http.routers.rolai-web-http.rule=Host(`${ROLAI_WEB_HOST}`)"
-      - "traefik.http.routers.rolai-web-http.entrypoints=web"
-      - "traefik.http.routers.rolai-web-http.middlewares=rolai-https"
-
-networks:
-  traefik:
-    name: ${TRAEFIK_NETWORK}
-    external: true
