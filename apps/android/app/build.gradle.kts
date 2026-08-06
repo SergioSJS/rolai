@@ -30,17 +30,24 @@ android {
     // as monta a partir dos secrets). Sem elas, `assembleRelease` cai na
     // chave de debug — o build local e o CI de PR continuam verdes sem
     // precisar de chave nenhuma. A chave NUNCA entra no repositorio.
-    val keystoreFile = System.getenv("ANDROID_KEYSTORE_PATH")
-    val hasSigning = !keystoreFile.isNullOrBlank() && file(keystoreFile).exists()
+    // VAZIO conta como ausente. No GitHub Actions um secret que nao existe
+    // vira string VAZIA na env (nao some), entao `?:` sozinho nao serve:
+    // keyPassword virava "" e o build morria com "Get Key failed: Given
+    // final block not properly padded" — que parece senha errada, mas e
+    // senha vazia. Keystore PKCS12 (padrao do keytool desde o JDK 9) usa a
+    // mesma senha pra store e pra chave, entao o fallback e o caminho comum.
+    fun env(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }
+
+    val keystoreFile = env("ANDROID_KEYSTORE_PATH")
+    val hasSigning = keystoreFile != null && file(keystoreFile).exists()
 
     signingConfigs {
         if (hasSigning) {
             create("release") {
-                storeFile = file(keystoreFile!!)
-                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
-                    ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                storeFile = file(keystoreFile)
+                storePassword = env("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = env("ANDROID_KEY_ALIAS")
+                keyPassword = env("ANDROID_KEY_PASSWORD") ?: env("ANDROID_KEYSTORE_PASSWORD")
             }
         }
     }
