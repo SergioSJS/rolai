@@ -1,0 +1,65 @@
+// Icones SVG inline pros botoes do compositor — silhuetas monocromaticas
+// dos formatos fisicos dos dados (stroke: currentColor, herdam a cor).
+
+import type { DieKind } from "../composer";
+
+interface DiceIconProps {
+  kind: DieKind;
+  className?: string;
+}
+
+// Poligonos num viewBox 24x24.
+const SHAPES: Record<number, string> = {
+  4: "12,3.5 20.5,19.5 3.5,19.5", // triangulo
+  6: "M5,5 h14 v14 h-14 z", // quadrado (path)
+  8: "12,2.5 21,12 12,21.5 3,12", // losango
+  10: "12,2.5 19.5,9.5 12,21.5 4.5,9.5", // pipa (kite)
+  12: "12,2.8 20.2,8.8 17,19.2 7,19.2 3.8,8.8", // pentagono
+  20: "12,2.5 20.2,7.2 20.2,16.8 12,21.5 3.8,16.8 3.8,7.2", // hexagono
+};
+
+export function DiceIcon({ kind, className }: DiceIconProps) {
+  const common = {
+    className: className ?? "die-icon",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinejoin: "round" as const,
+    strokeLinecap: "round" as const,
+    "aria-hidden": true,
+  };
+  if (kind === "F") {
+    // Fudge: cubo com as faces "+" e "−".
+    return (
+      <svg {...common}>
+        <path d="M5,5 h14 v14 h-14 z" />
+        <path d="M8.2,10 h3.4 M9.9,8.3 v3.4" />
+        <path d="M13,15.5 h3.4" />
+      </svg>
+    );
+  }
+  if (kind === 100) {
+    // Par de losangos: dezenas + unidades.
+    return (
+      <svg {...common}>
+        <polygon points="7.5,5 12,9.5 7.5,14 3,9.5" />
+        <polygon points="16.5,10 21,14.5 16.5,19 12,14.5" />
+      </svg>
+    );
+  }
+  const shape = SHAPES[kind];
+  if (shape === undefined) return null;
+  if (shape.startsWith("M")) {
+    return (
+      <svg {...common}>
+        <path d={shape} />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <polygon points={shape} />
+    </svg>
+  );
+}

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rolaí</string>
+
+    <string name="settings_title">rolai — configurações</string>
+    <string name="open_app">Abrir o rolai.app</string>
+
+    <string name="overlay_toggle">Ativar botão flutuante</string>
+    <string name="overlay_permission_explain">Ao ativar, o Android abre a tela de permissão "Exibir sobre outros apps". O botão só aparece depois dessa permissão.</string>
+
+    <string name="room_code_label">Código da sala (opcional)</string>
+    <string name="room_code_hint">ex: a1B2-c3D</string>
+    <string name="name_label">Apelido</string>
+    <string name="notation_label">Rolagem rápida do botão</string>
+    <string name="system_label">Sistema de regras</string>
+    <string name="system_none">Notação livre (sem sistema)</string>
+    <string name="inputs_label">Parâmetros do sistema (JSON)</string>
+    <string name="server_label">Servidor (avançado)</string>
+
+    <string name="notification_channel_name">Botão flutuante</string>
+    <string name="notification_text">Botão flutuante ativo — toque para abrir as configurações</string>
+    <string name="notification_stop">Encerrar</string>
+
+    <string name="roll_button">ROLAR</string>
+    <string name="status_disconnected">sala: desconectado</string>
+    <string name="status_connecting">sala: conectando…</string>
+    <string name="status_reconnecting">sala: reconectando…</string>
+    <string name="status_room_not_found">sala não encontrada</string>
+    <string name="overlay_pool_empty">toque nos dados pra montar</string>
+    <string name="overlay_roll_pool">Rolar pool</string>
+    <string name="overlay_action_clear">limpar</string>
+    <string name="overlay_action_settings">config</string>
+    <string name="overlay_action_open_app">abrir app</string>
+    <string name="label_dice_preset">Estilo</string>
+    <string name="section_general">Botão flutuante</string>
+    <string name="section_room">Sala</string>
+    <string name="section_quickroll">Rolagem rápida</string>
+    <string name="section_appearance">Aparência do dado</string>
+    <string name="label_dice_scale">Tamanho do dado</string>
+    <string name="label_quality">Qualidade do 3D</string>
+    <string name="settings_subtitle">configurações</string>
+    <string name="label_color_body">Cor do corpo</string>
+    <string name="label_color_number">Cor do número</string>
+    <string name="label_color_outline">Cor do contorno</string>
+    <string name="label_texture">Textura</string>
+    <string name="label_material">Material</string>
+    <string name="label_harmony">Combinar automaticamente</string>
+    <string name="label_harmony_explain">O número e o contorno saem da cor do corpo, com contraste garantido. Escolher um deles à mão desliga.</string>
+</resources>

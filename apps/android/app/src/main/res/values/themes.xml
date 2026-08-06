@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema da tela de configuracoes nativa (Activity simples, sem
+         appcompat). Escuro, com os tokens do apps/web (styles.css). -->
+    <style name="Theme.Rolai" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#1D9E75</item>
+        <item name="android:windowBackground">#0D1013</item>
+        <item name="android:textColorPrimary">#E8ECF0</item>
+        <item name="android:textColorSecondary">#8B95A1</item>
+        <item name="android:textColorHint">#5A6470</item>
+        <item name="android:colorControlActivated">#25C48F</item>
+        <item name="android:colorControlNormal">#8B95A1</item>
+        <item name="android:colorButtonNormal">#1D9E75</item>
+    </style>
+
+    <!-- Cabecalho de secao (verde, caixa alta, espacamento de letra). -->
+    <style name="Rolai.SectionHeader" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">28dp</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.12</item>
+        <item name="android:textColor">#25C48F</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
+    <!-- Rotulo de campo (cinza discreto acima do controle). -->
+    <style name="Rolai.FieldLabel" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">#8B95A1</item>
+    </style>
+
+    <!-- Dialogo da roda de cores: o builder da colorpickerview herda de
+         AppCompat, entao precisa de tema AppCompat mesmo a Activity sendo
+         Material (ver ColorWheelDialog). -->
+    <style name="Theme.RolaiDialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">#1D9E75</item>
+    </style>
+
+    <!-- A LauncherActivity da TWA estende AppCompatActivity, entao o tema
+         dela PRECISA derivar de Theme.AppCompat (senao crasha no start). -->
+    <style name="Theme.RolaiTwa" parent="Theme.AppCompat.NoActionBar" />
+</resources>

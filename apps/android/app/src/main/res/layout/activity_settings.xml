@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tela de configuracoes nativa (SettingsActivity). Widgets da plataforma
+     de proposito: a activity nao usa appcompat. Visual escuro com os tokens
+     do apps/web — secoes com cabecalho verde, rotulos discretos. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="28dp"
+        android:paddingBottom="32dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="#E8ECF0"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_subtitle"
+            android:textColor="#8B95A1"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/btn_open_twa"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:backgroundTint="#1D9E75"
+            android:textColor="#FFFFFF"
+            android:text="@string/open_app" />
+
+        <TextView
+            style="@style/Rolai.SectionHeader"
+            android:text="@string/section_general" />
+
+        <Switch
+            android:id="@+id/switch_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/overlay_toggle"
+            android:textColor="#E8ECF0"
+            android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/overlay_permission_explain"
+            android:textColor="#8B95A1"
+            android:textSize="12sp" />
+
+        <TextView
+            style="@style/Rolai.SectionHeader"
+            android:text="@string/section_room" />
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/room_code_label" />
+
+        <EditText
+            android:id="@+id/edit_room_code"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/room_code_hint"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLength="32"
+            android:textColor="#E8ECF0" />
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/name_label" />
+
+        <EditText
+            android:id="@+id/edit_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:importantForAutofill="no"
+            android:inputType="textPersonName"
+            android:maxLength="24"
+            android:textColor="#E8ECF0" />
+
+        <TextView
+            style="@style/Rolai.SectionHeader"
+            android:text="@string/section_quickroll" />
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/notation_label" />
+
+        <EditText
+            android:id="@+id/edit_notation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:textColor="#E8ECF0" />
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/system_label" />
+
+        <Spinner
+            android:id="@+id/spinner_system"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/txt_inputs_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="#8B95A1"
+            android:textSize="12sp" />
+
+        <EditText
+            android:id="@+id/edit_inputs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint='{"mod": 1}'
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:textColor="#E8ECF0" />
+
+        <TextView
+            style="@style/Rolai.SectionHeader"
+            android:text="@string/section_appearance" />
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/label_dice_preset" />
+
+        <Spinner
+            android:id="@+id/spinner_dice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" />
+
+        <!-- Previa do dado (cor do corpo + numero, com contorno) — o
+             mesmo par de cores que vai pro palco 3D. -->
+        <FrameLayout
+            android:id="@+id/dice_preview"
+            android:layout_width="76dp"
+            android:layout_height="76dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="14dp">
+
+            <TextView
+                android:id="@+id/txt_preview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="20"
+                android:textSize="26sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+
+        <Switch
+            android:id="@+id/switch_harmony"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="@string/label_harmony"
+            android:textColor="#E8ECF0"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/label_harmony_explain"
+            android:textColor="#8B95A1"
+            android:textSize="12sp" />
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/label_color_body" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/palette_body"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/label_color_number" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/palette_number"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/label_color_outline" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/palette_outline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/label_texture" />
+
+        <Spinner
+            android:id="@+id/spinner_texture"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/label_material" />
+
+        <Spinner
+            android:id="@+id/spinner_material"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/txt_scale_label"
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/label_dice_scale" />
+
+        <SeekBar
+            android:id="@+id/seek_scale"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:min="70"
+            android:max="160" />
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/label_quality" />
+
+        <Spinner
+            android:id="@+id/spinner_quality"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/server_label" />
+
+        <EditText
+            android:id="@+id/edit_server"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:importantForAutofill="no"
+            android:inputType="textUri"
+            android:textColor="#E8ECF0" />
+    </LinearLayout>
+</ScrollView>

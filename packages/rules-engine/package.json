@@ -1,0 +1,20 @@
+{
+  "name": "@rolai/rules-engine",
+  "version": "0.1.0",
+  "description": "Parser de notacao + profiles de sistema do rolai. Usado por apps/web e pela WebView headless de apps/android.",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

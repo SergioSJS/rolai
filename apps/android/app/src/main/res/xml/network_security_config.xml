@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext (http/ws sem TLS) SO pra loopback — o backend de dev roda em
+  127.0.0.1 na maquina e chega no aparelho via `adb reverse`. Todo o resto
+  do app continua exigindo TLS, inclusive em debug.
+    localhost/127.0.0.1 -> aparelho por USB com adb reverse
+    10.0.2.2            -> host visto de dentro do emulador
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

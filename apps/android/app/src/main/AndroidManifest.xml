@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Superficie minima de permissoes (specs/04-android-overlay.md,
+      docs/security.md):
+      - INTERNET: WebSocket da sala (OkHttp, no OverlayService).
+      - FOREGROUND_SERVICE + FOREGROUND_SERVICE_SPECIAL_USE: exigidas a
+        partir da API 34 pra qualquer foreground service tipada.
+      - POST_NOTIFICATIONS: runtime na API 33+, pedida na tela de
+        configuracoes ao ativar o overlay.
+      - SYSTEM_ALERT_WINDOW: NUNCA pedida no boot — so quando o usuario
+        liga o toggle "Ativar botao flutuante" (SettingsActivity).
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.Rolai"
+        android:allowBackup="false"
+        android:supportsRtl="true"
+        android:networkSecurityConfig="@xml/network_security_config">
+
+        <!--
+          Launcher: tela de configuracoes NATIVA (nao a TWA), porque e aqui
+          que mora o toggle do overlay e o pedido explicito de
+          SYSTEM_ALERT_WINDOW — a TWA so renderiza conteudo web e nao teria
+          como expor esse fluxo nativo. O app web abre pelo botao
+          "Abrir o rolai.app" ou tocando num link https://rolai.app.
+        -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- TWA envelopando apps/web em producao. Sem o assetlinks.json
+             correto no dominio ela cai pra barra de URL visivel — ver
+             apps/android/README.md. -->
+        <activity
+            android:name=".TwaActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RolaiTwa">
+            <meta-data
+                android:name="android.support.customtabs.trusted.DEFAULT_URL"
+                android:value="${twaUrl}" />
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="rolai.app" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          Overlay flutuante + WebSocket da sala + WebView headless do
+          rules-engine. Tipo `specialUse`, decisao baseada na doc oficial
+          (developer.android.com/develop/background-work/services/fgs/service-types,
+          conferida em 2026-08):
+          - Nenhum outro tipo cobre "UI de overlay interativa persistente".
+            connectedDevice e pra interagir com dispositivo externo
+            (BT/NFC/USB); a conexao WS aqui e meio, nao proposito.
+          - dataSync caberia na conexao WS, mas desde a API 35 tem teto
+            cumulativo de 6h/24h com onTimeout (developer.android.com/
+            develop/background-work/services/fg-service-timeout) — mataria
+            o overlay no meio de uma sessao longa de jogo, e seu caso de
+            uso declarado e transferencia de dados, nao UI persistente.
+          - specialUse existe exatamente pra casos validos fora dos outros
+            tipos; exige o <property> abaixo com a justificativa (usada na
+            revisao da Play Store).
+        -->
+        <service
+            android:name=".OverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Botao flutuante ativado explicitamente pelo usuario que mantem viva a conexao WebSocket com a sala de RPG e rola dados (via rules-engine em WebView headless) sem sair do app em primeiro plano (ex: leitor de PDF). Nenhum outro tipo de foreground service cobre UI de overlay interativa persistente; dataSync tem teto de 6h/24h na API 35+." />
+        </service>
+
+    </application>
+</manifest>

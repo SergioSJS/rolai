@@ -1,0 +1,22 @@
+system: fitd
+label: "FitD — Pool de ação"
+roll_type: simple
+inputs:
+  - id: pool_size
+    label: "Tamanho do pool"
+    type: number
+fields:
+  - id: pool
+    dice: "{input.pool_size}d6"
+outcome_rules:
+  - condition: "count(pool, '>=6') >= 2"
+    result: critical
+  - condition: "count(pool, '>=6') == 1"
+    result: full_success
+  # Tiers sao mutuamente exclusivos: partial exige zero 6, senao um
+  # critical/full_success tambem marcaria partial_success e a UI exibiria
+  # dois outcomes contraditorios.
+  - condition: "max(pool) >= 4 and count(pool, '>=6') == 0"
+    result: partial_success
+  - condition: "max(pool) < 4"
+    result: miss

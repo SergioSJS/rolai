@@ -1,0 +1,23 @@
+node_modules/
+dist/
+apps/web/dist-headless/
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+*.iml
+.gradle/
+/apps/android/**/build/
+/apps/android/.idea/
+
+# Caches de ferramenta (ficam fora do repo — sao regeraveis)
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+apps/android/.kotlin/
+*.log
+
+# Build local do Android (o APK publicado vem do CI, ver .github/workflows)
+apps/android/local.properties
+apps/android/app/build/

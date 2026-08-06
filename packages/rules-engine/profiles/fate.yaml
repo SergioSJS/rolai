@@ -1,0 +1,25 @@
+system: fate
+label: "Fate / Fudge — 4dF"
+roll_type: simple
+inputs:
+  - id: skill
+    label: "Habilidade"
+    type: number
+  - id: difficulty
+    label: "Dificuldade"
+    type: number
+fields:
+  - id: roll
+    dice: "4dF"
+    modifier: "{input.skill}"
+# Fate compara o total (4dF + habilidade) com a dificuldade/oposicao.
+# Tiers mutuamente exclusivos — ver nota em fitd.yaml.
+outcome_rules:
+  - condition: "roll.total >= {input.difficulty} + 3"
+    result: success_with_style
+  - condition: "roll.total > {input.difficulty} and roll.total < {input.difficulty} + 3"
+    result: success
+  - condition: "roll.total == {input.difficulty}"
+    result: tie
+  - condition: "roll.total < {input.difficulty}"
+    result: fail

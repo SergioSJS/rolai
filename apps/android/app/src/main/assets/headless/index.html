@@ -1,0 +1,18 @@
+<!doctype html>
+<!--
+  Pagina minima carregada pela WebView headless do OverlayService
+  (file:///android_asset/headless/index.html). Nao tem UI, nao navega,
+  nao acessa rede — so executa o bundle do rules-engine e responde via
+  bridge RolaiBridge (ver HeadlessRoller.kt e apps/web/src/headless.ts).
+  rolai-headless.js e gerado por `npm run build:headless` em apps/web —
+  nao editar a mao.
+-->
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>rolai headless</title>
+  </head>
+  <body>
+    <script src="rolai-headless.js"></script>
+  </body>
+</html>

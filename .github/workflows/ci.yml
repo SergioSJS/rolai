@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rules-engine:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/rules-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+        working-directory: .
+      - run: npm test
+      - run: npm run typecheck
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ".[dev]"
+      - run: ruff check .
+      - run: mypy .
+      - run: pytest
+      - run: pip install pip-audit && pip-audit
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+        working-directory: .
+      - run: npm test
+      # Build (tsc -b && vite build) e a unica forma de pegar erro de tsc do
+      # vite.config + PWA que o vitest nao cobre.
+      - run: npm run build
+      # Audit so em deps de producao: as vulnerabilidades conhecidas do repo
+      # estao todas na cadeia vite/vitest (dev tooling — nao entram no bundle
+      # estatico nem em imagem). Bump major do vite fica como decisao separada.
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: .

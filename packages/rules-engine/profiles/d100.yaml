@@ -1,0 +1,28 @@
+system: d100
+label: "d100 — teste de perícia (BRP/Cthulhu)"
+roll_type: simple
+inputs:
+  - id: skill
+    label: "Perícia"
+    type: number
+fields:
+  - id: roll
+    dice: "1d100"
+# Rolagem por baixo: sucesso e rolar <= pericia. Os tiers sao fracoes da
+# pericia (extremo = 1/5, dificil = 1/2) e a comparacao com float funciona
+# igual ao arredondamento pra baixo do livro (roll inteiro <= 27.5 == <= 27).
+# Falha critica: 100 sempre; 96-99 tambem quando a pericia e menor que 50.
+outcome_rules:
+  - condition: "roll.total == 1"
+    result: critical
+  - condition: "roll.total == 100 or (roll.total >= 96 and {input.skill} < 50)"
+    result: fumble
+  - condition: "roll.total > 1 and roll.total <= {input.skill} / 5"
+    result: extreme_success
+  - condition: "roll.total > {input.skill} / 5 and roll.total <= {input.skill} / 2"
+    result: hard_success
+  - condition: "roll.total > {input.skill} / 2 and roll.total <= {input.skill}"
+    result: regular_success
+  # Falha simples: acima da pericia, sem ser a falha critica ja tratada acima.
+  - condition: "roll.total > {input.skill} and roll.total < 100 and not (roll.total >= 96 and {input.skill} < 50)"
+    result: fail

@@ -1,0 +1,23 @@
+system: ironsworn
+label: "Ironsworn — Ação"
+roll_type: comparison
+inputs:
+  - id: attribute
+    label: "Atributo"
+    type: number
+fields:
+  - id: action
+    dice: "1d6"
+    modifier: "{input.attribute}"
+  - id: challenge
+    dice: "2d10"
+    compare_individually: true
+outcome_rules:
+  - condition: "action.total > challenge[0] and action.total > challenge[1]"
+    result: strong_hit
+  - condition: "action.total > challenge[0] xor action.total > challenge[1]"
+    result: weak_hit
+  - condition: "action.total <= challenge[0] and action.total <= challenge[1]"
+    result: miss
+  - condition: "challenge[0] == challenge[1]"
+    result: match

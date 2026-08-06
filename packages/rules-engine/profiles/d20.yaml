@@ -1,0 +1,32 @@
+system: d20
+label: "d20 — teste contra CD"
+roll_type: simple
+inputs:
+  - id: mode
+    label: "Modo"
+    type: select
+    options:
+      - { value: "", label: "Normal" }
+      - { value: "adv", label: "Vantagem" }
+      - { value: "dis", label: "Desvantagem" }
+  - id: mod
+    label: "Modificador"
+    type: number
+  - id: dc
+    label: "CD"
+    type: number
+fields:
+  # "1d20adv" / "1d20dis" viram 2d20kh1 / 2d20kl1 no parser (acucar da
+  # notacao camada 1) — `rolls` fica com o unico dado mantido.
+  - id: roll
+    dice: "1d20{input.mode}"
+    modifier: "{input.mod}"
+outcome_rules:
+  - condition: "roll.rolls[0] == 20"
+    result: critical_success
+  - condition: "roll.rolls[0] == 1"
+    result: critical_failure
+  - condition: "roll.total >= {input.dc} and roll.rolls[0] != 20 and roll.rolls[0] != 1"
+    result: success
+  - condition: "roll.total < {input.dc} and roll.rolls[0] != 20 and roll.rolls[0] != 1"
+    result: fail

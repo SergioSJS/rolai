@@ -1,0 +1,9 @@
+{
+  "name": "rolai",
+  "icon": "icon.png",
+  "tagline": "Dice roller 3D multiplayer para mesas de RPG",
+  "category": "MeioOrc-Apps",
+  "port_map": "8420",
+  "index": "/",
+  "compose": ["../docker-compose.yml", "../docker-compose.casaos.yml"]
+}

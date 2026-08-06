@@ -1,0 +1,1366 @@
+/* Rolaí — design tokens + app shell. Temas via [data-theme] no <html>:
+   dark (default), light, table (feltro). O modo stream/OBS nao usa tema:
+   e uma URL propria (?stream=1) com fundo alpha ou chroma — ver o bloco
+   "Modo stream" mais abaixo e src/StreamApp.tsx.
+   Convencao de tokens inspirada em design systems semanticos (background /
+   panel / text / muted / accent) — sem framework. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0d1013;
+  --bg-soft: #13171c;
+  --panel: rgba(22, 27, 33, 0.92);
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --text: #e8ecf0;
+  --muted: #8b95a1;
+  --accent: #1d9e75;
+  --accent-strong: #25c48f;
+  --accent-glow: rgba(29, 158, 117, 0.35);
+  --warn: #e5c07b;
+  --error: #e06c75;
+  --chip-bg: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(0, 0, 0, 0.35);
+  --stage-bg: rgba(14, 38, 29, 0.45);
+  --shadow-panel: 0 6px 24px rgba(0, 0, 0, 0.35);
+  --radius: 10px;
+  --font:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #e7eae4;
+  --bg-soft: #f4f6f1;
+  --panel: rgba(255, 255, 255, 0.88);
+  --panel-border: rgba(23, 33, 28, 0.12);
+  --text: #182420;
+  --muted: #5a6a61;
+  --accent: #15775a;
+  --accent-strong: #0f8f68;
+  --accent-glow: rgba(21, 119, 90, 0.25);
+  --warn: #8a6d1f;
+  --error: #b03a46;
+  --chip-bg: rgba(23, 33, 28, 0.06);
+  --input-bg: rgba(255, 255, 255, 0.7);
+  --stage-bg: rgba(21, 119, 90, 0.08);
+  --shadow-panel: 0 4px 18px rgba(23, 33, 28, 0.12);
+}
+
+:root[data-theme="table"] {
+  --stage-bg: rgba(0, 0, 0, 0.28);
+  --panel: rgba(17, 22, 19, 0.9);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(29, 158, 117, 0.12) 0%, transparent 60%),
+    var(--bg);
+}
+
+:root[data-theme="light"] body {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(21, 119, 90, 0.08) 0%, transparent 60%),
+    var(--bg);
+}
+
+:root[data-theme="table"] body {
+  background: var(--bg) url("/texture-felt.png") repeat;
+  background-size: 512px;
+}
+
+/* Modo stream/OBS (?stream=1): nada de fundo alem do escolhido pela URL —
+   alpha real (transparent) ou chroma solido, aplicado inline pela StreamApp. */
+body.stream-mode {
+  background: transparent;
+}
+
+/* ---------- App shell ---------- */
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 1.25rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.menu-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.menu-brand .logo {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--accent-strong);
+  filter: drop-shadow(0 0 8px var(--accent-glow));
+}
+
+.brand-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.menu-items {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.menu-button {
+  background: transparent;
+  color: var(--text);
+  padding: 0.4rem 0.8rem;
+  border-radius: 7px;
+  font-weight: 600;
+}
+
+.menu-button:hover:not(:disabled) {
+  background: var(--chip-bg);
+}
+
+/* ---------- Layout principal ---------- */
+
+.layout {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 2rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 1.1rem;
+  /* stretch: o historico ocupa a altura da tela em vez de deixar um vazio
+     enorme embaixo dos paineis. */
+  align-items: stretch;
+}
+
+.main-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: sticky;
+  top: 4.2rem;
+  align-self: start;
+  /* Sem isto o min-content do painel (linha do modificador, pills) estoura
+     a coluna do grid e a pagina inteira rola na horizontal no celular. */
+  min-width: 0;
+}
+
+/* ---------- Palco (overlay acima de TODA a UI) ---------- */
+
+/* O canvas fica fixed no viewport inteiro, ACIMA dos paineis (menu z5,
+   modal z20, palco z60, resultado z61). pointer-events: none — a UI
+   continua clicavel por baixo. Fora da rolagem o canvas e transparente:
+   some de vista sem atrapalhar. */
+.stage {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Resultado por cima do canvas: base central da tela. */
+.stage-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 1rem 1rem 2rem;
+  pointer-events: none;
+}
+
+/* ---------- Modo stream/OBS (?room=CODIGO&stream=1) ---------- */
+
+/* Sem UI de app: so o palco (reutiliza .stage/.stage-overlay acima). */
+.stream-root {
+  position: fixed;
+  inset: 0;
+}
+
+/* Overlay do Android (janela translucida): impede a promocao do canvas
+   WebGL a uma superficie propria do sistema. Quando promovido, quem faz o
+   blend e o compositor do Android — que erra o alpha nessa janela e o dado
+   sai fantasma (visto em aparelho; no desktop o canvas nunca e promovido e
+   o dado sempre foi solido). Um filtro nao-identidade obriga o Chromium a
+   compor o canvas no proprio render pass, com blend correto. Visualmente
+   imperceptivel. */
+body.stream-mode .stage canvas {
+  filter: contrast(1.005) brightness(1.005);
+  transform: rotate(0.02deg);
+}
+
+/* Veu do overlay Android: fica ATRAS do palco (z abaixo de .stage) e some
+   junto com o resultado. */
+.stream-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  animation: stream-result-fade 8s forwards;
+  pointer-events: none;
+}
+
+/* O resultado entra, fica e sai sozinho — o unmount no fim da animacao e
+   agendado pela StreamApp (STREAM_RESULT_MS, manter em sincronia). */
+.stream-result {
+  animation: stream-result-fade 8s forwards;
+}
+
+@keyframes stream-result-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  5%,
+  85% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Mensagem minima (sala invalida, desconectado): discreta, sem painel —
+   qualquer coisa maior poluiria a saida da stream. */
+.stream-status {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* Legibilidade do resultado em cima de QUALQUER fundo (o OBS pode estar
+   sobre gameplay colorido/claro): contorno preto em camadas no texto e
+   chips com fundo escuro solido, em vez dos tokens de tema — no modo
+   stream nao existe tema por baixo. */
+.stream-root .result-headline {
+  color: #f4f7f5;
+  text-shadow:
+    -2px -2px 0 rgba(0, 0, 0, 0.9),
+    2px -2px 0 rgba(0, 0, 0, 0.9),
+    -2px 2px 0 rgba(0, 0, 0, 0.9),
+    2px 2px 0 rgba(0, 0, 0, 0.9),
+    0 0 6px rgba(0, 0, 0, 0.9),
+    0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+.stream-root .result-headline.is-outcome {
+  color: #2ee6a8;
+  text-shadow:
+    -2px -2px 0 rgba(0, 0, 0, 0.9),
+    2px -2px 0 rgba(0, 0, 0, 0.9),
+    -2px 2px 0 rgba(0, 0, 0, 0.9),
+    2px 2px 0 rgba(0, 0, 0, 0.9),
+    0 0 22px rgba(46, 230, 168, 0.55),
+    0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+.stream-root .result-flag {
+  background: rgba(10, 12, 14, 0.85);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #2ee6a8;
+}
+
+.stream-root .die-chip {
+  background: rgba(10, 12, 14, 0.85);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #f4f7f5;
+}
+
+.stream-root .die-chip-sides {
+  color: rgba(244, 247, 245, 0.65);
+}
+
+.stream-root .die-chip-mod {
+  background: rgba(10, 12, 14, 0.6);
+  color: #2ee6a8;
+}
+
+.stream-root .result-group-total {
+  color: #2ee6a8;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+
+.stream-root .result-group-name,
+.stream-root .result-notation {
+  color: rgba(244, 247, 245, 0.8);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+
+/* ---------- Painéis ---------- */
+
+.panel {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-panel);
+}
+
+/* Fio de luz na borda de cima: separa o painel do fundo escuro sem
+   precisar clarear o fundo inteiro. */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.14),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.panel h2,
+.modal-header h2 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin: 0 0 0.7rem;
+}
+
+.panel h3 {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0.9rem 0 0.35rem;
+}
+
+/* ---------- Formulários ---------- */
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin-bottom: 0.7rem;
+}
+
+input,
+select {
+  font: inherit;
+  font-size: 0.95rem;
+  text-transform: none;
+  letter-spacing: normal;
+  border-radius: 7px;
+  border: 1px solid var(--panel-border);
+  padding: 0.5rem 0.65rem;
+  background: var(--input-bg);
+  color: var(--text);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.05s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.button-secondary {
+  background: var(--chip-bg);
+  color: var(--text);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: var(--panel-border);
+}
+
+.button-ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+/* Botao redondo que carrega so um glifo SVG (−, ×). O SVG centraliza
+   sozinho no viewBox — nada de baseline de fonte desalinhando o traco. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  line-height: 0;
+}
+
+.icon-button .glyph {
+  width: 62%;
+  height: 62%;
+  display: block;
+}
+
+.button-ghost:hover:not(:disabled) {
+  background: var(--chip-bg);
+  color: var(--text);
+}
+
+.roll-button {
+  width: 100%;
+  padding: 0.85rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  box-shadow:
+    0 0 22px var(--accent-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.roll-button:hover:not(:disabled) {
+  box-shadow:
+    0 0 30px var(--accent-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.roll-button:disabled {
+  background: var(--chip-bg);
+  color: var(--muted);
+  box-shadow: none;
+}
+
+/* ---------- Seletor de sistema ---------- */
+
+.system-select {
+  margin-bottom: 0.35rem;
+}
+
+.system-caption {
+  margin: 0 0 0.8rem;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.profile-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.3rem;
+}
+
+/* ---------- Compositor ---------- */
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.7rem;
+}
+
+/* Resumo do pool: o que vai ser rolado, com remocao explicita por tipo. */
+.pool-tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.1rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px dashed var(--panel-border);
+  border-radius: 8px;
+  background: var(--input-bg);
+}
+
+.pool-empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.pool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.2rem 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  border: 1px solid var(--accent);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pool-chip-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--accent-strong);
+}
+
+.pool-chip-mod {
+  border-style: dashed;
+  color: var(--accent-strong);
+}
+
+.pool-chip-remove {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.pool-chip-remove:hover:not(:disabled) {
+  background: var(--error);
+  color: #fff;
+}
+
+.composer-dice {
+  display: flex;
+  flex-wrap: wrap;
+  /* folga pros badges "−" e contador, que sobram pra fora do slot */
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+/* Slot = botao de adicionar + botao "−" sobreposto (HTML nao aceita
+   button dentro de button). flex: 1 faz a ultima linha preencher a largura
+   em vez de deixar buraco. */
+.die-slot {
+  position: relative;
+  /* cresce pra fechar a linha, mas com teto: dois dados sozinhos na ultima
+     linha nao viram dois botoes gigantes. */
+  flex: 1 1 68px;
+  min-width: 68px;
+  max-width: 120px;
+}
+
+.die-button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.45rem 0.2rem 0.35rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--chip-bg);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.die-remove {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 1;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 1px solid var(--panel-border);
+  background: var(--bg-soft);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.die-remove:hover:not(:disabled) {
+  background: var(--error);
+  border-color: var(--error);
+  color: #fff;
+}
+
+.die-icon {
+  width: 26px;
+  height: 26px;
+  color: var(--muted);
+}
+
+.die-slot.active .die-icon {
+  color: var(--accent-strong);
+}
+
+.die-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--chip-bg);
+}
+
+.die-slot.active .die-button {
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.die-button-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 1.2rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.65rem;
+  line-height: 1.2rem;
+  text-align: center;
+}
+
+.composer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* nowrap: com wrap, o "Limpar" caia sozinho numa linha vazia */
+  flex-wrap: nowrap;
+}
+
+.composer-row .stepper {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.composer-clear {
+  margin-left: auto;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  flex: 0 0 auto;
+}
+
+.composer-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+
+.notation-input {
+  font-family: var(--mono);
+  width: 100%;
+}
+
+/* ---------- Stepper ---------- */
+
+.stepper {
+  display: flex;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+
+.stepper input {
+  width: 3.1rem;
+  text-align: center;
+}
+
+.stepper input::-webkit-outer-spin-button,
+.stepper input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+.stepper-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  padding: 0;
+  background: var(--chip-bg);
+  color: var(--text);
+}
+
+.stepper-button .glyph {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.stepper-button:hover:not(:disabled) {
+  background: var(--panel-border);
+}
+
+/* ---------- Resultado ---------- */
+
+.result-display {
+  text-align: center;
+  max-width: 100%;
+}
+
+.result-headline {
+  font-size: clamp(2.6rem, 7vw, 4.2rem);
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--text);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+}
+
+/* Outcome e palavra, nao numero: "sucesso com estilo" no mesmo corpo do
+   total (4rem) vira uma faixa de texto atravessando a tela. Corpo menor,
+   com o peso vindo do caixa alta e do brilho. */
+.result-headline.is-outcome {
+  font-size: clamp(1.4rem, 3vw, 2.1rem);
+  line-height: 1.15;
+  color: var(--accent-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-shadow:
+    0 0 26px var(--accent-glow),
+    0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+.result-flag {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent-strong);
+  background: var(--panel);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.result-groups {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.result-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.result-group-name {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.result-chips {
+  display: inline-flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.die-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 2.2rem;
+  padding: 0.25rem 0.45rem 0.15rem;
+  border-radius: 8px;
+  background: var(--chip-bg);
+  border: 1px solid var(--panel-border);
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.die-chip-sides {
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+.die-chip-mod {
+  background: transparent;
+  border-style: dashed;
+  color: var(--accent-strong);
+  justify-content: center;  font-size: 1rem;
+}
+
+.result-group-total {
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.result-notation {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.result-dismiss-hint {
+  opacity: 0.65;
+}
+
+.result-dismiss-hint::before {
+  content: "·";
+  margin-right: 0.5rem;
+}
+
+.notice {
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  background: rgba(229, 192, 123, 0.14);
+  border: 1px solid rgba(229, 192, 123, 0.45);
+  color: var(--warn);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+/* Indicador de conectividade: pildora discreta no canto, abaixo do palco
+   (z60) — some sozinha quando a rede volta. */
+.offline-badge {
+  position: fixed;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 15;
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* ---------- Modal ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Folga elastica: encolhe junto com a janela (12vh fixos empurravam o
+     modal pra fora numa janela baixa). */
+  padding: clamp(0.75rem, 4vh, 3rem) 1rem;
+  /* UMA barra de rolagem so, a do corpo do modal. Se o backdrop tambem
+     rolasse, sobrava barra dupla e o modal parecia cortado. */
+  overflow: hidden;
+}
+
+.modal {
+  width: 100%;
+  max-width: 420px;
+  /* 100% da area util do backdrop (que ja e viewport menos o padding, com
+     box-sizing: border-box) — sem conta de vh que erra o padding e deixa o
+     modal passar da tela. O corpo e que rola; o cabecalho fica sempre a
+     vista. */
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  padding: 0.9rem 1rem 0.6rem;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.modal-header h2 {
+  margin: 0;
+}
+
+.modal-close {
+  padding: 0.2rem 0.55rem;
+}
+
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.9rem 1rem 1.1rem;
+}
+
+/* Janela baixa (notebook com zoom, celular deitado): quase sem folga, pra
+   sobrar altura util pro conteudo. */
+@media (max-height: 640px) {
+  .modal-backdrop {
+    padding: 0.5rem;
+  }
+}
+
+.settings-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0.4rem 0 0;
+}
+
+/* ---------- Preferências ---------- */
+
+.settings-panel h3:first-child {
+  margin-top: 0;
+}
+
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.settings-row > label {
+  flex: 1 1 8rem;
+}
+
+.color-field input[type="color"] {
+  width: 100%;
+  height: 2.1rem;
+  padding: 2px;
+  cursor: pointer;
+}
+
+/* Previa dos dados: mesa de feltro com dois dados nas cores/textura reais. */
+.dice-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.4rem;
+  height: 7.5rem;
+  border-radius: 12px;
+  background:
+    radial-gradient(140% 120% at 50% 0%, rgba(29, 158, 117, 0.16) 0%, transparent 55%),
+    #0e2a20;
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
+}
+
+.die-preview {
+  position: relative;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 2px 6px rgba(255, 255, 255, 0.28),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.35),
+    0 8px 16px rgba(0, 0, 0, 0.45);
+}
+
+.die-preview-small {
+  width: 2.9rem;
+  height: 2.9rem;
+  border-radius: 11px;
+}
+
+/* A mesma imagem .webp estampada no dado 3D, multiplicada sobre a cor. */
+.die-preview-tex {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-size: cover;
+  background-position: center;
+  mix-blend-mode: multiply;
+  opacity: 0.9;
+}
+
+.die-preview-num {
+  position: relative;
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.die-preview-small .die-preview-num {
+  font-size: 1.1rem;
+}
+
+.dice-preview-hint {
+  margin: 0.35rem 0 0.6rem;
+  text-align: center;
+}
+
+/* Slider (tamanho do dado) na cor do tema. */
+input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  accent-color: var(--accent);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  box-shadow: 0 0 8px var(--accent-glow);
+  cursor: pointer;
+}
+
+input[type="range"]:focus {
+  box-shadow: none;
+  outline: none;
+}
+
+.about p {
+  margin: 0 0 0.7rem;
+  font-size: 0.9rem;
+}
+
+/* ---------- Sala ---------- */
+
+.status {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.status-connected {
+  color: var(--accent-strong);
+}
+.status-connecting,
+.status-reconnecting {
+  color: var(--warn);
+}
+.status-closed {
+  color: var(--error);
+}
+.status-idle {
+  color: var(--muted);
+}
+
+.room-code {
+  font-family: var(--mono);
+  color: var(--text);
+  background: var(--chip-bg);
+  padding: 0.1rem 0.45rem;
+  border-radius: 5px;
+}
+
+.room-status-line {
+  margin: 0 0 0.7rem;
+}
+
+.room-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.export-links a {
+  color: var(--accent-strong);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  text-decoration: none;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+}
+
+.export-links a:hover {
+  border-color: var(--accent);
+}
+
+.roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.roster li {
+  font-size: 0.8rem;
+}
+
+/* ---------- Histórico ---------- */
+
+.history-panel {
+  flex: 1;
+  min-height: 40vh;
+  max-height: calc(100vh - 7rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.history-panel > :last-child {
+  flex: 1;
+}
+
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 0.88rem;
+  flex-wrap: wrap;
+}
+
+.history li:last-child {
+  border-bottom: none;
+}
+
+/* Nome do jogador com a cara do dado dele (cor do corpo + cor do numero). */
+.player-tag {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--accent-strong);
+  background: var(--chip-bg);
+}
+
+.player-tag.has-style {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.history-notation {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+
+.history-flag {
+  border: 1px solid var(--accent);
+  color: var(--accent-strong);
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+/* Estado vazio: a coluna do historico ocupa a tela inteira, entao um
+   paragrafo solto no topo deixava o painel parecendo quebrado. */
+.history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 12rem;
+  height: 100%;
+  color: var(--muted);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.history-empty svg {
+  width: 3rem;
+  height: 3rem;
+  opacity: 0.35;
+  margin-bottom: 0.4rem;
+}
+
+.history-empty p {
+  margin: 0;
+}
+
+.history-empty-hint {
+  font-size: 0.78rem;
+  opacity: 0.75;
+  max-width: 22rem;
+}
+
+/* ---------- Dado 2D / texto puro (no palco) ---------- */
+
+.die2d {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  background: linear-gradient(160deg, #ffffff, #d8dde2);
+  color: #14181c;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: die2d-shake 0.15s infinite;
+}
+
+.die2d.settled {
+  animation: none;
+  outline: 3px solid var(--accent);
+  box-shadow: 0 0 26px var(--accent-glow);
+}
+
+@keyframes die2d-shake {
+  0% {
+    transform: rotate(-4deg) translateY(-2px);
+  }
+  50% {
+    transform: rotate(3deg) translateY(2px);
+  }
+  100% {
+    transform: rotate(-3deg) translateY(-1px);
+  }
+}
+
+.die-text {
+  font-size: clamp(3rem, 8vw, 5rem);
+  font-weight: 800;
+  color: #fff;
+  text-shadow:
+    0 0 30px var(--accent-glow),
+    0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.error {
+  color: var(--error);
+  font-size: 0.82rem;
+  margin: 0.5rem 0 0;
+}
+
+/* ---------- Mobile ---------- */
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Controles primeiro no mobile; historico embaixo. */
+  .sidebar {
+    position: static;
+    order: 1;
+  }
+
+  .main-col {
+    order: 2;
+  }
+
+  .history-panel {
+    min-height: 0;
+    max-height: 50vh;
+  }
+
+  .menu-bar {
+    padding: 0.5rem 0.8rem;
+  }
+}
+
+/* Campo com label separada do controle (steppers) */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.7rem;
+}
+
+.field > label {
+  margin-bottom: 0;
+}

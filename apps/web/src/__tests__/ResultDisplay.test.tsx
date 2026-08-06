@@ -1,0 +1,59 @@
+import { describe, expect, it } from "vitest";
+import { render } from "@testing-library/react";
+import { roll } from "@rolai/rules-engine";
+import type { RollResult } from "@rolai/rules-engine";
+import { ResultDisplay } from "../components/ResultDisplay";
+
+describe("ResultDisplay", () => {
+  it("com outcome (FitD), o outcome e o headline — nao a soma do pool", () => {
+    // Repro do bug reportado: [6,6,2,3] no FitD exibia "17" gigante,
+    // numero que nao significa nada pro sistema.
+    const result: RollResult = {
+      notation: "4d6",
+      groups: { pool: { rolls: [6, 6, 2, 3], total: 17 } },
+      profile: "fitd",
+      outcome: "critical",
+      outcome_flags: ["critical"],
+      timestamp: "2026-08-05T12:00:00.000Z",
+    };
+    const { container } = render(<ResultDisplay result={result} />);
+    const headline = container.querySelector(".result-headline");
+    expect(headline?.textContent).toBe("crítico");
+    expect(headline?.textContent).not.toBe("17");
+    // A composicao continua visivel nos chips.
+    expect(container.textContent).toContain("6");
+    expect(container.textContent).toContain("d6");
+  });
+
+  it("sem outcome (notacao livre), o total e o headline", () => {
+    const result = roll("2d6", { deterministic: [3, 4] });
+    const { container } = render(<ResultDisplay result={result} />);
+    expect(container.querySelector(".result-headline")?.textContent).toBe("7");
+  });
+
+  it("flags independentes do outcome aparecem como badge (ex: match)", () => {
+    const result: RollResult = {
+      notation: "{1d6+3} vs {2d10}",
+      groups: {
+        action: { rolls: [4], modifier: 3, total: 7 },
+        challenge: { rolls: [5, 5] },
+      },
+      profile: "ironsworn",
+      outcome: "strong_hit",
+      outcome_flags: ["strong_hit", "match"],
+      timestamp: "2026-08-05T12:00:00.000Z",
+    };
+    const { container } = render(<ResultDisplay result={result} />);
+    expect(container.querySelector(".result-headline")?.textContent).toBe(
+      "sucesso forte",
+    );
+    expect(container.querySelector(".result-flag")?.textContent).toBe("match!");
+  });
+
+  it("sem resultado nao desenha nada", () => {
+    // O overlay do resultado e fixo acima de toda a UI: placeholder aqui
+    // vira texto flutuando por cima do historico e dos controles.
+    const { container } = render(<ResultDisplay result={null} />);
+    expect(container.textContent).toBe("");
+  });
+});

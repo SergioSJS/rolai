@@ -1,0 +1,20 @@
+system: pbta
+label: "PbtA — Rolagem 2d6"
+roll_type: simple
+inputs:
+  - id: mod
+    label: "Modificador"
+    type: number
+fields:
+  - id: roll
+    dice: "2d6"
+    modifier: "{input.mod}"
+outcome_rules:
+  - condition: "roll.total >= 10"
+    result: strong_hit
+  # Tier exclusivo: sem o teto, um strong_hit (>=10) tambem marcaria
+  # weak_hit e a UI exibiria dois outcomes contraditorios.
+  - condition: "roll.total >= 7 and roll.total < 10"
+    result: weak_hit
+  - condition: "roll.total < 7"
+    result: miss

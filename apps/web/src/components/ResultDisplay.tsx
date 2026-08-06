@@ -1,0 +1,93 @@
+// Resultado em destaque, sobreposto ao palco. Com profile, o outcome E o
+// resultado (ex: FitD nao tem "soma" — exibir o total do pool como numero
+// principal induzia a erro); sem profile, o total assume. Chips por dado
+// mostram a composicao em qualquer caso.
+
+import type { RollResult } from "@rolai/rules-engine";
+import { dieFaceLabel, displayGroups, outcomeLabel } from "../format";
+
+export function ResultDisplay({
+  result,
+  // Modo stream/OBS: ninguem clica pra dispensar (some sozinho), entao o
+  // hint nao faz sentido na saida da stream.
+  showDismissHint = true,
+}: {
+  result: RollResult | null;
+  showDismissHint?: boolean;
+}) {
+  // Sem resultado, nada: este overlay fica FIXO acima de toda a UI, entao
+  // qualquer placeholder aqui vira texto flutuando por cima do historico e
+  // dos controles. Quem convida a rolar e o painel lateral.
+  if (result === null) return null;
+
+  const groups = displayGroups(result);
+  // Grupo unico sem total do engine (ex: "2d6" livre — o engine so emite
+  // total com operador de soma explicito): a soma e a leitura natural da
+  // rolagem, entao exibimos. Em multi-grupo (vs), vale so o total do
+  // engine — somar o challenge do Ironsworn seria errado.
+  const single = groups.length === 1 ? groups[0]! : undefined;
+  // `?? undefined` tambem cobre null vindo de outro cliente (ver format.ts).
+  const singleTotal =
+    single !== undefined
+      ? (single.total ??
+        single.rolls.reduce((sum, v) => sum + v, 0) + (single.modifier ?? 0))
+      : undefined;
+  const headline =
+    typeof result.outcome === "string"
+      ? outcomeLabel(result.outcome)
+      : singleTotal !== undefined
+        ? String(singleTotal)
+        : result.notation;
+
+  return (
+    <div className="result-display">
+      <div
+        className={`result-headline${typeof result.outcome === "string" ? " is-outcome" : ""}`}
+      >
+        {headline}
+      </div>
+      {result.outcome_flags
+        ?.filter((flag) => flag !== result.outcome)
+        .map((flag) => (
+          <div key={flag} className="result-flag">
+            {outcomeLabel(flag)}
+          </div>
+        ))}
+      <div className="result-groups">
+        {groups.map((group, gi) => (
+          <div key={`${group.name}-${gi}`} className="result-group">
+            {groups.length > 1 && (
+              <span className="result-group-name">{group.name}</span>
+            )}
+            <span className="result-chips">
+              {group.rolls.map((value, i) => (
+                <span key={i} className="die-chip">
+                  {dieFaceLabel(value, group.fudge)}
+                  {group.sides !== null && (
+                    <span className="die-chip-sides">
+                      {group.fudge ? "dF" : `d${group.sides}`}
+                    </span>
+                  )}
+                </span>
+              ))}
+              {group.modifier !== undefined && group.modifier !== 0 && (
+                <span className="die-chip die-chip-mod">
+                  {group.modifier > 0 ? `+${group.modifier}` : group.modifier}
+                </span>
+              )}
+            </span>
+            {group.total !== undefined && (
+              <span className="result-group-total">= {group.total}</span>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="result-notation">
+        <span>{result.notation}</span>
+        {showDismissHint && (
+          <span className="result-dismiss-hint">clique ou Esc pra tirar os dados</span>
+        )}
+      </div>
+    </div>
+  );
+}

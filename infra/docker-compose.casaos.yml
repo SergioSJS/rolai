@@ -1,0 +1,14 @@
+# Override para ZimaOS/CasaOS — sem Traefik, porta exposta direto, volumes
+# nos paths padrao de dados do CasaOS. Ver docs/deployment.md.
+services:
+  backend:
+    ports:
+      - "8420:8000"
+
+  redis:
+    volumes:
+      - /DATA/AppData/rolai/redis:/data
+
+  postgres:
+    volumes:
+      - /DATA/AppData/rolai/postgres:/var/lib/postgresql/data
