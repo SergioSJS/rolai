@@ -26,6 +26,25 @@ android {
         buildConfig = true
     }
 
+    // Assinatura de release: so existe quando as envs estao presentes (o CI
+    // as monta a partir dos secrets). Sem elas, `assembleRelease` cai na
+    // chave de debug — o build local e o CI de PR continuam verdes sem
+    // precisar de chave nenhuma. A chave NUNCA entra no repositorio.
+    val keystoreFile = System.getenv("ANDROID_KEYSTORE_PATH")
+    val hasSigning = !keystoreFile.isNullOrBlank() && file(keystoreFile).exists()
+
+    signingConfigs {
+        if (hasSigning) {
+            create("release") {
+                storeFile = file(keystoreFile!!)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+                    ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Dev: a TWA abre o Vite da maquina, alcancavel do aparelho por
@@ -35,6 +54,7 @@ android {
             buildConfigField("String", "DEFAULT_WEB_BASE_URL", "\"http://localhost:5273\"")
         }
         release {
+            if (hasSigning) signingConfig = signingConfigs.getByName("release")
             manifestPlaceholders["twaUrl"] = "https://rolai.app"
             buildConfigField("String", "DEFAULT_WS_BASE_URL", "\"wss://api.rolai.app\"")
             buildConfigField("String", "DEFAULT_WEB_BASE_URL", "\"https://rolai.app\"")

@@ -141,23 +141,74 @@ app/src/main/assets/headless/
   systems.json          GERADO — fonte do seletor de sistema
 ```
 
-## TWA em tela cheia exige keystore fixo
+## Chave de assinatura (keystore) — quando e por quê
 
-O `assetlinks.json` (em `apps/web/public/.well-known/`) precisa do SHA-256 da
-chave que assinou o APK. O APK publicado nas Releases é **debug**, e o CI
-assina com uma chave de debug gerada na hora — **fingerprint efêmero, muda a
-cada build**, então não dá pra registrar no assetlinks e a TWA abre com a
-barra de URL visível.
+### O problema
 
-Pra tela cheia, mesmo sem Play Store, é preciso uma chave estável:
+Todo APK Android é assinado. Hoje o APK das Releases é **debug**: o CI assina
+com a chave de debug que o Android gera sozinho, e como o runner do GitHub é
+descartado a cada build, **essa chave é diferente toda vez**.
+
+Isso não impede instalar o app. Impede uma coisa só: **abrir em tela cheia**.
+O Android só deixa a TWA esconder a barra de URL se o site provar que confia
+naquele app, e a prova é o `assetlinks.json` publicado em
+`https://rolai.app/.well-known/assetlinks.json` listando o SHA-256 da chave.
+Com chave que muda todo build, não há o que listar — daí a barra de URL.
+
+Ou seja: **não ir pra Play Store não dispensa a chave**, se você quiser tela
+cheia. Se conviver com a barra de URL estiver de bom tamanho, pode ignorar
+esta seção inteira — o app funciona, o botão flutuante funciona, o overlay
+funciona.
+
+### Como fazer (uma vez só)
+
+O build e o CI já estão prontos: `app/build.gradle.kts` cria o `signingConfig`
+quando as envs existem, e `.github/workflows/release.yml` roda
+`assembleRelease` quando o secret existe. Sem os secrets, tudo continua caindo
+no debug — nada quebra.
+
+**1. Gerar a chave** (na sua máquina — pede uma senha que você escolhe):
 
 ```bash
-keytool -genkey -v -keystore rolai.jks -alias rolai \
+keytool -genkeypair -v -keystore ~/rolai-release.jks -alias rolai \
   -keyalg RSA -keysize 2048 -validity 10000
-keytool -list -v -keystore rolai.jks -alias rolai | grep SHA256   # vai pro assetlinks
-base64 -i rolai.jks | pbcopy                                       # vira secret no CI
 ```
 
-Depois: `signingConfig` lendo senha/alias de env, os secrets no GitHub
-(`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`)
-e `assembleRelease` no workflow. **A chave nunca entra no repositório.**
+Guarde o arquivo **e** a senha (gerenciador de senhas). Se perder, não dá pra
+publicar atualização do mesmo app: quem já instalou precisa desinstalar antes.
+`validity 10000` ≈ 27 anos, pra não vencer no meio do caminho.
+
+**2. Pegar o fingerprint** e colar no assetlinks:
+
+```bash
+keytool -list -v -keystore ~/rolai-release.jks -alias rolai | grep SHA256
+```
+
+Substitua o placeholder de zeros em
+`apps/web/public/.well-known/assetlinks.json` pelo valor
+(`AA:BB:CC:...`, com os dois-pontos), commite e faça o deploy do web — o
+arquivo precisa estar no ar em rolai.app.
+
+**3. Cadastrar os secrets no GitHub** (`gh` já configurado):
+
+```bash
+base64 -i ~/rolai-release.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD   # cola a senha, Enter
+gh secret set ANDROID_KEY_ALIAS           # rolai
+```
+
+`ANDROID_KEY_PASSWORD` só é preciso se a senha da chave for diferente da
+senha do keystore (o comando acima usa a mesma).
+
+**4. Gerar a release**: `git tag v0.2.0 && git push --tags`. O workflow detecta
+o secret, assina, e imprime o fingerprint do APK no passo "Mostrar fingerprint
+do APK" — tem que bater com o do assetlinks.
+
+**A chave nunca entra no repositório.** Ela vive na sua máquina e, em base64,
+nos secrets do GitHub (que o runner descarta no fim do build).
+
+### Trocar de chave quebra a atualização
+
+APK assinado com chave diferente não instala por cima do antigo. Quem já tem o
+APK de debug instalado precisa **desinstalar antes** de instalar o assinado.
+Vale avisar na descrição da Release.
