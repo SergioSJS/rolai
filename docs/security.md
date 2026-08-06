@@ -11,8 +11,25 @@ importa pra este projeto.
 
 ## Salas / WebSocket
 
-- **Código de sala**: gerado com um CSPRNG (ex. `secrets.token_urlsafe`),
-  nunca sequencial/incremental — não deve ser adivinhável nem enumerável.
+- **Código de sala**: o gerado pelo backend sai de um CSPRNG
+  (`secrets.token_urlsafe`), nunca sequencial/incremental — não deve ser
+  adivinhável nem enumerável.
+- **Código escolhido pelo usuário (trade-off aceito, 2026-08-06)**: entrar
+  numa URL de sala inexistente **cria** a sala com aquele código, desde que
+  ele passe no piso de entropia (`is_valid_custom_code` em `rooms.py`:
+  ≥16 caracteres, ≥8 distintos). Motivação: mesa fixa para OBS (a Browser
+  Source aponta pro mesmo endereço para sempre, sobrevivendo ao TTL) e link
+  compartilhado expirado (todos caem na **mesma** sala, em vez de cada um
+  numa sala diferente).
+  Custo assumido: como não há login, **o código é a credencial**. Um código
+  fraco seria sala pública adivinhável — daí o piso, que derruba `teste`,
+  `aaaa...`, `12341234...`. Não é prova de imprevisibilidade; é o piso que
+  torna enumeração inviável junto do rate limit por IP.
+  A criação por WS usa **o mesmo teto por IP** do `POST /rooms`
+  (`room_create_limit_per_hour`) e o mesmo teto global — senão abrir WS
+  viraria um caminho paralelo pra encher o Redis.
+  Quem escolhe o código assume que quem tiver o link entra: para mesa
+  privada, use o código gerado pelo backend.
 - **Rate limit por conexão**: limite de mensagens/segundo por socket
   (ex. token bucket simples), pra evitar flood de rolagens travando a sala
   pra todo mundo.

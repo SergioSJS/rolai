@@ -215,3 +215,43 @@ def test_history_keeps_the_style_of_who_rolled(client: TestClient) -> None:
     with client.websocket_connect(f"/rooms/{code}?name=Beto") as ws_b:
         snapshot = next_event(ws_b)
         assert snapshot["history"][0]["style"] == STYLE
+
+
+# --- Sala com codigo escolhido pelo usuario (docs/security.md) ---
+
+CODIGO_FIXO = "mesa-do-sergio-2026"
+
+
+def test_custom_code_creates_room_on_join(client: TestClient) -> None:
+    """Mesa fixa do OBS: a Browser Source aponta pro mesmo endereco pra
+    sempre, mesmo depois do TTL derrubar a sala."""
+    with client.websocket_connect(f"/rooms/{CODIGO_FIXO}?name=Sergio") as ws:
+        assert next_event(ws)["type"] == "snapshot"
+
+
+def test_same_custom_code_is_the_same_room(client: TestClient) -> None:
+    """O ponto do link compartilhado: a segunda pessoa entra na sala da
+    primeira, e nao numa sala nova. Sem isso, cada um ficaria sozinho."""
+    with client.websocket_connect(f"/rooms/{CODIGO_FIXO}?name=Sergio") as ws_a:
+        assert next_event(ws_a)["type"] == "snapshot"
+        with client.websocket_connect(f"/rooms/{CODIGO_FIXO}?name=Beto") as ws_b:
+            assert next_event(ws_b)["type"] == "snapshot"
+            # A entrada de Beto chega pra Sergio: mesma sala. O primeiro
+            # roster e o da propria entrada de Sergio — le ate os dois
+            # aparecerem, com teto pra nao pendurar o teste.
+            nomes: set[str] = set()
+            for _ in range(4):
+                evento = next_event(ws_a, skip_roster=False)
+                if evento["type"] != "roster":
+                    continue
+                nomes = {m["name"] for m in evento["roster"]}
+                if nomes == {"Sergio", "Beto"}:
+                    break
+            assert nomes == {"Sergio", "Beto"}
+
+
+def test_weak_custom_code_is_still_refused(client: TestClient) -> None:
+    """O codigo E a credencial (nao ha login). Codigo curto ou pobre nao
+    pode virar sala, senao `?room=teste` e sala publica adivinhavel."""
+    for fraco in ("teste", "aaaaaaaaaaaaaaaaaaaa", "12341234123412341234", "mesa"):
+        assert_ws_rejected(client, f"/rooms/{fraco}", 4404)

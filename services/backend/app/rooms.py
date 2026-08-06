@@ -92,6 +92,20 @@ class RoomStore:
     def _key(self, code: str, suffix: str = "") -> str:
         return f"room:{code}{suffix}"
 
+    async def claim(self, code: str) -> bool:
+        """Cria a sala COM o codigo pedido. False = o codigo ja existia.
+
+        NX: se duas pessoas abrirem o mesmo link ao mesmo tempo, a primeira
+        cria e a segunda entra na sala da primeira — nunca duas salas com o
+        mesmo codigo, nunca uma sobrescrevendo a outra.
+        """
+        await self._enforce_room_cap()
+        if not await self._redis.set(self._key(code), "1", nx=True):
+            return False
+        await self._redis.sadd(ACTIVE_ROOMS_KEY, code)
+        await self._refresh_ttl(code)
+        return True
+
     async def create(self) -> str:
         await self._enforce_room_cap()
         for _ in range(MAX_CODE_RETRIES):
@@ -307,9 +321,38 @@ async def _broadcast(connections: dict[str, WebSocket], event: dict[str, object]
         await conn.send_json(event)
 
 
-# Codigo de sala e sempre token_urlsafe: alfabeto restrito e tamanho curto.
-# Sem esse filtro, qualquer string vira chave no Redis.
+# Alfabeto e tamanho aceitos numa URL de sala. Sem esse filtro, qualquer
+# string vira chave no Redis.
 ROOM_CODE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{4,32}$")
+
+# --- Sala com codigo escolhido pelo usuario ---
+#
+# Decisao consciente, registrada em docs/security.md: entrar num codigo
+# inexistente CRIA a sala com aquele codigo. Serve o caso de mesa fixa (a
+# Browser Source do OBS aponta pro mesmo endereco pra sempre, mesmo depois
+# do TTL derrubar a sala) e o de link compartilhado que expirou — todo mundo
+# que abre o link cai na MESMA sala, em vez de cada um numa sala diferente.
+#
+# O custo: o codigo deixa de ser so CSPRNG. Como nao ha login, o codigo E a
+# credencial — `?room=teste` seria uma sala que qualquer um adivinha. Dai o
+# piso de entropia abaixo, que so vale pra codigo escolhido a mao; o gerado
+# pelo backend continua curto.
+#
+# 16 caracteres com >= 8 distintos: derruba o caso real (palavra comum,
+# "teste", "aaaaaaaa...", "12341234...") sem exigir do usuario decorar algo
+# impossivel. Nao e prova matematica de imprevisibilidade — e o piso que
+# torna enumeracao inviavel na pratica, junto do rate limit por IP.
+CUSTOM_CODE_MIN_LENGTH = 16
+CUSTOM_CODE_MIN_DISTINCT = 8
+
+
+def is_valid_custom_code(code: str) -> bool:
+    """Codigo escolhido a mao pode virar sala nova? (ver bloco acima)"""
+    if not ROOM_CODE_PATTERN.match(code):
+        return False
+    if len(code) < CUSTOM_CODE_MIN_LENGTH:
+        return False
+    return len(set(code)) >= CUSTOM_CODE_MIN_DISTINCT
 
 
 @router.websocket("/rooms/{code}")
@@ -357,8 +400,29 @@ async def room_ws(
         return
 
     if not await store.exists(code):
-        await websocket.close(code=4404)
-        return
+        # Codigo escolhido a mao com entropia suficiente vira sala nova (ver
+        # bloco de CUSTOM_CODE_*). Codigo curto/pobre continua dando 4404 —
+        # senao `?room=teste` viraria sala publica adivinhavel.
+        if not is_valid_custom_code(code):
+            await websocket.close(code=4404)
+            return
+        # Mesmo teto por IP do POST /rooms: sem isto, abrir WS viraria um
+        # caminho paralelo pra encher o Redis, ignorando o limite do REST.
+        if not await within_limit(
+            _redis_of(websocket), f"rl:rooms:{ip}", settings.room_create_limit_per_hour, 3600
+        ):
+            log.warning("event=rate_limited limit=room_create via=ws ip=%s", ip)
+            _stats_of(websocket).limit_hit("room_create")
+            await websocket.close(code=4429)
+            return
+        try:
+            created = await store.claim(code)
+        except RoomCapReached:
+            log.warning("event=room_cap_reached via=ws ip=%s", ip)
+            _stats_of(websocket).limit_hit("room_cap")
+            await websocket.close(code=4429)
+            return
+        log.info("event=room_created via=ws code=%s new=%s ip=%s", code, created, ip)
 
     # Broadcast entre os conectados desta sala, em memoria (single-process).
     # Jogadores e espectadores ficam em mapas separados: espectador nao
