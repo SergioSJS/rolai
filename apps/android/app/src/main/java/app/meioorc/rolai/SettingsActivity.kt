@@ -66,6 +66,25 @@ class SettingsActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        // Edge-to-edge e forcado a partir do targetSdk 35: a janela nao
+        // redimensiona mais sozinha pro teclado (o adjustResize do manifest
+        // vira inset, nao resize). Sem isto o teclado cobre o campo sendo
+        // editado. Tem que ser MARGEM (padding so cria espaco morto no fim
+        // do scroll — o viewport continua atras do teclado); a margem muda
+        // o tamanho de verdade, e o onSizeChanged do ScrollView rola o
+        // campo focado pra cima do teclado.
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(
+            findViewById(R.id.settings_scroller),
+        ) { view, insets ->
+            val ime = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())
+            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            view.setPadding(0, bars.top, 0, 0)
+            val lp = view.layoutParams as android.view.ViewGroup.MarginLayoutParams
+            lp.bottomMargin = maxOf(ime.bottom, bars.bottom)
+            view.layoutParams = lp
+            insets
+        }
+
         switchOverlay = findViewById(R.id.switch_overlay)
         editRoomCode = findViewById(R.id.edit_room_code)
         findViewById<Button>(R.id.button_create_room).setOnClickListener(::createRoom)

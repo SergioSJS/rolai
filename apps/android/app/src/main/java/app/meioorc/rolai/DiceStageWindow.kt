@@ -46,6 +46,12 @@ class DiceStageWindow(private val context: Context) {
     private var windowManager: WindowManager? = null
     private var params: WindowManager.LayoutParams? = null
 
+    /** URL do palco, pra retentativa de carga (ver play). */
+    private var stageUrl: String? = null
+
+    /** Ultima carga do palco falhou (offline sem cache, servidor fora). */
+    private var stageLoadFailed = false
+
     /** Toque no palco enquanto ha dado na tela (janela interativa). */
     var onStageTapped: (() -> Unit)? = null
 
@@ -63,13 +69,33 @@ class DiceStageWindow(private val context: Context) {
     ) {
         if (container != null) return
         windowManager = wm
+        val url = streamUrl(webBaseUrl, roomCode, dicePreset, scalePercent, quality, style)
+        stageUrl = url
+        stageLoadFailed = false
         val view = WebView(context).apply {
             setBackgroundColor(Color.TRANSPARENT)
             settings.javaScriptEnabled = true
             // localStorage: e de onde a pagina le a qualidade de render.
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
-            loadUrl(streamUrl(webBaseUrl, roomCode, dicePreset, scalePercent, quality, style))
+            webViewClient = object : android.webkit.WebViewClient() {
+                override fun onReceivedError(
+                    view: WebView,
+                    request: android.webkit.WebResourceRequest,
+                    error: android.webkit.WebResourceError,
+                ) {
+                    if (!request.isForMainFrame) return
+                    // Sem esta protecao, a falha de carga vira uma PAGINA DE
+                    // ERRO gigante por cima dos outros apps. O palco e
+                    // decorativo: falhou, fica invisivel (a WebView e
+                    // transparente) — a rolagem continua saindo no cartao
+                    // do overlay via WebView headless, que e 100% local.
+                    // O play() tenta recarregar na proxima rolagem.
+                    stageLoadFailed = true
+                    view.loadUrl("about:blank")
+                }
+            }
+            loadUrl(url)
             // O listener vai NA WebView (nao no pai): filho consome o toque
             // antes do OnTouchListener do pai rodar. Retornar true engole o
             // evento — a pagina nunca precisa de toque; um tap = dispensar.
@@ -118,6 +144,13 @@ class DiceStageWindow(private val context: Context) {
      */
     fun play(resultJson: String) {
         val view = webView ?: return
+        if (stageLoadFailed) {
+            // O palco falhou ao carregar (offline): tenta de novo ao rolar.
+            // Se a rede voltou, ESTA rolagem ainda nao anima (a pagina esta
+            // carregando), mas as proximas ja saem.
+            stageLoadFailed = false
+            stageUrl?.let { view.loadUrl(it) }
+        }
         val escaped = org.json.JSONObject.quote(resultJson)
         view.evaluateJavascript("window.rolaiStream && window.rolaiStream.play($escaped)", null)
     }

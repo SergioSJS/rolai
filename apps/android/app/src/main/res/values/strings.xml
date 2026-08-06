@@ -31,6 +31,9 @@
     <string name="status_room_not_found">sala não encontrada</string>
     <string name="overlay_pool_empty">toque nos dados pra montar</string>
     <string name="overlay_roll_pool">Rolar pool</string>
+    <string name="overlay_notation_hint">ou digite: 2d6+3, 4dF…</string>
+    <string name="overlay_history_title">histórico</string>
+    <string name="overlay_history_empty">sem rolagens ainda</string>
     <string name="overlay_action_clear">limpar</string>
     <string name="overlay_action_settings">config</string>
     <string name="overlay_action_open_app">abrir app</string>

@@ -7,11 +7,16 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.abs
@@ -21,46 +26,76 @@ import kotlin.math.abs
  * OverlayService). Tier "texto puro" da escada de qualidade
  * (docs/architecture.md) — NUNCA 3D aqui (o 3D e o palco, DiceStageWindow).
  *
- * Dois estados:
- *  - recolhido: bolha redonda ancorada na borda, arrastavel;
- *  - expandido: cartao com status da sala, compositor de pool (chips de
- *    dado), ROLAR, ultimo resultado e atividade recente.
+ * Quatro estados:
+ *  - COLLAPSED: so a bolha redonda, ancorada na borda, arrastavel;
+ *  - FAN: a bolha abre 3 mini-bolhas — rolar (a ULTima rolagem, ou a
+ *    configurada se ainda nao rolou nada), historico e compor;
+ *  - PANEL: o compositor (chips de dado + notacao digitavel + ROLAR),
+ *    aberto pela engrenagem do fan;
+ *  - HISTORY: cartao compacto com o ultimo resultado em destaque e as
+ *    ultimas rolagens da sala — abre SO pela mini-bolha do relogio;
+ *  - RESULT: flash compacto com o resultado de uma rolagem pelo atalho —
+ *    some sozinho em RESULT_FLASH_MS ou ao toque.
  *
- * Sem campo de texto no overlay de proposito: manter FLAG_NOT_FOCUSABLE
- * evita disputar teclado/foco com o app em primeiro plano (o leitor de
- * PDF). A rolagem rapida (notacao/sistema) se configura na SettingsActivity.
+ * O campo de notacao digitavel exige janela focavel — e o FLAG_NOT_FOCUSABLE
+ * e o que impede o overlay de roubar o teclado do app em primeiro plano (o
+ * leitor de PDF). Por isso o flag so sai enquanto o PANEL esta aberto:
+ * quem troca e o OverlayService, via onWindowFocusMode.
  *
- * Visual segue os tokens do apps/web (styles.css): fundo #14181C ~95%,
+ * Visual segue os tokens do apps/web (styles.css): fundo #14181C,
  * borda 1dp branca 10%, accent #1D9E75, texto #E8ECF0, muted #8B95A1.
  */
 class OverlayView(context: Context) {
 
     val root: FrameLayout = FrameLayout(context)
 
+    /** ROLAR do painel com o campo vazio: rolagem rapida das configuracoes. */
     var onRollClicked: (() -> Unit)? = null
 
-    /** Rola uma notacao montada na hora pelos chips de dado do overlay. */
+    /** ROLAR com notacao montada nos chips ou digitada no campo. */
     var onRollNotation: ((String) -> Unit)? = null
+
+    /** Mini-bolha de rolagem do fan: ultima rolagem, ou a configurada. */
+    var onQuickRoll: (() -> Unit)? = null
     var onOpenApp: (() -> Unit)? = null
     var onOpenSettings: (() -> Unit)? = null
 
-    private val bubble: android.widget.ImageView
+    /** PANEL aberto = a janela precisa de foco (teclado); saiu dele = repor
+     *  o FLAG_NOT_FOCUSABLE. Quem troca o flag e o OverlayService. */
+    var onWindowFocusMode: ((Boolean) -> Unit)? = null
+
+    private enum class Mode { COLLAPSED, FAN, PANEL, HISTORY, RESULT }
+    private var mode = Mode.COLLAPSED
+
+    private val bubble: ImageView
+    private val fan: LinearLayout
     private val panel: LinearLayout
+    private val historyPanel: LinearLayout
+    private val resultFlash: TextView
     private lateinit var dragHandle: TextView
+    private lateinit var historyDragHandle: TextView
     private lateinit var statusDot: TextView
     private lateinit var statusView: TextView
-    private lateinit var resultView: TextView
+    private lateinit var panelResultView: TextView
+    private lateinit var historyResultView: TextView
+    private lateinit var historyLinesView: TextView
     private lateinit var activityView: TextView
-    private lateinit var poolView: TextView
+    private lateinit var notationInput: EditText
     private lateinit var rollButton: TextView
-    private val chips = LinkedHashMap<Int, TextView>()
+    private val chips = LinkedHashMap<String, TextView>()
 
-    // tipo de dado -> quantidade, na ordem de toque (LinkedHashMap)
-    private val pool = LinkedHashMap<Int, Int>()
+    // rotulo do dado ("6", "F") -> quantidade, na ordem de toque
+    // (LinkedHashMap). "F" = dado Fate/Fudge: o termo vira "NdF", que o
+    // rules-engine entende (4dF e a rolagem classica do Fate).
+    private val pool = LinkedHashMap<String, Int>()
 
-    // Notacao da rolagem rapida (das configuracoes) — vira o rotulo do
-    // ROLAR quando o pool esta vazio, pra ficar obvio o que vai rolar.
+    // Notacao da rolagem rapida (das configuracoes) — rotulo do ROLAR com
+    // o campo vazio.
     private var quickNotation: String = ""
+
+    // Ultimas rolagens da sala (as nossas inclusas) — alimenta o
+    // activityView do painel (3 linhas) e o cartao de historico (10).
+    private val history = ArrayDeque<String>()
 
     private val dp = context.resources.displayMetrics.density
 
@@ -69,32 +104,101 @@ class OverlayView(context: Context) {
     init {
         // d20 vetorial (mesma marca do apps/web) — emoji renderiza diferente
         // em cada fabricante e desalinha dentro do circulo.
-        bubble = android.widget.ImageView(context).apply {
+        bubble = ImageView(context).apply {
             setImageResource(R.drawable.ic_d20)
             imageTintList = ColorStateList.valueOf(Color.WHITE)
             val pad = 14.dp()
             setPadding(pad, pad, pad, pad)
-            background = rippled(
-                GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(ACCENT)
-                    setStroke(1.dp(), Color.argb(0x33, 0xFF, 0xFF, 0xFF))
-                },
-            )
+            background = rippled(circle(ACCENT))
             elevation = 6.dp().toFloat()
-            contentDescription = "rolai — abrir painel de rolagem"
+            contentDescription = "rolai — abrir acoes de rolagem"
             layoutParams = FrameLayout.LayoutParams(56.dp(), 56.dp())
-            setOnClickListener { setExpanded(true) }
+            setOnClickListener {
+                setMode(if (mode == Mode.FAN) Mode.COLLAPSED else Mode.FAN)
+            }
         }
 
+        fan = buildFan(context)
+        fan.visibility = View.GONE
         panel = buildPanel(context)
         panel.visibility = View.GONE
+        historyPanel = buildHistoryPanel(context)
+        historyPanel.visibility = View.GONE
+
+        // Flash de resultado da rolagem pelo atalho: compacto, some sozinho
+        // (RESULT_FLASH_MS) ou ao toque. NAO abre o cartao de historico.
+        resultFlash = TextView(context).apply {
+            setTextColor(TEXT)
+            textSize = 16f
+            setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            background = cardBackground()
+            elevation = 10.dp().toFloat()
+            setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
+            visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = 62.dp() }
+            setOnClickListener { setMode(Mode.COLLAPSED) }
+        }
 
         root.addView(bubble)
+        root.addView(fan)
         root.addView(panel)
+        root.addView(historyPanel)
+        root.addView(resultFlash)
     }
 
-    // ---------- construcao do cartao ----------
+    // ---------- fan (3 mini-bolhas) ----------
+
+    private fun buildFan(context: Context): LinearLayout =
+        LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            // Abaixo da bolha principal, com as mini-bolhas (44dp)
+            // centralizadas no eixo dela (56dp): (56-44)/2 = 6.
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = 62.dp()
+                marginStart = 6.dp()
+            }
+            addView(miniBubble(context, R.drawable.ic_d20, "rolar") { onQuickRoll?.invoke() })
+            addView(
+                miniBubble(context, R.drawable.ic_history, "historico de rolagens") {
+                    setMode(Mode.HISTORY)
+                },
+            )
+            addView(
+                miniBubble(context, R.drawable.ic_settings, "compor rolagem") {
+                    setMode(Mode.PANEL)
+                },
+            )
+        }
+
+    private fun miniBubble(
+        context: Context,
+        iconRes: Int,
+        description: String,
+        onClick: () -> Unit,
+    ): ImageView =
+        ImageView(context).apply {
+            setImageResource(iconRes)
+            imageTintList = ColorStateList.valueOf(TEXT)
+            val pad = 11.dp()
+            setPadding(pad, pad, pad, pad)
+            background = rippled(circle(PANEL))
+            elevation = 6.dp().toFloat()
+            contentDescription = description
+            layoutParams = LinearLayout.LayoutParams(44.dp(), 44.dp()).apply {
+                topMargin = 5.dp()
+                bottomMargin = 5.dp()
+            }
+            setOnClickListener { onClick() }
+        }
+
+    // ---------- cartao de composicao (PANEL) ----------
 
     private fun buildPanel(context: Context): LinearLayout {
         val header = LinearLayout(context).apply {
@@ -115,16 +219,7 @@ class OverlayView(context: Context) {
             setTypeface(typeface, Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val collapseButton = TextView(context).apply {
-            text = "—"
-            setTextColor(MUTED)
-            textSize = 16f
-            gravity = Gravity.CENTER
-            background = rippled(pill(Color.TRANSPARENT))
-            setPadding(10.dp(), 2.dp(), 10.dp(), 2.dp())
-            contentDescription = "recolher painel"
-            setOnClickListener { setExpanded(false) }
-        }
+        val collapseButton = collapseButton(context)
         header.addView(statusDot)
         header.addView(dragHandle)
         header.addView(collapseButton)
@@ -134,18 +229,36 @@ class OverlayView(context: Context) {
             textSize = 11f
         }
 
-        // Chips de dado em duas fileiras (4 + 3): toque soma ao pool e o
-        // proprio chip vira o termo ("2d6"). Espelha o compositor do
-        // apps/web — quem calcula continua sendo o rules-engine na WebView
-        // headless, nada de regra aqui.
-        val rowTop = chipRow(context, DICE_SIDES.take(4))
-        val rowBottom = chipRow(context, DICE_SIDES.drop(4))
+        // Chips de dado em duas fileiras (4 + 4, com o dF do Fate): toque
+        // soma ao pool e o proprio chip vira o termo ("2d6"). Espelha o
+        // compositor do apps/web — quem calcula continua sendo o
+        // rules-engine na WebView headless, nada de regra aqui.
+        val rowTop = chipRow(context, DICE_KEYS.take(4))
+        val rowBottom = chipRow(context, DICE_KEYS.drop(4))
 
-        poolView = TextView(context).apply {
-            setTextColor(MUTED)
-            textSize = 11f
+        // A notacao tambem pode ser digitada ("2d6+3", "4dF"). O campo e a
+        // fonte de verdade na hora de rolar: tocar em chip REESCREVE o campo
+        // com o pool (edicao manual se perde — chips e teclado sao dois
+        // jeitos de montar a rolagem, nao de misturar os dois).
+        notationInput = EditText(context).apply {
+            setHint(R.string.overlay_notation_hint)
+            setHintTextColor(MUTED)
+            setTextColor(TEXT)
+            textSize = 13f
+            setSingleLine()
+            typeface = Typeface.MONOSPACE
             gravity = Gravity.CENTER
-            text = context.getString(R.string.overlay_pool_empty)
+            background = GradientDrawable().apply {
+                cornerRadius = 10.dp().toFloat()
+                setColor(CHIP)
+                setStroke(1.dp(), BORDER)
+            }
+            setPadding(8.dp(), 0, 8.dp(), 0)
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) { updateRollButton() }
+            })
         }
 
         rollButton = TextView(context).apply {
@@ -165,7 +278,7 @@ class OverlayView(context: Context) {
             setOnClickListener { rollCurrent() }
         }
 
-        resultView = TextView(context).apply {
+        panelResultView = TextView(context).apply {
             setTextColor(TEXT)
             textSize = 22f
             gravity = Gravity.CENTER
@@ -210,11 +323,7 @@ class OverlayView(context: Context) {
 
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                cornerRadius = 20.dp().toFloat()
-                setColor(PANEL)
-                setStroke(1.dp(), BORDER)
-            }
+            background = cardBackground()
             elevation = 12.dp().toFloat()
             setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
             layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
@@ -222,14 +331,69 @@ class OverlayView(context: Context) {
             addView(statusView, vParams(topMargin = 2))
             addView(rowTop, vParams(topMargin = 12))
             addView(rowBottom, vParams(topMargin = 6))
-            addView(poolView, vParams(topMargin = 8))
+            addView(notationInput, vParams(topMargin = 8))
             addView(rollButton, vParams(topMargin = 10))
-            addView(resultView, vParams(topMargin = 12))
+            addView(panelResultView, vParams(topMargin = 12))
             addView(activityView, vParams(topMargin = 6))
             addView(divider)
             addView(actionRow, vParams(topMargin = 2))
         }
     }
+
+    // ---------- cartao de historico (HISTORY) ----------
+
+    private fun buildHistoryPanel(context: Context): LinearLayout {
+        historyDragHandle = TextView(context).apply {
+            setText(R.string.overlay_history_title)
+            setTextColor(TEXT)
+            textSize = 15f
+            letterSpacing = 0.02f
+            setTypeface(typeface, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(historyDragHandle)
+            addView(collapseButton(context))
+        }
+
+        historyResultView = TextView(context).apply {
+            setTextColor(TEXT)
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+        }
+
+        historyLinesView = TextView(context).apply {
+            setTextColor(MUTED)
+            textSize = 11f
+            typeface = Typeface.MONOSPACE
+            setText(R.string.overlay_history_empty)
+        }
+
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = cardBackground()
+            elevation = 12.dp().toFloat()
+            setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
+            layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
+            addView(header)
+            addView(historyResultView, vParams(topMargin = 10))
+            addView(historyLinesView, vParams(topMargin = 8))
+        }
+    }
+
+    private fun renderHistory() {
+        val lines = history.toList().takeLast(HISTORY_CARD_LINES)
+        historyLinesView.text = if (lines.isEmpty()) {
+            historyLinesView.context.getString(R.string.overlay_history_empty)
+        } else {
+            lines.joinToString("\n")
+        }
+    }
+
+    // ---------- pecas compartilhadas ----------
 
     private fun vParams(topMargin: Int): LinearLayout.LayoutParams =
         LinearLayout.LayoutParams(
@@ -237,11 +401,37 @@ class OverlayView(context: Context) {
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { this.topMargin = topMargin.dp() }
 
-    private fun chipRow(context: Context, sides: List<Int>): LinearLayout {
+    private fun cardBackground(): GradientDrawable =
+        GradientDrawable().apply {
+            cornerRadius = 20.dp().toFloat()
+            setColor(PANEL)
+            setStroke(1.dp(), BORDER)
+        }
+
+    private fun circle(color: Int): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(color)
+            setStroke(1.dp(), Color.argb(0x33, 0xFF, 0xFF, 0xFF))
+        }
+
+    private fun collapseButton(context: Context): TextView =
+        TextView(context).apply {
+            text = "—"
+            setTextColor(MUTED)
+            textSize = 16f
+            gravity = Gravity.CENTER
+            background = rippled(pill(Color.TRANSPARENT))
+            setPadding(10.dp(), 2.dp(), 10.dp(), 2.dp())
+            contentDescription = "recolher"
+            setOnClickListener { setMode(Mode.COLLAPSED) }
+        }
+
+    private fun chipRow(context: Context, keys: List<String>): LinearLayout {
         val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-        for (side in sides) {
+        for (key in keys) {
             val chip = TextView(context).apply {
-                text = "d$side"
+                text = "d$key"
                 setTextColor(TEXT)
                 textSize = 12f
                 maxLines = 1
@@ -249,13 +439,13 @@ class OverlayView(context: Context) {
                 gravity = Gravity.CENTER
                 background = chipBackground(active = false)
                 setPadding(0, 9.dp(), 0, 9.dp())
-                setOnClickListener { addDie(side) }
+                setOnClickListener { addDie(key) }
             }
-            chips[side] = chip
+            chips[key] = chip
             row.addView(
                 chip,
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    marginStart = if (side == sides.first()) 0 else 6.dp()
+                    marginStart = if (key == keys.first()) 0 else 6.dp()
                 },
             )
         }
@@ -293,8 +483,8 @@ class OverlayView(context: Context) {
 
     // ---------- compositor de pool ----------
 
-    private fun addDie(sides: Int) {
-        pool[sides] = (pool[sides] ?: 0) + 1
+    private fun addDie(key: String) {
+        pool[key] = (pool[key] ?: 0) + 1
         renderPool()
     }
 
@@ -303,45 +493,75 @@ class OverlayView(context: Context) {
         renderPool()
     }
 
-    /** "2d6+1d20" — mesma gramatica multi-termo do rules-engine. */
+    /** "2d6+1d20" / "4dF" — mesma gramatica multi-termo do rules-engine. */
     private fun poolNotation(): String =
-        pool.entries.joinToString("+") { (sides, count) -> "${count}d$sides" }
+        pool.entries.joinToString("+") { (key, count) -> "${count}d$key" }
 
     private fun renderPool() {
         val notation = poolNotation()
-        for ((sides, chip) in chips) {
-            val count = pool[sides] ?: 0
-            chip.text = if (count > 0) "${count}d$sides" else "d$sides"
+        for ((key, chip) in chips) {
+            val count = pool[key] ?: 0
+            chip.text = if (count > 0) "${count}d$key" else "d$key"
             chip.setTextColor(if (count > 0) ACCENT_BRIGHT else TEXT)
             chip.background = chipBackground(active = count > 0)
         }
-        poolView.text = notation.ifEmpty {
-            poolView.context.getString(R.string.overlay_pool_empty)
-        }
+        // Dispara o TextWatcher, que atualiza o rotulo do ROLAR.
+        notationInput.setText(notation)
+        notationInput.setSelection(notation.length)
+    }
+
+    private fun updateRollButton() {
+        val typed = notationInput.text.toString().trim()
         rollButton.text = when {
-            notation.isNotEmpty() -> "ROLAR $notation"
+            typed.isNotEmpty() -> "ROLAR $typed"
             quickNotation.isNotEmpty() -> "ROLAR $quickNotation"
             else -> rollButton.context.getString(R.string.roll_button)
         }
     }
 
-    /** Rola o pool montado aqui; vazio = rolagem rapida das configuracoes. */
+    /** Rola o que esta no campo; vazio = rolagem rapida das configuracoes. */
     private fun rollCurrent() {
-        val notation = poolNotation()
+        hideKeyboard()
+        val notation = notationInput.text.toString().trim()
         if (notation.isEmpty()) onRollClicked?.invoke() else onRollNotation?.invoke(notation)
+    }
+
+    private fun hideKeyboard() {
+        val imm = root.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(root.windowToken, 0)
     }
 
     // ---------- API usada pelo OverlayService ----------
 
-    /** Notacao da rolagem rapida — vira o rotulo do ROLAR com o pool vazio. */
+    /** Notacao da rolagem rapida — rotulo do ROLAR com o campo vazio. */
     fun setQuickNotation(notation: String) {
         quickNotation = notation.trim()
-        renderPool()
+        if (::rollButton.isInitialized) updateRollButton()
     }
 
+    /** Compatibilidade com a API antiga: true = painel, false = recolhido. */
     fun setExpanded(expanded: Boolean) {
-        panel.visibility = if (expanded) View.VISIBLE else View.GONE
-        bubble.visibility = if (expanded) View.GONE else View.VISIBLE
+        setMode(if (expanded) Mode.PANEL else Mode.COLLAPSED)
+    }
+
+    private val hideResultRunnable = Runnable {
+        if (mode == Mode.RESULT) setMode(Mode.COLLAPSED)
+    }
+
+    private fun setMode(newMode: Mode) {
+        mode = newMode
+        bubble.visibility =
+            if (newMode == Mode.PANEL || newMode == Mode.HISTORY) View.GONE else View.VISIBLE
+        fan.visibility = if (newMode == Mode.FAN) View.VISIBLE else View.GONE
+        panel.visibility = if (newMode == Mode.PANEL) View.VISIBLE else View.GONE
+        historyPanel.visibility = if (newMode == Mode.HISTORY) View.VISIBLE else View.GONE
+        resultFlash.visibility = if (newMode == Mode.RESULT) View.VISIBLE else View.GONE
+        root.removeCallbacks(hideResultRunnable)
+        if (newMode == Mode.RESULT) root.postDelayed(hideResultRunnable, RESULT_FLASH_MS)
+        // So o PANEL tem campo de texto — so ele precisa de janela focavel.
+        onWindowFocusMode?.invoke(newMode == Mode.PANEL)
+        if (newMode != Mode.PANEL) hideKeyboard()
+        if (newMode == Mode.HISTORY) renderHistory()
     }
 
     fun setStatus(text: String) {
@@ -352,23 +572,30 @@ class OverlayView(context: Context) {
     }
 
     fun showResult(text: String) {
-        resultView.text = text
-        setExpanded(true)
+        panelResultView.text = text
+        historyResultView.text = text
+        resultFlash.text = text
+        // Com o painel aberto (rolagem por chips/digitada), o resultado
+        // aparece nele mesmo. Pelo atalho do fan: flash compacto que some
+        // sozinho — NAO abre cartao nenhum.
+        if (mode != Mode.PANEL) setMode(Mode.RESULT)
     }
 
-    /** Anexa uma linha de atividade da sala (rolagens de outros jogadores). */
+    /** Anexa uma linha de atividade da sala (rolagens, nossas e dos outros). */
     fun addActivityLine(line: String) {
-        val lines = (activityView.text.toString().split("\n").filter { it.isNotBlank() } + line)
-            .takeLast(MAX_ACTIVITY_LINES)
-        activityView.text = lines.joinToString("\n")
+        history.addLast(line)
+        while (history.size > MAX_HISTORY) history.removeFirst()
+        activityView.text = history.toList().takeLast(MAX_ACTIVITY_LINES).joinToString("\n")
+        if (mode == Mode.HISTORY) renderHistory()
     }
 
-    /** Arrasto da bolha e do cabecalho do painel, com snap na borda ao soltar. */
+    /** Arrasto da bolha e dos cabecalhos, com snap na borda ao soltar. */
     @SuppressLint("ClickableViewAccessibility")
     fun bindDrag(windowManager: WindowManager, params: WindowManager.LayoutParams) {
         val listener = DragTouchListener(windowManager, params)
         bubble.setOnTouchListener(listener)
         dragHandle.setOnTouchListener(listener)
+        historyDragHandle.setOnTouchListener(listener)
     }
 
     private inner class DragTouchListener(
@@ -436,7 +663,14 @@ class OverlayView(context: Context) {
         private val TEXT = Color.rgb(0xE8, 0xEC, 0xF0)
         private val MUTED = Color.rgb(0x8B, 0x95, 0xA1)
         private const val MAX_ACTIVITY_LINES = 3
-        private val DICE_SIDES = listOf(4, 6, 8, 10, 12, 20, 100)
+        private const val HISTORY_CARD_LINES = 10
+        private const val MAX_HISTORY = 20
+
+        /** Tempo do flash de resultado na tela antes de sumir sozinho. */
+        private const val RESULT_FLASH_MS = 6_000L
+
+        // Rotulos de dado dos chips ("F" = dado Fate/Fudge — "4dF").
+        private val DICE_KEYS = listOf("4", "6", "8", "10", "12", "20", "100", "F")
         private const val TOUCH_SLOP_DP = 8
     }
 }

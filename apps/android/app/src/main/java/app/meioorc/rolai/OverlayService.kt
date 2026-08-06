@@ -48,6 +48,12 @@ class OverlayService : Service() {
     // nao ha nada pra refazer (ver applySettings).
     private var lastStageUrl: String? = null
     private var lastHandshakeUrl: String? = null
+
+    /** Acao da mini-bolha de rolagem do fan: repete a ultima rolagem por
+     *  notacao; null = ainda nao rolou (ou a config mudou) = rola a
+     *  rolagem rapida configurada. */
+    private var lastRollAction: (() -> Unit)? = null
+    private var lastQuickKey: String = ""
     private val settingsReloadRunnable = Runnable { applySettings() }
     private var viewAttached = false
 
@@ -97,8 +103,15 @@ class OverlayService : Service() {
             onError = { message -> overlay.showResult("erro: $message") },
         )
         overlay.onRollClicked = ::rollNow
-        overlay.setQuickNotation(RolaiSettings.load(this).notation)
-        overlay.onRollNotation = { notation -> headlessRoller.roll(notation) }
+        overlay.onQuickRoll = { (lastRollAction ?: ::rollNow).invoke() }
+        overlay.onRollNotation = { notation -> rollNotation(notation) }
+        lastQuickKey = quickKeyOf(settings)
+        overlay.setQuickNotation(settings.notation)
+        overlay.onWindowFocusMode = ::setOverlayFocusable
+        // START_STICKY recria o service do zero quando o sistema mata o
+        // processo — sem persistir, a mini-bolha "esquecia" a ultima rolagem
+        // e voltava pra configurada. Sobrevive a restart.
+        loadLastRoll()?.let { saved -> lastRollAction = { headlessRoller.roll(saved) } }
         overlay.onOpenApp = { launchFromOverlay(Intent(this, TwaActivity::class.java)) }
         overlay.onOpenSettings = { launchFromOverlay(Intent(this, SettingsActivity::class.java)) }
 
@@ -204,8 +217,9 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            // NOT_FOCUSABLE: nunca rouba teclado/foco do app em primeiro
-            // plano (nao ha campo de texto no overlay).
+            // NOT_FOCUSABLE de nascenca: nunca rouba teclado/foco do app em
+            // primeiro plano. O painel de composicao TEM campo de texto —
+            // o flag sai so enquanto ele esta aberto (setOverlayFocusable).
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT,
         ).apply {
@@ -229,6 +243,17 @@ class OverlayService : Service() {
     private fun applySettings() {
         val settings = RolaiSettings.load(this)
         overlay.setQuickNotation(settings.notation)
+        val quickKey = quickKeyOf(settings)
+        if (quickKey != lastQuickKey) {
+            // Mudou a rolagem configurada: a "ultima rolagem" da mini-bolha
+            // deixa de fazer sentido — ela volta a rolar a configurada.
+            lastQuickKey = quickKey
+            lastRollAction = null
+            getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .remove(KEY_LAST_ROLL)
+                .apply()
+        }
 
         // So remonta o que de fato mudou. Trocar de sistema ou de notacao
         // nao tem nada a ver com o palco nem com a sala — reabrir conexao
@@ -345,6 +370,41 @@ class OverlayService : Service() {
         )
     }
 
+    /** Rolagem por notacao (chips/digitada no painel): vira a "ultima
+     *  rolagem" que a mini-bolha do fan repete. Persistida — ver
+     *  loadLastRoll. */
+    private fun rollNotation(notation: String) {
+        headlessRoller.roll(notation)
+        lastRollAction = { headlessRoller.roll(notation) }
+        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_LAST_ROLL, notation)
+            .apply()
+    }
+
+    /** Ultima rolagem por notacao, ou null se nunca rolou / config mudou. */
+    private fun loadLastRoll(): String? =
+        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_LAST_ROLL, null)
+            ?.takeIf { it.isNotBlank() }
+
+    /** Assinatura da rolagem configurada — pra detectar mudanca no reload. */
+    private fun quickKeyOf(settings: RolaiSettings): String =
+        listOf(settings.system, settings.notation, settings.inputsJson).joinToString("|")
+
+    /** O campo de notacao do painel precisa de teclado: sem NOT_FOCUSABLE a
+     *  janela pode ganhar foco, e NOT_TOUCH_MODAL devolve os toques fora
+     *  dela pro app em primeiro plano. Fechou o painel, volta o
+     *  NOT_FOCUSABLE de sempre (a bolha nunca disputa teclado). */
+    private fun setOverlayFocusable(focusable: Boolean) {
+        overlayParams.flags = if (focusable) {
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        } else {
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        windowManager.updateViewLayout(overlay.root, overlayParams)
+    }
+
     private fun rollNow() {
         val settings = RolaiSettings.load(this)
         overlay.setQuickNotation(settings.notation)
@@ -377,6 +437,9 @@ class OverlayService : Service() {
         if (roomClient == null) {
             diceStage.play(resultJson)
             stageShow()
+            // Sem sala nao ha eco do servidor — a nossa rolagem entra no
+            // historico por aqui (em sala ela entra pelo broadcast).
+            overlay.addActivityLine("você: ${formatResult(resultJson)}")
         }
         // Em sala: propaga o resultado JA calculado (relay burro — o
         // backend nao recalcula, ver docs/architecture.md).
@@ -393,6 +456,9 @@ class OverlayService : Service() {
 
         const val ACTION_START = "app.meioorc.rolai.action.START"
         const val ACTION_STOP = "app.meioorc.rolai.action.STOP"
+
+        /** SharedPrefs: ultima rolagem por notacao (a da mini-bolha do fan). */
+        private const val KEY_LAST_ROLL = "last_roll"
 
         /** Config mudou: remonta palco e sala sem religar o botao. */
         const val ACTION_RELOAD = "app.meioorc.rolai.action.RELOAD"
