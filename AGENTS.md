@@ -77,6 +77,10 @@ pra revisão de PR:
 - Nenhuma permissão Android além do estritamente necessário
   (`SYSTEM_ALERT_WINDOW` só quando o usuário ativa o overlay explicitamente).
 - CORS restrito ao(s) domínio(s) do frontend, nunca `*` em produção.
+- O IP do cliente vem do primeiro `X-Forwarded-For` e isso só vale porque o
+  Traefik é o único proxy na frente. Se entrar CDN/proxy no caminho
+  (Cloudflare em nuvem laranja), o header vira forjável e os limites param
+  de valer — ver `docs/security-cloudflare.md` antes de mexer.
 
 ## Ordem de implementação sugerida
 

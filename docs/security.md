@@ -4,6 +4,11 @@ Checklist a validar em qualquer PR que toque backend, WS, ou o overlay
 Android. Não é exaustivo pra todo software — é o recorte específico que
 importa pra este projeto.
 
+> **Colocando a Cloudflare na frente (nuvem laranja)?** Leia
+> `docs/security-cloudflare.md` ANTES. O limite por IP daqui assume que só o
+> Traefik escreve `X-Forwarded-For`; com a CF no caminho o header passa a ser
+> forjável e os limites de abuso viram decoração.
+
 ## Salas / WebSocket
 
 - **Código de sala**: gerado com um CSPRNG (ex. `secrets.token_urlsafe`),
