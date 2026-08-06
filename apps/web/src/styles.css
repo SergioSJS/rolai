@@ -1326,6 +1326,19 @@ input[type="range"]:focus {
   margin: 0.5rem 0 0;
 }
 
+/* Dica abaixo de um campo. Vira aviso (cor de erro) quando o proprio
+   texto e o motivo da recusa — o seletor fica com quem renderiza. */
+.field-hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.field-hint.is-error {
+  color: var(--error);
+}
+
 /* ---------- Mobile ---------- */
 
 @media (max-width: 900px) {

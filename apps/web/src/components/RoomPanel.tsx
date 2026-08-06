@@ -9,6 +9,7 @@ import { useState } from "react";
 import type { RoomState } from "../room/reducer";
 import { exportUrl } from "../config";
 import { MAX_PLAYER_NAME } from "../settings";
+import { customCodeIssue } from "../room/code";
 import { PlayerTag } from "./PlayerTag";
 
 interface RoomPanelProps {
@@ -40,6 +41,25 @@ export function RoomPanel({
 }: RoomPanelProps) {
   const [name, setName] = useState(playerName === "anonymous" ? "" : playerName);
   const [code, setCode] = useState(initialCode);
+  // Motivo da recusa do codigo escolhido, mostrado so depois de tentar —
+  // reclamar enquanto a pessoa digita e ruido.
+  const [codeIssue, setCodeIssue] = useState<string | null>(null);
+
+  // Criar: campo vazio = codigo aleatorio do backend (sala privada). Campo
+  // preenchido = a sala QUE VOCE ESCOLHEU. Entrar num codigo inexistente ja
+  // cria a sala no backend, entao aqui e o mesmo caminho do Entrar — o que
+  // muda e validar antes e explicar o motivo, em vez de um 4404 seco.
+  const criar = (apelido: string) => {
+    const escolhido = code.trim();
+    if (escolhido === "") {
+      setCodeIssue(null);
+      onCreate(apelido);
+      return;
+    }
+    const issue = customCodeIssue(escolhido);
+    setCodeIssue(issue);
+    if (issue === null) onJoin(escolhido, apelido);
+  };
 
   if (room.code === null) {
     return (
@@ -59,11 +79,25 @@ export function RoomPanel({
           <input
             type="text"
             value={code}
-            onChange={(e) => setCode(e.target.value)}
+            maxLength={32}
+            placeholder="deixe vazio para um código aleatório"
+            aria-describedby="room-code-hint"
+            onChange={(e) => {
+              setCode(e.target.value);
+              if (codeIssue !== null) setCodeIssue(null);
+            }}
           />
         </label>
+        <p
+          id="room-code-hint"
+          className={codeIssue === null ? "field-hint" : "field-hint is-error"}
+        >
+          {codeIssue === null
+            ? "Um código escolhido por você funciona como mesa fixa (bom pro OBS): mínimo 16 caracteres, 8 diferentes. Quem tiver o link entra."
+            : codeIssue}
+        </p>
         <div className="room-actions">
-          <button type="button" onClick={() => onCreate(name || "anonymous")}>
+          <button type="button" onClick={() => criar(name || "anonymous")}>
             Criar sala
           </button>
           <button
