@@ -25,11 +25,13 @@ Variáveis esperadas em `.env` (ver `.env.example`):
 - `ROLAI_BACKEND_HOST` — subdomínio do relay (produção: `api.rolai.app`)
 - `LETSENCRYPT_RESOLVER` — nome do resolver ACME já configurado no Traefik
 
-Frontend (`apps/web`) é um build estático, servido de qualquer lugar. Em
-produção ele vive em **rolai.app** (Cloudflare Pages ou similar, DNS na
-Cloudflare), com a variável de build `VITE_WS_URL=wss://api.rolai.app`
-apontando pro backend — que roda no VPS Hostinger atrás do Traefik em
-**api.rolai.app**. Não esquecer de liberar a origem do frontend no backend
+Frontend (`apps/web`) sobe no **mesmo compose**, como imagem própria (nginx
+servindo o build estático) atrás do mesmo Traefik: **rolai.app** pro app e
+**api.rolai.app** pro relay. A URL do backend é resolvida em runtime pelo
+container (ver a seção do GHCR abaixo) — não é variável de build, então a
+mesma imagem serve qualquer ambiente.
+
+Não esquecer de liberar a origem do frontend no backend
 (`CORS_ORIGINS=["https://rolai.app"]`), senão o WebSocket é recusado na
 checagem de `Origin` (ver `docs/security.md`).
 
