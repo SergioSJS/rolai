@@ -38,6 +38,9 @@ debug já aponta a TWA pra `http://localhost:5273` e o WS pra
 (`res/xml/network_security_config.xml`).
 
 Rodar local sem docker: `cd services/backend && uv run python scripts/dev_local.py`
+(recarrega sozinho ao salvar em `app/` — a factory fica em `app/dev.py`,
+porque reload exige import string que o subprocesso do reloader consiga
+importar)
 (fakeredis + sqlite em memória, porta **8420**) e `npm run dev -w @rolai/web`
 (porta **5273**).
 
