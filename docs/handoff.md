@@ -350,12 +350,33 @@ antes); vale um olho antes de considerar fechado.
 
 `dice-roller.zip` continua na raiz do repositório.
 
+## Git, CI e distribuição (2026-08-06)
+
+O projeto passou a ser versionado: <https://github.com/SergioSJS/rolai>
+(público, MIT). Antes do push foi feita auditoria — nenhum `.env`, chave ou
+senha no que subiu — e o autor dos commits usa o e-mail noreply do GitHub em
+vez do pessoal.
+
+- **CI** (`.github/workflows/ci.yml`) roda os quatro pacotes: rules-engine,
+  backend, web e **android** (testes JVM + `assembleDebug`, com JDK 21 —
+  o 26 o Gradle recusa).
+- **Release** (`.github/workflows/release.yml`): tag `v*` (ou disparo manual,
+  que atualiza a pré-release `nightly`) compila e anexa o APK. É de **debug**
+  de propósito: sem Play Store, não há keystore de release no repo — chave
+  privada não entra em git e o CI não precisa de segredo.
+- Primeira publicada: **v0.1.0** com `rolai-0.1.0.apk` (3,8 MB).
+
+Um percalço que vale lembrar: `pip install .` no CI deixa cópia do pacote em
+`build/lib` e o mypy acusa módulo `app` duplicado — resolvido com
+`exclude = ["^build/"]`. Local não aparece porque usamos `uv`.
+
 ## Aberto (nada disso foi feito)
 
-- **Release Android**: sem `signingConfig`/keystore (só sai debug) e sem
-  `assetlinks.json` no domínio — a TWA abre com barra de URL. Precisa de
-  navegador com Custom Tabs instalado (Brave serve; a lib descobre o provedor
-  em runtime, não tem allowlist).
+- **Release assinado**: se um dia for pra loja, keystore em base64 num secret
+  e `signingConfig` lendo de env; o `assetlinks.json` em
+  `apps/web/public/.well-known/` ainda tem fingerprint placeholder, então a
+  TWA abre com barra de URL. Precisa de navegador com Custom Tabs instalado
+  (Brave serve; a lib descobre o provedor em runtime, não tem allowlist).
 - **Overlay**: "repetir última rolagem" e histórico maior no painel.
 - **Deploy**: o stack docker nunca subiu de ponta a ponta.
 - **Testes instrumentados** do Android (`androidTest`) nunca rodaram — exigem
