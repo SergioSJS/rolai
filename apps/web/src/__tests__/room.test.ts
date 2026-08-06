@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RollResult } from "@rolai/rules-engine";
 import { initialRoomState, roomReducer } from "../room/reducer";
 import { PendingRolls } from "../room/echo";
-import { parseServerMessage } from "../room/client";
+import { isHeartbeatPing, parseServerMessage } from "../room/client";
 import { apiBaseUrl, roomWsUrl, wsBaseUrl } from "../config";
 
 function makeResult(overrides: Partial<RollResult> = {}): RollResult {
@@ -151,6 +151,17 @@ describe("parseServerMessage", () => {
     expect(parseServerMessage("not json")).toBeNull();
     expect(parseServerMessage('{"type":"mystery"}')).toBeNull();
     expect(parseServerMessage('{"type":"roll","player":42}')).toBeNull();
+  });
+});
+
+describe("isHeartbeatPing", () => {
+  it("reconhece o ping do backend e so ele", () => {
+    expect(isHeartbeatPing('{"type":"ping"}')).toBe(true);
+    expect(isHeartbeatPing('{"type":"pong"}')).toBe(false);
+    expect(isHeartbeatPing('{"type":"roll","player":"ana"}')).toBe(false);
+    expect(isHeartbeatPing("not json")).toBe(false);
+    // Nao bate em payload de rolagem que so mencione "ping" no meio.
+    expect(isHeartbeatPing('{"type":"roll","player":"pinguim"}')).toBe(false);
   });
 });
 

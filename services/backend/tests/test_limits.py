@@ -136,3 +136,38 @@ def test_ws_without_origin_is_allowed(make_client: Callable[..., TestClient]) ->
         code = client.post("/rooms").json()["code"]
         with client.websocket_connect(f"/rooms/{code}") as ws:
             assert next_event(ws)["type"] == "snapshot"
+
+
+def test_cf_connecting_ip_takes_precedence_over_x_forwarded_for(
+    make_client: Callable[..., TestClient],
+) -> None:
+    """Atras da Cloudflare, o primeiro item do X-Forwarded-For continua
+    forjavel (a CF ANEXA o IP real ao que o cliente mandou); CF-Connecting-IP
+    e reescrito pela borda. O limite tem que contar no CF-Connecting-IP —
+    docs/security-cloudflare.md."""
+    with make_client(trust_proxy_headers=True, room_create_limit_per_hour=1) as client:
+        first = client.post(
+            "/rooms",
+            headers={"CF-Connecting-IP": "203.0.113.7", "X-Forwarded-For": "192.0.2.1"},
+        )
+        assert first.status_code == 201
+        # X-Forwarded-For DIFERENTE, mesmo CF-Connecting-IP: mesmo balde.
+        second = client.post(
+            "/rooms",
+            headers={"CF-Connecting-IP": "203.0.113.7", "X-Forwarded-For": "192.0.2.99"},
+        )
+        assert second.status_code == 429
+
+
+def test_x_forwarded_for_still_used_without_cf_header(
+    make_client: Callable[..., TestClient],
+) -> None:
+    """Antes da laranja (ou sem Cloudflare no caminho) o comportamento de
+    hoje se mantem: primeiro item do X-Forwarded-For."""
+    with make_client(trust_proxy_headers=True, room_create_limit_per_hour=1) as client:
+        assert (
+            client.post("/rooms", headers={"X-Forwarded-For": "198.51.100.9"}).status_code == 201
+        )
+        assert (
+            client.post("/rooms", headers={"X-Forwarded-For": "198.51.100.9"}).status_code == 429
+        )

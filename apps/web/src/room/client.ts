@@ -95,6 +95,20 @@ export function parseServerMessage(raw: string): RoomEvent | null {
   }
 }
 
+// Heartbeat do backend: {"type":"ping"} a cada N segundos ociosos
+// (ws_heartbeat_seconds). O parseServerMessage ignora tipos desconhecidos,
+// entao o ping e tratado aqui — responder pong mantem os dois sentidos da
+// conexao quentes atras de proxies com timeout ocioso (Cloudflare ~100s).
+export function isHeartbeatPing(raw: string): boolean {
+  if (!raw.includes("ping")) return false;
+  try {
+    const data: unknown = JSON.parse(raw);
+    return isRecord(data) && data["type"] === "ping";
+  } catch {
+    return false;
+  }
+}
+
 export class RoomClient {
   private ws: WebSocket | null = null;
   private manualClose = false;
@@ -142,7 +156,12 @@ export class RoomClient {
     this.ws = ws;
 
     ws.onmessage = (msg: MessageEvent) => {
-      const event = parseServerMessage(String(msg.data));
+      const raw = String(msg.data);
+      if (isHeartbeatPing(raw)) {
+        ws.send('{"type":"pong"}');
+        return;
+      }
+      const event = parseServerMessage(raw);
       if (event === null) return;
       if (event.type === "snapshot") this.attempts = 0;
       this.onEvent(event);

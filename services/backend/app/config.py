@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 60
     max_message_bytes: int = 4 * 1024  # docs/security.md: rejeitar antes de parsear
     history_max_entries: int = 200
+    # Heartbeat do WS: sem mensagem do cliente por este intervalo, o servidor
+    # envia {"type":"ping"} — proxy com timeout ocioso (Cloudflare ~100s)
+    # nao derruba a conexao parada (docs/security-cloudflare.md). 0 desliga.
+    ws_heartbeat_seconds: float = 30
 
     # --- limites de abuso (docs/security.md). 0 desliga o limite. ---
     # Confiar em X-Forwarded-For SO quando ha proxy na frente (Traefik);

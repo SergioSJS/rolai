@@ -14,8 +14,19 @@ def client_ip(source: Request | WebSocket, trust_proxy: bool) -> str:
     mas so da pra confiar nesse header quando existe mesmo um proxy na
     frente, senao qualquer um forja o header e escapa do limite. Por isso
     `trust_proxy` e opt-in por env (ver infra/docker-compose.hostinger.yml).
+
+    Com a Cloudflare no caminho, preferir CF-Connecting-IP: a borda da CF
+    SOBRESCREVE esse header a cada requisicao, enquanto no X-Forwarded-For
+    ela so ANEXA o IP real ao que o cliente mandou (o primeiro item continua
+    forjavel). Confianca valida nos dois so com o acesso direto ao VPS
+    fechado (firewall nos ranges da CF ou ipAllowList no Traefik) — sem
+    isso, quem pula a CF forja o header do mesmo jeito. Detalhes em
+    docs/security-cloudflare.md.
     """
     if trust_proxy:
+        cf = source.headers.get("cf-connecting-ip")
+        if cf and cf.strip():
+            return cf.strip()[:45]  # cabe um IPv6 completo
         forwarded = source.headers.get("x-forwarded-for")
         if forwarded:
             first = forwarded.split(",")[0].strip()

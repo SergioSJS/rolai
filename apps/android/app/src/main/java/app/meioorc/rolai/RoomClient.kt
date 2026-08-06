@@ -126,6 +126,12 @@ class RoomClient(private val listener: Listener) {
                     val error = message.optString("message", "erro do servidor")
                     handler.post { listener.onError(error) }
                 }
+                "ping" -> {
+                    // Heartbeat do backend (ws_heartbeat_seconds): responder
+                    // mantem proxies com timeout ocioso (Cloudflare ~100s) e
+                    // o NAT da rede movel sem derrubar a conexao parada.
+                    webSocket.send("{\"type\":\"pong\"}")
+                }
             }
         }
 

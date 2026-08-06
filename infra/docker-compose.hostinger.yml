@@ -31,6 +31,17 @@ services:
       - "traefik.http.middlewares.rolai-ratelimit.rateLimit.average=20"
       - "traefik.http.middlewares.rolai-ratelimit.rateLimit.burst=50"
       - "traefik.http.middlewares.rolai-ratelimit.rateLimit.sourceCriterion.ipStrategy.depth=1"
+      # --- MODO LARANJA (Cloudflare proxied) — docs/security-cloudflare.md ---
+      # As trocas abaixo so entram DEPOIS de ligar a nuvem laranja no
+      # api.rolai.app: com o api em cinza (DNS only) nenhuma requisicao traz
+      # CF-Connecting-IP e o rate limit agruparia todo mundo no mesmo balde.
+      # 1) Comentar a linha ipStrategy.depth=1 acima e descomentar:
+      #- "traefik.http.middlewares.rolai-ratelimit.rateLimit.sourceCriterion.requestHeaderName=CF-Connecting-IP"
+      # 2) Fechar o bypass direto ao VPS, senao CF-Connecting-IP continua
+      #    forjavel: firewall nos ranges da CF (https://www.cloudflare.com/ips/)
+      #    ou ipAllowList neste router e no do web:
+      #- "traefik.http.middlewares.rolai-cfonly.ipallowlist.sourcerange=<ranges IPv4+IPv6 da CF>"
+      #    e adicionar "rolai-cfonly" aos middlewares dos dois routers.
       # Corpo grande morre no proxy, nao na app.
       - "traefik.http.middlewares.rolai-buffer.buffering.maxRequestBodyBytes=131072"
       - "traefik.http.middlewares.rolai-headers.headers.stsSeconds=31536000"

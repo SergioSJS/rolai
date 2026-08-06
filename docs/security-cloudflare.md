@@ -5,9 +5,12 @@ no `rolai.app`. Complementa `docs/security.md`, que descreve o modelo atual —
 leia aquele primeiro. Aqui só o que a Cloudflare quebra, o que ela ganha, e o
 que precisa mudar no código antes.
 
-Estado de hoje: **os dois domínios estão em nuvem cinza (DNS only)**, e o
-código assume isso. Ligar laranja sem as mudanças abaixo **abre um furo real
-no limite de abuso** — não é polimento.
+Estado de hoje: **os dois domínios estão em nuvem cinza (DNS only)**. O
+código já está pronto pra laranja — `client_ip()` prefere
+`CF-Connecting-IP` (item 1) e o WebSocket tem heartbeat (item 3). O que
+falta é só infra/DNS: ligar a laranja, trocar a label do rate limit
+(item 2) e fechar o bypass direto ao VPS (item 1). A ordem importa —
+ver "Ordem de execução".
 
 ## Topologia atual
 
@@ -35,16 +38,16 @@ navegador ──TLS──> Traefik (rede host, VPS Hostinger) ──> rolai-web 
 
 ### 1. O limite por IP vira contornável (o mais grave)
 
-`services/backend/app/limits.py:client_ip()` pega o **primeiro** item de
-`X-Forwarded-For`:
+O código original de `services/backend/app/limits.py:client_ip()` pegava o
+**primeiro** item de `X-Forwarded-For`:
 
 ```python
 forwarded = source.headers.get("x-forwarded-for")
 first = forwarded.split(",")[0].strip()
 ```
 
-Isso está **correto hoje**, com só o Traefik na frente: quem escreve o header
-é o proxy, e o primeiro item é o cliente real.
+Isso era **correto** com só o Traefik na frente: quem escreve o header é o
+proxy, e o primeiro item é o cliente real.
 
 Com a Cloudflare no caminho deixa de ser: a CF **anexa** o IP real ao
 `X-Forwarded-For` que o cliente mandou. Quem enviar
@@ -52,31 +55,21 @@ Com a Cloudflare no caminho deixa de ser: a CF **anexa** o IP real ao
 e escapa de `room_create_limit_per_hour`, `ws_connect_limit_per_minute` e
 `http_rate_limit_per_minute` de uma vez.
 
-**Conserto:** ler `CF-Connecting-IP`, que a Cloudflare **sobrescreve** sempre,
-ignorando o que o cliente mandar. E só confiar nele quando a requisição
-realmente veio da CF.
-
-Esboço (mantendo `trust_proxy_headers` como está):
-
-```python
-def client_ip(source: Request | WebSocket, trust_proxy: bool) -> str:
-    if trust_proxy:
-        # Atras da Cloudflare este header e reescrito pela borda e nao pode
-        # ser forjado; X-Forwarded-For pode (a CF anexa ao que o cliente
-        # mandou). Preferir sempre o especifico.
-        cf = source.headers.get("cf-connecting-ip")
-        if cf:
-            return cf[:45]
-        forwarded = source.headers.get("x-forwarded-for")
-        ...
-```
+**Conserto (IMPLEMENTADO):** `client_ip()` lê `CF-Connecting-IP` antes do
+`X-Forwarded-For`, mantendo `trust_proxy_headers` como está — a Cloudflare
+**sobrescreve** esse header sempre, ignorando o que o cliente mandar. A
+preferência é segura mesmo antes da laranja: sem CF no caminho o header não
+vem e o código cai no caminho antigo; e um atacante que alcança o VPS
+direto forja um header ou outro com o mesmo esforço (ou seja, nada piora
+na transição). Coberto por teste
+(`tests/test_limits.py::test_cf_connecting_ip_takes_precedence_over_x_forwarded_for`).
 
 **Não basta.** `CF-Connecting-IP` também é forjável por quem alcançar o VPS
 direto, pulando a CF. Duas defesas, e o ideal é as duas:
 
 - **Firewall no VPS**: aceitar 80/443 só dos ranges da Cloudflare
   (`https://www.cloudflare.com/ips/`). Fecha o bypass de vez.
-- **Traefik**: `ipAllowList` nos ranges da CF no router do backend, ou
+- **Traefik**: `ipAllowList` nos ranges da CF nos dois routers, ou
   `forwardedHeaders.trustedIPs` com esses ranges.
 
 Sem pelo menos uma delas, trocar `X-Forwarded-For` por `CF-Connecting-IP` só
@@ -98,21 +91,31 @@ mais na frente, a profundidade muda e o limite passa a agrupar gente errada
 traefik.http.middlewares.rolai-ratelimit.rateLimit.sourceCriterion.requestHeaderName=CF-Connecting-IP
 ```
 
-### 3. WebSocket ocioso morre (~100s)
+A label nova já está no `infra/docker-compose.hostinger.yml`, comentada,
+com as instruções de troca (bloco "MODO LARANJA"). **Não descomentar antes
+da laranja no api**: em cinza nenhuma requisição traz o header e o rate
+limit de borda agruparia todo mundo num balde só.
 
-A Cloudflare fecha conexão WebSocket parada. **Não há heartbeat no projeto** —
-nem no backend (`services/backend/app/rooms.py`) nem no cliente
-(`apps/web/src/room/client.ts`). O cliente reconecta com backoff
-(`MAX_RECONNECT_ATTEMPTS = 5`), então não quebra de vez, mas uma mesa parada
-fica reconectando a cada ~2 min. Cada reconexão consome cota de
-`ws_connect_limit_per_minute` — o limite de abuso passa a punir uso normal.
+### 3. WebSocket ocioso morre (~100s) — RESOLVIDO
 
-Duas saídas:
+A Cloudflare fecha conexão WebSocket parada. O risco era duplo: mesa ociosa
+reconectando a cada ~2 min (chato) e cada reconexão comendo cota de
+`ws_connect_limit_per_minute` — o limite de abuso punindo uso normal.
 
-- **`api.rolai.app` fica em cinza** (recomendado, e é o estado atual). A
-  laranja entra só no `rolai.app`, que é estático e não tem WS.
-- Ou **implementar ping/pong** antes de ligar laranja no `api`. Vale de
-  qualquer forma: qualquer proxy tem timeout ocioso.
+**Heartbeat implementado** (app-level, não frame de protocolo — o Starlette
+não expõe ping/pong de baixo nível):
+
+- Backend (`rooms.py`): a cada `ws_heartbeat_seconds` (default 30, 0 desliga)
+  sem mensagem do cliente, envia `{"type":"ping"}`. O envio fica na mesma
+  task do receive (via `asyncio.wait_for`), sem writer concorrente no socket.
+- Cliente web (`apps/web/src/room/client.ts`) e Android
+  (`apps/android/.../RoomClient.kt`) respondem `{"type":"pong"}`; o backend
+  consome o pong em silêncio (não é rolagem, não gera erro).
+- Cliente antigo que ignore o ping não quebra: o ping sozinho já reseta o
+  timer ocioso da CF.
+
+Com isso o `api.rolai.app` **pode** ir pra laranja — a recomendação anterior
+de mantê-lo em cinza não se aplica mais.
 
 ### 4. Cache de borda
 
@@ -131,9 +134,12 @@ Duas saídas:
 
 Modo SSL/TLS **Full (strict)**, nunca "Flexible" (fala HTTP com a origem).
 
-Ovo-e-galinha do ACME: com laranja ligada e "Always Use HTTPS" ativo, o
-desafio HTTP-01 é redirecionado antes de chegar no Traefik e o certificado
-nunca sai. **Ordem certa:** cinza → certificado emitido → só então laranja.
+Ovo-e-galinha do ACME: o certificado da origem **já existe** (Let's Encrypt
+via Traefik), então ligar a laranja agora não quebra nada. A atenção é pra
+reemissão do zero (cert expirado ou VPS novo): com laranja + "Always Use
+HTTPS", o desafio HTTP-01 é redirecionado pra um HTTPS onde o Traefik ainda
+não tem cert válido e a emissão pode falhar. **Ordem segura:** cinza →
+certificado emitido → só então laranja.
 
 `.app` está na lista de **HSTS preload**: o navegador nunca tenta HTTP. TLS
 válido é pré-requisito, não polimento.
@@ -147,12 +153,39 @@ válido é pré-requisito, não polimento.
 
 ## Ordem de execução
 
-1. Firewall do VPS restrito aos ranges da Cloudflare (ou `ipAllowList` no
-   Traefik). **Primeiro** — sem isso o resto é teatro.
-2. `client_ip()` preferindo `CF-Connecting-IP`, com teste.
-3. Label do Traefik para `requestHeaderName=CF-Connecting-IP`.
-4. Ligar laranja **só em `rolai.app`**, SSL em Full (strict).
-5. `api.rolai.app` **permanece cinza** até existir heartbeat no WS.
+A versão anterior desta lista mandava o firewall primeiro **e** mantinha o
+api em cinza — as duas coisas juntas não funcionam: com o VPS respondendo
+só pros ranges da CF, um `api.rolai.app` em DNS-only fica inalcançável.
+Com o heartbeat implementado o api vai pra laranja junto, e a ordem que não
+derruba nada é:
+
+1. **Deploy do código novo** (heartbeat + `CF-Connecting-IP`): push no
+   `main`, o CI publica as imagens, e no VPS
+   `docker compose -f infra/docker-compose.yml -f infra/docker-compose.hostinger.yml pull && up -d`
+   (ver `docs/deployment.md`). Tudo continua cinza e funcionando — as
+   mudanças são inertes sem CF no caminho.
+2. **Cloudflare dashboard**: SSL/TLS em modo **Full (strict)** — nunca
+   Flexible (fala HTTP com a origem). "Always Use HTTPS" é dispensável: o
+   redirect do Traefik já cobre, e `.app` é HSTS preload.
+3. **Ligar a laranja nos dois registros** (`rolai.app` e `api.rolai.app`).
+   O heartbeat segura o WS; o `CF-Connecting-IP` já passa a chegar e o
+   backend já prefere ele.
+4. **Trocar a label do rate limit** no `infra/docker-compose.hostinger.yml`
+   (bloco "MODO LARANJA" comentado): comentar `ipStrategy.depth=1`,
+   descomentar `requestHeaderName=CF-Connecting-IP`, e subir de novo.
+5. **Fechar o bypass direto ao VPS** — só agora, com a laranja já ligada
+   (antes disso isto derruba o site). Uma das duas:
+   - Firewall (recomendado): liberar 80/443 só pros ranges de
+     `https://www.cloudflare.com/ips/` (a lista muda — vale um cron de
+     sync), cuidando pra não trancar o próprio SSH. Ex. com ufw: um
+     `ufw allow from <range> to any port 80,443 proto tcp` por range,
+     depois `ufw deny 80,443 proto tcp`.
+   - Ou `ipAllowList` com os ranges da CF nos dois routers (label comentada
+     no mesmo bloco "MODO LARANJA" do compose).
+   - Complemento opcional na config estática do Traefik do VPS (fora deste
+     repo): `entryPoints.websecure.forwardedHeaders.trustedIPs=<ranges CF>`,
+     pro `X-Forwarded-For` voltar a ser íntegro (logs e usos futuros).
+6. **Verificar** (seção abaixo) — principalmente o teste dos 40 POSTs.
 
 ## Como verificar
 
@@ -179,14 +212,17 @@ done
 Deve aparecer **429** depois de `room_create_limit_per_hour`. Se os 40 saírem
 200, o header está sendo aceito como identidade — o furo desta doc.
 
-WebSocket sobrevive ocioso (só faz sentido se um dia o `api` for pra laranja):
-abrir a sala, deixar 3 minutos sem rolar, e conferir que o roster não piscou.
+WebSocket sobrevive ocioso (com o api em laranja): abrir a sala, deixar 3
+minutos sem rolar, e conferir que o roster não piscou. Com o heartbeat nem
+reconexão deveria haver — no devtools dá pra ver os `{"type":"ping"}`
+chegando a cada `ws_heartbeat_seconds` (30s por default).
 
 ## Referências no código
 
 | Assunto | Onde |
 | --- | --- |
 | IP do cliente | `services/backend/app/limits.py` |
+| Heartbeat do WS | `services/backend/app/rooms.py` (`ws_heartbeat_seconds` em `config.py`), `apps/web/src/room/client.ts`, `apps/android/.../RoomClient.kt` |
 | Origin do WS, códigos 4403/4429 | `services/backend/app/rooms.py` |
 | Limites configuráveis | `services/backend/app/config.py`, `.env.example` |
 | Labels do Traefik | `infra/docker-compose.hostinger.yml` |

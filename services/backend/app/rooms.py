@@ -28,6 +28,11 @@
 #     servidor envia {"type": "error", "message": "rate_limit_exceeded"} e
 #     fecha a conexao com codigo 1008 (policy violation).
 #   - Sala inexistente -> close 4404 (antes do accept).
+#   - Heartbeat de aplicacao: se o cliente ficar ws_heartbeat_seconds sem
+#     mandar nada, o servidor envia {"type":"ping"}; o cliente responde
+#     {"type":"pong"}, que o loop consome em silencio (nao e rolagem).
+#     Proxy com timeout ocioso (Cloudflare ~100s, NAT de rede movel) nao
+#     derruba conexao parada — ver docs/security-cloudflare.md. 0 desliga.
 #
 # Estado da sala no Redis (TTL renovado a cada evento: entrada, saida, rolagem):
 #   room:{code}          string "1"  — marcador de existencia da sala
@@ -37,6 +42,7 @@
 #   rooms:active         set com o codigo de cada sala viva — teto global de
 #                        salas (settings.max_active_rooms), prunado a cada
 #                        criacao (sala expirada some do set)
+import asyncio
 import csv
 import io
 import json
@@ -422,8 +428,18 @@ async def room_ws(
                 connections,
                 {"type": "roster", "roster": roster_payload(await store.roster(code))},
             )
+        heartbeat = settings.ws_heartbeat_seconds
         while True:
-            raw = await websocket.receive_text()
+            try:
+                raw = await asyncio.wait_for(
+                    websocket.receive_text(), timeout=heartbeat if heartbeat > 0 else None
+                )
+            except TimeoutError:
+                # Cliente ocioso: heartbeat de aplicacao (ver cabecalho do
+                # modulo). O send fica nesta mesma task — nada de writer
+                # concorrente no socket.
+                await websocket.send_json({"type": "ping"})
+                continue
             if len(raw.encode("utf-8")) > settings.max_message_bytes:
                 log.warning(
                     "event=payload_rejected reason=message_too_large code=%s player=%s", code, name
@@ -437,6 +453,8 @@ async def room_ws(
                 await _send_error(websocket, "rate_limit_exceeded")
                 await websocket.close(code=1008)
                 break
+            if _is_pong(raw):
+                continue  # resposta ao heartbeat — nao e rolagem
             event_in = await _parse_roll_event(websocket, raw, code, name)
             if event_in is None:
                 continue  # erro ja enviado ao remetente
@@ -478,6 +496,17 @@ async def room_ws(
                     connections,
                     {"type": "roster", "roster": roster_payload(await store.roster(code))},
                 )
+
+
+def _is_pong(raw: str) -> bool:
+    """Resposta do cliente ao {"type":"ping"} do heartbeat. Sem este filtro
+    o pong cairia na validacao de RollEventIn e voltaria erro pro remetente
+    a cada heartbeat."""
+    try:
+        data: object = json.loads(raw)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(data, dict) and data.get("type") == "pong"
 
 
 async def _parse_roll_event(
