@@ -40,6 +40,11 @@ type DiceFactoryLike = {
 // Quanto engrossar o contorno do numero (ver makeOutlineVisible).
 const OUTLINE_WIDTH_BOOST = 3.5;
 
+// Teto pro initialize() COM som. Generoso pro caso lento (rede ruim, cache
+// frio) e curto o bastante pra ninguem ficar olhando pra mesa vazia — se
+// estourar, o palco sobe sem audio (ver init).
+const SOUND_INIT_TIMEOUT_MS = 2500;
+
 type DiceBoxInstance = {
   DiceFactory?: DiceFactoryLike;
   initialize(): Promise<unknown>;
@@ -213,19 +218,37 @@ export class DiceBoxRenderer implements RollRenderer {
     // As imagens de textura sao pedidas como
     // `${assetPath}textures/<nome>.webp` — os arquivos vivem em
     // public/textures (copiados do pacote da lib).
-    const box: DiceBoxInstance = withPatchedContext(() => new DiceBox(`#${container.id}`, {
-      assetPath: "./",
-      shadows: this.options.shadows,
-      light_intensity: this.options.lightIntensity,
-      // Os mp3 vivem em public/sounds (copiados do pacote, igual as
-      // texturas). CUIDADO: com `sounds: true` a lib faz `throw` no
-      // initialize() se qualquer arquivo faltar — sem os assets no lugar,
-      // ligar isto derruba o renderer inteiro, nao so o audio.
-      sounds: true,
-      baseScale: Math.round(100 * this.options.scale),
-      theme_customColorset: toColorset(this.options.style),
-    }));
-    await box.initialize();
+    const build = (sounds: boolean): DiceBoxInstance =>
+      withPatchedContext(() => new DiceBox(`#${container.id}`, {
+        assetPath: "./",
+        shadows: this.options.shadows,
+        light_intensity: this.options.lightIntensity,
+        sounds,
+        baseScale: Math.round(100 * this.options.scale),
+        theme_customColorset: toColorset(this.options.style),
+      }));
+
+    // Som e opcional; dado 3D nao e.
+    //
+    // A lib carrega os 75 mp3 DENTRO do initialize(), e o `loadAudio` dela
+    // so resolve no `canplaythrough`. Quando isso nao chega, a promise fica
+    // pendente pra sempre: o initialize() nao rejeita, TRAVA. Verificado em
+    // producao e local — com `sounds: true` a rolagem saia so em numero,
+    // sem dado nenhum, porque o renderer nunca terminava de subir.
+    //
+    // Por isso a corrida com relogio em vez de try/catch: `catch` nao pega
+    // promise pendente. Estourou o tempo, remonta sem audio.
+    let box = build(true);
+    const withSound = await Promise.race([
+      box.initialize().then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), SOUND_INIT_TIMEOUT_MS)),
+    ]).catch(() => false);
+    if (!withSound) {
+      console.warn("audio nao carregou a tempo, seguindo sem som");
+      container.replaceChildren();
+      box = build(false);
+      await box.initialize();
+    }
     // A lib cria TODO material de dado com `transparent: true` e
     // `depthTest: false`. Num canvas com alpha (que e o nosso caso: modo
     // stream, overlay do Android e Browser Source do OBS) isso faz o fundo

@@ -43,6 +43,12 @@ class OverlayService : Service() {
     private val stageHandler = Handler(Looper.getMainLooper())
     private val stageHideRunnable = Runnable { diceStage.setInteractive(false) }
     private var roomClient: RoomClient? = null
+
+    // Assinatura do que ja esta montado: se a config nova gera a mesma URL,
+    // nao ha nada pra refazer (ver applySettings).
+    private var lastStageUrl: String? = null
+    private var lastHandshakeUrl: String? = null
+    private val settingsReloadRunnable = Runnable { applySettings() }
     private var viewAttached = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -76,6 +82,14 @@ class OverlayService : Service() {
             settings.quality,
             settings,
         )
+        lastStageUrl = DiceStageWindow.streamUrl(
+            settings.webBaseUrl,
+            settings.roomCode,
+            settings.dicePreset,
+            settings.diceScalePercent,
+            settings.quality,
+            settings,
+        )
         diceStage.onStageTapped = ::dismissDice
         headlessRoller = HeadlessRoller(
             this,
@@ -102,7 +116,14 @@ class OverlayService : Service() {
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_RELOAD && overlayAttached) {
-            applySettings()
+            // DEBOUNCE, nao aplicar direto: a tela de config salva a cada
+            // toque (cor, spinner, slider) — sao 11 pontos chamando save.
+            // Aplicar em cada um derrubava e reabria DUAS conexoes WS por
+            // toque (sala + palco espectador), estourava o teto de
+            // WS_CONNECT_LIMIT_PER_MINUTE do backend e o palco levava 4429:
+            // o dado dos OUTROS parava de aparecer ate o minuto virar.
+            stageHandler.removeCallbacks(settingsReloadRunnable)
+            stageHandler.postDelayed(settingsReloadRunnable, SETTINGS_DEBOUNCE_MS)
             return START_STICKY
         }
         // START_STICKY: se o sistema matar o processo, o overlay volta
@@ -207,9 +228,13 @@ class OverlayService : Service() {
      */
     private fun applySettings() {
         val settings = RolaiSettings.load(this)
-        diceStage.detach()
-        diceStage.attach(
-            windowManager,
+        overlay.setQuickNotation(settings.notation)
+
+        // So remonta o que de fato mudou. Trocar de sistema ou de notacao
+        // nao tem nada a ver com o palco nem com a sala — reabrir conexao
+        // por isso e desperdicio, e desperdicio aqui custa cota de conexao
+        // no backend.
+        val stageUrl = DiceStageWindow.streamUrl(
             settings.webBaseUrl,
             settings.roomCode,
             settings.dicePreset,
@@ -217,13 +242,41 @@ class OverlayService : Service() {
             settings.quality,
             settings,
         )
-        overlay.setQuickNotation(settings.notation)
+        if (stageUrl != lastStageUrl) {
+            lastStageUrl = stageUrl
+            diceStage.detach()
+            diceStage.attach(
+                windowManager,
+                settings.webBaseUrl,
+                settings.roomCode,
+                settings.dicePreset,
+                settings.diceScalePercent,
+                settings.quality,
+                settings,
+            )
+        }
+
+        val handshakeUrl = if (RolaiSettings.hasRoom(settings)) {
+            runCatching {
+                RoomClient.buildHandshakeUrl(
+                    settings.wsBaseUrl,
+                    settings.roomCode,
+                    settings.playerName,
+                    settings,
+                )
+            }.getOrNull()
+        } else {
+            null
+        }
+        if (handshakeUrl == lastHandshakeUrl) return
+        lastHandshakeUrl = handshakeUrl
         roomClient?.disconnect()
         roomClient = null
-        if (RolaiSettings.hasRoom(settings)) {
-            connectRoom(settings)
-        } else {
+        if (handshakeUrl == null) {
             overlay.setStatus(getString(R.string.status_disconnected))
+        } else {
+            overlay.setStatus(getString(R.string.status_connecting))
+            roomClient = RoomClient(roomListener).also { it.connect(handshakeUrl) }
         }
     }
 
@@ -331,6 +384,13 @@ class OverlayService : Service() {
     }
 
     companion object {
+        /**
+         * Espera antes de aplicar config nova. A tela salva a cada toque;
+         * sem isto, arrastar o slider de tamanho vira uma rajada de
+         * reconexoes.
+         */
+        private const val SETTINGS_DEBOUNCE_MS = 700L
+
         const val ACTION_START = "app.meioorc.rolai.action.START"
         const val ACTION_STOP = "app.meioorc.rolai.action.STOP"
 
