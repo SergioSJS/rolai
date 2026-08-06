@@ -36,3 +36,7 @@ line-length = 100
 
 [tool.mypy]
 strict = true
+# `pip install .` (o caminho do CI) deixa uma copia do pacote em build/lib,
+# e o mypy reclama de modulo "app" duplicado. Localmente nao aparece porque
+# usamos uv, que nao gera esse diretorio.
+exclude = ["^build/"]

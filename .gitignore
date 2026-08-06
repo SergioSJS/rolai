@@ -21,3 +21,5 @@ apps/android/.kotlin/
 # Build local do Android (o APK publicado vem do CI, ver .github/workflows)
 apps/android/local.properties
 apps/android/app/build/
+build/
+*.egg-info/
