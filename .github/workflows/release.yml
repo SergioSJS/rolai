@@ -1,0 +1,51 @@
+name: Release
+
+# Gera o APK e anexa numa Release do GitHub — e assim que o app e
+# distribuido (nao vai pra Play Store). Dispara em tag `v*` ou na mao.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+
+      # APK de DEBUG de proposito: sem Play Store, nao ha keystore de
+      # release neste repo (chave privada nao entra em git). O debug e
+      # assinado com a chave de debug do Android, instala em qualquer
+      # aparelho com "fontes desconhecidas" e nao precisa de segredo no CI.
+      # Se um dia virar release assinado: keystore em base64 num secret e
+      # signingConfig lendo de env.
+      - name: Build APK
+        working-directory: apps/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Renomear com a versao
+        id: apk
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [ "$version" = "$GITHUB_REF_NAME" ] && version="$(date +%Y%m%d)-${GITHUB_SHA::7}"
+          cp apps/android/app/build/outputs/apk/debug/app-debug.apk "rolai-$version.apk"
+          echo "path=rolai-$version.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar na Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.apk.outputs.path }}
+          generate_release_notes: true
+          # workflow_dispatch nao tem tag: cria/atualiza a "nightly".
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'nightly' }}
+          name: ${{ github.ref_type == 'tag' && github.ref_name || 'Build mais recente' }}
+          prerelease: ${{ github.ref_type != 'tag' }}

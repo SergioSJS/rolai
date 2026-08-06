@@ -1,32 +1,75 @@
 # Rolaí
 
-Dice roller 3D multiplayer para mesas de RPG — salas efêmeras, histórico
-exportável, e um app Android com botão flutuante pra rolar sem sair de
-outro app.
+Dice roller multiplayer pra mesas de RPG: rolagem 3D com física, salas
+efêmeras compartilhadas por link, histórico exportável e um app Android com
+botão flutuante que rola por cima de qualquer outro app (o leitor de PDF da
+ficha, por exemplo).
 
-## Começando
+## Baixar o app Android
 
-Se você é um agente de codificação (Kimi Code, Claude Code): comece por
-`AGENTS.md`, depois `specs/00-overview.md`.
+O APK sai da [página de Releases](../../releases) — é um build de **debug**
+assinado com a chave de debug do Android (o projeto não vai pra Play Store).
+Pra instalar, libere "fontes desconhecidas" no aparelho.
 
-Se você é humano: comece por `docs/architecture.md` — tem o desenho
-completo do sistema, as decisões já tomadas e o porquê de cada uma.
+Pra abrir em tela cheia sem barra de URL, o app precisa de um navegador com
+suporte a Custom Tabs instalado (Chrome, Brave…).
 
-## Estrutura
+## O que tem aqui
 
-| Pasta | O quê |
-|---|---|
-| `packages/rules-engine` | Parser de notação + profiles de sistema (TS, compartilhado web/Android) |
-| `apps/web` | Frontend PWA (React + Vite + TS) |
-| `apps/android` | App Kotlin (TWA + overlay flutuante) |
-| `services/backend` | Relay de sala (FastAPI) |
-| `infra` | Docker Compose para Hostinger e ZimaOS/CasaOS |
-| `docs` | Arquitetura, notação de rolagem, profiles, segurança, deploy |
-| `specs` | Specs de implementação por etapa (estilo SPDD) |
+```
+packages/rules-engine/   TypeScript — parser da notação + profiles de sistema
+                         (d20, Fate/Fudge, PbtA, FitD, Ironsworn, d100).
+                         Fonte única das regras: web e Android usam este mesmo
+                         código, nunca uma reimplementação.
+apps/web/                React + Vite. PWA, palco 3D, salas, modo stream/OBS.
+apps/android/            Kotlin. TWA + Foreground Service com overlay flutuante
+                         e WebView headless rodando o rules-engine.
+services/backend/        Python + FastAPI. Relay de sala (WebSocket) + REST.
+infra/                   docker-compose (Hostinger/Traefik e ZimaOS/CasaOS).
+```
 
-## Deploy
+Arquitetura em [`docs/architecture.md`](docs/architecture.md); o estado atual
+e o que continua aberto em [`docs/handoff.md`](docs/handoff.md).
 
-Dois alvos suportados desde o início, ver `docs/deployment.md`:
+## Rodar local
 
-- **Hostinger VPS** — atrás do Traefik existente, `infra/docker-compose.hostinger.yml`
-- **ZimaOS/CasaOS** — `infra/docker-compose.casaos.yml` + manifest em `infra/casaos/`
+```bash
+npm install
+
+# backend sem docker (fakeredis + sqlite em memória), porta 8420
+cd services/backend && uv run python scripts/dev_local.py
+
+# web, porta 5273
+npm run dev -w @rolai/web
+```
+
+Testar o app Android contra esse ambiente, pelo cabo USB (nada exposto na
+rede):
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21   # o Gradle recusa o JDK 26
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+adb reverse tcp:8420 tcp:8420 && adb reverse tcp:5273 tcp:5273
+cd apps/android && ./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+## Testes
+
+```bash
+npm test -w @rolai/rules-engine     # 79
+npm test -w @rolai/web              # 131
+cd services/backend && uv run pytest # 49
+cd apps/android && ./gradlew test
+```
+
+## Modo stream (OBS)
+
+`?stream=1&room=CÓDIGO` desenha só os dados, com fundo transparente de
+verdade — feito pra Browser Source. `&chroma=rrggbb` troca por chroma key, e
+`&style=`, `&scale=`, `&quality=` ajustam a aparência sem depender do
+localStorage do navegador (é assim que o overlay Android configura o palco).
+
+## Licença
+
+MIT — veja [`LICENSE`](LICENSE).

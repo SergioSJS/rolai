@@ -58,3 +58,23 @@ jobs:
       # estatico nem em imagem). Bump major do vite fica como decisao separada.
       - run: npm audit --omit=dev --audit-level=high
         working-directory: .
+
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      - uses: actions/checkout@v4
+      # AGP 8.6 exige JDK 17+; o 21 e o que usamos localmente (o 26 do
+      # homebrew o Gradle recusa — ver docs/handoff.md).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      # O bundle headless do rules-engine vive em assets/ e e versionado,
+      # entao o modulo compila sem depender do build da web aqui.
+      - run: ./gradlew test assembleDebug --no-daemon
+
