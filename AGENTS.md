@@ -143,6 +143,22 @@ Ao mexer nisso:
 - Servidor custom nas preferências volta a usar a rede — é o caminho pra
   testar outro deploy.
 
+## Mexeu no rules-engine? Regenere o bundle do Android
+
+O app calcula rolagem numa WebView com o bundle EMBARCADO em
+`apps/android/app/src/main/assets/headless/`. É artefato de build, e fica
+defasado em silêncio: a web mostra o comportamento novo e o APK segue com
+o motor antigo, sem erro nenhum.
+
+```bash
+npm run build:headless -w @rolai/web   # motor de regras (rolagem)
+npm run build:stage    -w @rolai/web   # palco 3D offline
+```
+
+Aconteceu com o `dropped` do keep/drop: corrigido no engine, verde nos
+testes web, e `1d20dis` continuava errado no celular.
+`KeepDropHeadlessTest` (instrumentado) falha quando o bundle está velho.
+
 ## Armadilha recorrente deste projeto
 
 A maior parte dos bugs difíceis daqui teve a mesma forma: **código decidindo
