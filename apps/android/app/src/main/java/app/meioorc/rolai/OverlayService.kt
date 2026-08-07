@@ -118,7 +118,7 @@ class OverlayService : Service() {
         // processo — sem persistir, a mini-bolha "esquecia" a ultima rolagem
         // e voltava pra configurada. Sobrevive a restart.
         loadLastRoll()?.let { saved -> lastRollAction = { headlessRoller.roll(saved) } }
-        overlay.onOpenApp = { launchFromOverlay(Intent(this, TwaActivity::class.java)) }
+        overlay.onOpenApp = { launchFromOverlay(TwaActivity.intentFor(this)) }
         overlay.onOpenSettings = { launchFromOverlay(Intent(this, SettingsActivity::class.java)) }
 
         if (RolaiSettings.hasRoom(settings)) {

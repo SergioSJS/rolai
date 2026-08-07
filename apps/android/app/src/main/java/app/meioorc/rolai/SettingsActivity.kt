@@ -190,13 +190,7 @@ class SettingsActivity : Activity() {
         editServer = findViewById(R.id.edit_server)
 
         findViewById<Button>(R.id.btn_open_twa).setOnClickListener {
-            // CLEAR_TOP: a aba do Custom Tab da TWA vive na MESMA task do
-            // app. Sem isto o Android considera que a task ja esta no topo e
-            // o clique nao faz nada — mesmo motivo do botao do overlay.
-            startActivity(
-                Intent(this, TwaActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP),
-            )
+            startActivity(TwaActivity.intentFor(this))
         }
 
         loadSystemsFromAssets()
