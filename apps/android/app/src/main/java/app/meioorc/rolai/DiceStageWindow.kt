@@ -142,7 +142,7 @@ class DiceStageWindow(private val context: Context) {
      * Empurra uma rolagem JA CALCULADA pro palco (window.rolaiStream.play).
      * E o que faz o dado 3D aparecer sem sala e sem rede — offline.
      */
-    fun play(resultJson: String) {
+    fun play(resultJson: String, styleJson: String? = null) {
         val view = webView ?: return
         if (stageLoadFailed) {
             // O palco falhou ao carregar (offline): tenta de novo ao rolar.
@@ -152,7 +152,13 @@ class DiceStageWindow(private val context: Context) {
             stageUrl?.let { view.loadUrl(it) }
         }
         val escaped = org.json.JSONObject.quote(resultJson)
-        view.evaluateJavascript("window.rolaiStream && window.rolaiStream.play($escaped)", null)
+        // O bridge aceita (resultado, estilo): o estilo e o de QUEM ROLOU, pra
+        // mesa inteira ver o dado na cor de quem jogou.
+        val estilo = styleJson ?: "null"
+        view.evaluateJavascript(
+            "window.rolaiStream && window.rolaiStream.play($escaped, $estilo)",
+            null,
+        )
     }
 
     /** Tira os dados da tela agora (ponte window.rolaiStream.clear). */

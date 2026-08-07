@@ -26,8 +26,12 @@ class RoomClient(private val listener: Listener) {
 
     interface Listener {
         fun onConnected()
-        /** Broadcast de rolagem (de qualquer jogador, inclusive eco do nosso). */
-        fun onRoll(player: String, resultJson: String)
+        /**
+         * Broadcast de rolagem (de qualquer jogador, inclusive eco do nosso).
+         * `styleJson` e a aparencia de dado de QUEM ROLOU (null = sem estilo):
+         * o palco anima com a cor de quem rolou, nao com a nossa.
+         */
+        fun onRoll(player: String, resultJson: String, styleJson: String?)
         /** Roster atual (snapshot inicial ou evento de entrada/saida). */
         fun onRoster(memberNames: List<String>)
         /** Erro de protocolo vindo do servidor, ou "room_not_found" local. */
@@ -120,7 +124,8 @@ class RoomClient(private val listener: Listener) {
                 "roll" -> {
                     val player = message.optString("player", "?")
                     val result = message.optJSONObject("result")?.toString() ?: return
-                    handler.post { listener.onRoll(player, result) }
+                    val style = message.optJSONObject("style")?.toString()
+                    handler.post { listener.onRoll(player, result, style) }
                 }
                 "error" -> {
                     val error = message.optString("message", "erro do servidor")

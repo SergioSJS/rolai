@@ -85,7 +85,10 @@ class OverlayService : Service() {
         diceStage.attach(
             windowManager,
             settings.webBaseUrl,
-            settings.roomCode,
+            // SEM sala na URL: o palco nao entra mais como espectador (era uma
+            // segunda conexao WS por aparelho, e a animacao morria junto com
+            // ela). Tudo que precisa animar chega por play().
+            "",
             settings.dicePreset,
             settings.diceScalePercent,
             settings.quality,
@@ -93,7 +96,7 @@ class OverlayService : Service() {
         )
         lastStageUrl = DiceStageWindow.streamUrl(
             settings.webBaseUrl,
-            settings.roomCode,
+            "",
             settings.dicePreset,
             settings.diceScalePercent,
             settings.quality,
@@ -290,7 +293,7 @@ class OverlayService : Service() {
         // no backend.
         val stageUrl = DiceStageWindow.streamUrl(
             settings.webBaseUrl,
-            settings.roomCode,
+            "",
             settings.dicePreset,
             settings.diceScalePercent,
             settings.quality,
@@ -361,13 +364,15 @@ class OverlayService : Service() {
             publishStatus(getString(R.string.status_connecting))
         }
 
-        override fun onRoll(player: String, resultJson: String) {
-            // Broadcast inclui o eco da nossa propria rolagem (ack do
-            // servidor); a nossa ja foi exibida — so loga a dos outros.
+        override fun onRoll(player: String, resultJson: String, styleJson: String?) {
             overlay.addActivityLine("$player: ${formatResult(resultJson)}")
-            // A WebView espectadora do palco vai animar este broadcast:
-            // janela interativa enquanto o dado esta na tela (ver
-            // DiceStageWindow — e o que evita o clamp de alpha do sistema).
+            // EMPURRA em vez de esperar o eco chegar na WebView espectadora.
+            // O palco era um segundo cliente WS (spectator) e dependia dessa
+            // conexao pra animar qualquer coisa — quando ela falhava, o dado
+            // simplesmente nao aparecia, sem erro nenhum. Agora quem ja tem a
+            // rolagem (este servico) manda direto: uma conexao a menos por
+            // aparelho e nada de animacao dependendo de rede extra.
+            diceStage.play(resultJson, styleJson)
             stageShow()
         }
 
@@ -483,19 +488,23 @@ class OverlayService : Service() {
 
     private fun onRollCalculated(resultJson: String) {
         overlay.showResult(formatResult(resultJson))
-        // Sem sala: o palco so ve a rolagem se a gente empurrar. Com sala,
-        // NAO empurra — o eco do servidor ja chega pela WebView espectadora
-        // e animaria duas vezes.
-        if (roomClient == null) {
+        // Propaga o resultado JA calculado (relay burro — o backend nao
+        // recalcula, ver docs/architecture.md). Em sala, quem anima e o eco
+        // do servidor, pela WebView espectadora: empurrar TAMBEM aqui faria
+        // o dado cair duas vezes.
+        //
+        // O que decide e a ENTREGA, nao a existencia do cliente. Antes bastava
+        // ter codigo de sala configurado pro `play` local ser pulado — com a
+        // sala fora do ar (ou codigo inexistente) a rolagem nao ia pra lugar
+        // nenhum e o dado 3D simplesmente parava de aparecer.
+        val entregue = roomState == RoomState.CONNECTED &&
+            roomClient?.sendRoll(resultJson) == true
+        if (!entregue) {
             diceStage.play(resultJson)
             stageShow()
-            // Sem sala nao ha eco do servidor — a nossa rolagem entra no
-            // historico por aqui (em sala ela entra pelo broadcast).
+            // Sem eco do servidor, a nossa rolagem entra no historico aqui.
             overlay.addActivityLine("você: ${formatResult(resultJson)}")
         }
-        // Em sala: propaga o resultado JA calculado (relay burro — o
-        // backend nao recalcula, ver docs/architecture.md).
-        roomClient?.sendRoll(resultJson)
     }
 
     companion object {
