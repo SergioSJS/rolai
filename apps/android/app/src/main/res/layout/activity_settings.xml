@@ -3,6 +3,7 @@
      de proposito: a activity nao usa appcompat. Visual escuro com os tokens
      do apps/web — secoes com cabecalho verde, rotulos discretos. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/settings_scroller"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -66,6 +67,30 @@
             style="@style/Rolai.SectionHeader"
             android:text="@string/section_room" />
 
+        <!-- Estado da conexao: sem isto nao havia como saber se a sala
+             pegou (o botao "Criar" so criava e ficava por isso mesmo). -->
+        <TextView
+            android:id="@+id/txt_room_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="#8B95A1"
+            tools:text="sala: conectado" />
+
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/server_label" />
+
+        <EditText
+            android:id="@+id/edit_server"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:importantForAutofill="no"
+            android:inputType="textUri"
+            android:textColor="#E8ECF0" />
+
         <TextView
             style="@style/Rolai.FieldLabel"
             android:text="@string/room_code_label" />
@@ -86,13 +111,28 @@
                 android:maxLength="32"
                 android:textColor="#E8ECF0" />
 
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
             <Button
                 android:id="@+id/button_create_room"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                android:layout_marginStart="8dp"
+                android:layout_weight="1"
                 android:text="@string/create_room" />
+
+            <Button
+                android:id="@+id/button_join_room"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/join_room" />
         </LinearLayout>
 
         <TextView
@@ -294,16 +334,5 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp" />
 
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/server_label" />
-
-        <EditText
-            android:id="@+id/edit_server"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:importantForAutofill="no"
-            android:inputType="textUri"
-            android:textColor="#E8ECF0" />
     </LinearLayout>
 </ScrollView>

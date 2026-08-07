@@ -10,9 +10,14 @@
 
     <string name="room_code_label">Código da sala (opcional)</string>
     <string name="room_code_hint">ex: a1B2-c3D</string>
-    <string name="create_room">Criar</string>
+    <string name="create_room">Criar sala</string>
+    <string name="join_room">Entrar</string>
+    <string name="room_needs_overlay">ative o botão flutuante para conectar na sala</string>
+    <string name="room_joining">conectando em %1$s…</string>
     <string name="create_room_working">criando sala…</string>
     <string name="create_room_failed">nao deu pra criar a sala: %1$s</string>
+    <string name="room_status_none">sem sala — o dado rola só neste aparelho</string>
+    <string name="room_status_created">sala criada: %1$s — ative o botão flutuante para conectar</string>
     <string name="name_label">Apelido</string>
     <string name="notation_label">Rolagem rápida do botão</string>
     <string name="system_label">Sistema de regras</string>
@@ -39,7 +44,7 @@
     <string name="overlay_action_open_app">abrir app</string>
     <string name="label_dice_preset">Estilo</string>
     <string name="section_general">Botão flutuante</string>
-    <string name="section_room">Sala</string>
+    <string name="section_room">Conexão e sala</string>
     <string name="section_quickroll">Rolagem rápida</string>
     <string name="section_appearance">Aparência do dado</string>
     <string name="label_dice_scale">Tamanho do dado</string>

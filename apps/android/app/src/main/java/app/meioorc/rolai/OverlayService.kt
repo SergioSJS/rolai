@@ -61,6 +61,9 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Instancia nova comeca do zero: o flag e estatico e pode ter ficado
+        // `true` de uma instancia anterior que nao chegou a limpar.
+        overlayAttached = false
         startForegroundWithNotification()
 
         if (!Settings.canDrawOverlays(this)) {
@@ -118,7 +121,7 @@ class OverlayService : Service() {
         if (RolaiSettings.hasRoom(settings)) {
             connectRoom(settings)
         } else {
-            overlay.setStatus(getString(R.string.status_disconnected))
+            publishStatus(getString(R.string.status_disconnected))
         }
         overlayAttached = true
     }
@@ -128,7 +131,7 @@ class OverlayService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent?.action == ACTION_RELOAD && overlayAttached) {
+        if (intent?.action == ACTION_RELOAD && isReady()) {
             // DEBOUNCE, nao aplicar direto: a tela de config salva a cada
             // toque (cor, spinner, slider) — sao 11 pontos chamando save.
             // Aplicar em cada um derrubava e reabria DUAS conexoes WS por
@@ -240,7 +243,21 @@ class OverlayService : Service() {
      * mexia em nada ate o servico renascer. Aqui o palco e remontado com a
      * URL nova e a sala reconecta (o `style` do handshake tambem mudou).
      */
+    /**
+     * Servico realmente montado NESTA instancia.
+     *
+     * `overlayAttached` e estatico (existe pros instrumented tests), entao um
+     * `true` deixado por uma instancia anterior fica visivel pra proxima. Se
+     * um RELOAD chegasse nesse intervalo, applySettings tocaria `windowManager`
+     * ainda nao inicializado e o processo morria com
+     * UninitializedPropertyAccessException — o "fecha com erro" ao desligar e
+     * religar o botao. Checar o lateinit desta instancia e o que vale.
+     */
+    private fun isReady(): Boolean =
+        ::windowManager.isInitialized && ::overlay.isInitialized && viewAttached
+
     private fun applySettings() {
+        if (!isReady()) return
         val settings = RolaiSettings.load(this)
         overlay.setQuickNotation(settings.notation)
         val quickKey = quickKeyOf(settings)
@@ -298,9 +315,9 @@ class OverlayService : Service() {
         roomClient?.disconnect()
         roomClient = null
         if (handshakeUrl == null) {
-            overlay.setStatus(getString(R.string.status_disconnected))
+            publishStatus(getString(R.string.status_disconnected))
         } else {
-            overlay.setStatus(getString(R.string.status_connecting))
+            publishStatus(getString(R.string.status_connecting))
             roomClient = RoomClient(roomListener).also { it.connect(handshakeUrl) }
         }
     }
@@ -314,13 +331,13 @@ class OverlayService : Service() {
             settings.playerName,
             settings,
         )
-        overlay.setStatus(getString(R.string.status_connecting))
+        publishStatus(getString(R.string.status_connecting))
         roomClient = RoomClient(roomListener).also { it.connect(url) }
     }
 
     private val roomListener = object : RoomClient.Listener {
         override fun onConnected() {
-            overlay.setStatus("sala: conectado")
+            publishStatus("sala: conectado")
         }
 
         override fun onRoll(player: String, resultJson: String) {
@@ -334,19 +351,19 @@ class OverlayService : Service() {
         }
 
         override fun onRoster(memberNames: List<String>) {
-            overlay.setStatus("sala: ${memberNames.size} jogador(es)")
+            publishStatus("sala: ${memberNames.size} jogador(es)")
         }
 
         override fun onError(message: String) {
             if (message == RoomClient.ERROR_ROOM_NOT_FOUND) {
-                overlay.setStatus(getString(R.string.status_room_not_found))
+                publishStatus(getString(R.string.status_room_not_found))
             } else {
-                overlay.setStatus("erro: $message")
+                publishStatus("erro: $message")
             }
         }
 
         override fun onDisconnected(reconnecting: Boolean) {
-            overlay.setStatus(
+            publishStatus(
                 getString(
                     if (reconnecting) R.string.status_reconnecting
                     else R.string.status_disconnected,
@@ -413,6 +430,16 @@ class OverlayService : Service() {
         } else {
             headlessRoller.rollWithProfile(settings.system, settings.inputsJson)
         }
+    }
+
+    /**
+     * Unico ponto de status: pinta no overlay E publica pra SettingsActivity.
+     * Sem isso a tela de config nao tinha como dizer se a sala conectou — o
+     * botao "Criar" criava a sala e o usuario ficava no escuro.
+     */
+    private fun publishStatus(text: String) {
+        roomStatus = text
+        overlay.setStatus(text)
     }
 
     /** Janela do palco interativa enquanto o dado esta na tela. */
@@ -484,6 +511,11 @@ class OverlayService : Service() {
         /** Estado observavel pros instrumented tests (OverlayServiceTest). */
         @Volatile
         var overlayAttached = false
+            private set
+
+        /** Ultimo status da sala, lido pela SettingsActivity. */
+        @Volatile
+        var roomStatus: String = ""
             private set
 
         /**

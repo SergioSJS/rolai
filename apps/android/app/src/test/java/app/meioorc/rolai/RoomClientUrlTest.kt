@@ -147,3 +147,32 @@ class HandshakeStyleTest {
         assertEquals("http://localhost:8420", RolaiSettings.httpBaseUrl("ws://localhost:8420/"))
     }
 }
+
+/**
+ * Piso de entropia do codigo escolhido a mao. TERCEIRA copia da regra
+ * (backend, web, aqui) — os numeros ficam travados no teste pra que mudar
+ * o piso no servidor sem mudar aqui quebre o build, em vez de virar
+ * "pode criar" seguido de 4404 na cara do usuario.
+ */
+class CustomCodeIssueTest {
+
+    @Test
+    fun `aceita codigo de mesa fixa`() {
+        assertEquals(null, RolaiSettings.customCodeIssue("mesa-do-sergio-2026"))
+    }
+
+    @Test
+    fun `recusa o que o backend recusa`() {
+        assertTrue(RolaiSettings.customCodeIssue("sergio")!!.contains("16"))
+        assertTrue(RolaiSettings.customCodeIssue("aaaaaaaaaaaaaaaaaaaa")!!.contains("diferentes"))
+        assertTrue(RolaiSettings.customCodeIssue("12341234123412341234")!!.contains("diferentes"))
+        assertTrue(RolaiSettings.customCodeIssue("mesa do sergio 2026")!!.contains("apenas"))
+        assertEquals("digite um código", RolaiSettings.customCodeIssue("   "))
+    }
+
+    @Test
+    fun `piso bate com o do backend e do web`() {
+        assertEquals(16, RolaiSettings.CUSTOM_CODE_MIN_LENGTH)
+        assertEquals(8, RolaiSettings.CUSTOM_CODE_MIN_DISTINCT)
+    }
+}

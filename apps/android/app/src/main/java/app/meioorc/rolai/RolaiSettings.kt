@@ -127,6 +127,29 @@ data class RolaiSettings(
         // Sala e opcional: sem codigo valido o overlay rola so local.
         fun hasRoom(settings: RolaiSettings): Boolean = isValidRoomCode(settings.roomCode)
 
+        // Piso de entropia do codigo escolhido a mao. ESPELHO de
+        // is_valid_custom_code (services/backend/app/rooms.py) e de
+        // apps/web/src/room/code.ts. Quem manda e o backend; isto existe pra
+        // dizer o motivo antes de gastar conexao e levar um 4404 seco.
+        const val CUSTOM_CODE_MIN_LENGTH = 16
+        const val CUSTOM_CODE_MIN_DISTINCT = 8
+
+        /** `null` = pode virar sala. Senao, o motivo pro usuario. */
+        fun customCodeIssue(code: String): String? {
+            val c = code.trim()
+            return when {
+                c.isEmpty() -> "digite um código"
+                !c.all { it.isLetterOrDigit() || it == '-' || it == '_' } ->
+                    "use apenas letras, números, hífen e sublinhado"
+                c.length > 32 -> "no máximo 32 caracteres"
+                c.length < CUSTOM_CODE_MIN_LENGTH ->
+                    "mínimo de $CUSTOM_CODE_MIN_LENGTH caracteres (tem ${c.length})"
+                c.toSet().size < CUSTOM_CODE_MIN_DISTINCT ->
+                    "use pelo menos $CUSTOM_CODE_MIN_DISTINCT caracteres diferentes"
+                else -> null
+            }
+        }
+
         /**
          * Base HTTP derivada da base WS — o REST (criar sala) e o WS moram
          * no mesmo host. Uma config so pro usuario: quem troca o servidor

@@ -40,6 +40,7 @@ class SettingsActivity : Activity() {
     private lateinit var editServer: EditText
     private lateinit var seekScale: android.widget.SeekBar
     private lateinit var txtScaleLabel: TextView
+    private lateinit var txtRoomStatus: TextView
     private lateinit var spinnerQuality: Spinner
     private lateinit var spinnerTexture: Spinner
     private lateinit var spinnerMaterial: Spinner
@@ -88,6 +89,7 @@ class SettingsActivity : Activity() {
         switchOverlay = findViewById(R.id.switch_overlay)
         editRoomCode = findViewById(R.id.edit_room_code)
         findViewById<Button>(R.id.button_create_room).setOnClickListener(::createRoom)
+        findViewById<Button>(R.id.button_join_room).setOnClickListener { joinRoom() }
         editName = findViewById(R.id.edit_name)
         editNotation = findViewById(R.id.edit_notation)
         spinnerSystem = findViewById(R.id.spinner_system)
@@ -100,6 +102,7 @@ class SettingsActivity : Activity() {
         }
         txtInputsHint = findViewById(R.id.txt_inputs_hint)
         txtScaleLabel = findViewById(R.id.txt_scale_label)
+        txtRoomStatus = findViewById(R.id.txt_room_status)
         seekScale = findViewById<android.widget.SeekBar>(R.id.seek_scale).apply {
             setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(
@@ -109,7 +112,11 @@ class SettingsActivity : Activity() {
                 ) = updateScaleLabel(value)
 
                 override fun onStartTrackingTouch(bar: android.widget.SeekBar?) = Unit
-                override fun onStopTrackingTouch(bar: android.widget.SeekBar?) = Unit
+
+                // Salvar ao SOLTAR (nao a cada pixel): arrastar nao gravava
+                // nada, entao mudar o tamanho so tinha efeito depois de
+                // religar o botao flutuante. O servico ja tem debounce.
+                override fun onStopTrackingTouch(bar: android.widget.SeekBar?) = saveFromViews()
             })
         }
         previewFrame = findViewById(R.id.dice_preview)
@@ -183,7 +190,13 @@ class SettingsActivity : Activity() {
         editServer = findViewById(R.id.edit_server)
 
         findViewById<Button>(R.id.btn_open_twa).setOnClickListener {
-            startActivity(Intent(this, TwaActivity::class.java))
+            // CLEAR_TOP: a aba do Custom Tab da TWA vive na MESMA task do
+            // app. Sem isto o Android considera que a task ja esta no topo e
+            // o clique nao faz nada — mesmo motivo do botao do overlay.
+            startActivity(
+                Intent(this, TwaActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            )
         }
 
         loadSystemsFromAssets()
@@ -201,6 +214,20 @@ class SettingsActivity : Activity() {
         }
         spinnerTexture.onItemSelectedListener = saveOnChange
         spinnerMaterial.onItemSelectedListener = saveOnChange
+        // Faltava: trocar a qualidade do 3D so valia depois de sair da tela.
+        spinnerQuality.onItemSelectedListener = saveOnChange
+
+        // Campo de texto salva ao PERDER O FOCO. Antes so o onPause salvava,
+        // entao digitar o codigo da sala (ou apelido, notacao, servidor) e
+        // continuar na tela nao aplicava nada — a mesma classe de bug do
+        // slider de tamanho. Por toque em vez de por tecla: o servico tem
+        // debounce, mas nao ha motivo de gravar a cada letra.
+        val saveOnBlur = View.OnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) saveFromViews()
+        }
+        for (campo in listOf(editRoomCode, editName, editNotation, editInputs, editServer)) {
+            campo.onFocusChangeListener = saveOnBlur
+        }
         spinnerDice.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 // Trocar de preset reescreve as cores (o preset E um atalho).
@@ -220,8 +247,36 @@ class SettingsActivity : Activity() {
         }
     }
 
+    private val statusHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val statusTicker = object : Runnable {
+        override fun run() {
+            renderRoomStatus()
+            statusHandler.postDelayed(this, 1500)
+        }
+    }
+
+    /**
+     * Estado da conexao em texto. Quem sabe de verdade e o servico (ele tem o
+     * WebSocket), entao a tela so reflete o que ele publicou. Sem overlay
+     * ligado nao ha conexao nenhuma — e importante dizer isso em vez de
+     * deixar em branco, que era o que fazia o "Criar sala" parecer quebrado.
+     */
+    private fun renderRoomStatus() {
+        val codigo = editRoomCode.text.toString().trim()
+        txtRoomStatus.text = when {
+            !RolaiSettings.isOverlayEnabled(this) && codigo.isEmpty() ->
+                getString(R.string.room_status_none)
+            !RolaiSettings.isOverlayEnabled(this) ->
+                getString(R.string.room_status_created, codigo)
+            OverlayService.roomStatus.isNotEmpty() -> OverlayService.roomStatus
+            codigo.isEmpty() -> getString(R.string.room_status_none)
+            else -> getString(R.string.status_connecting)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        statusHandler.post(statusTicker)
         if (pendingOverlayEnable && Settings.canDrawOverlays(this)) {
             pendingOverlayEnable = false
             enableOverlay()
@@ -239,6 +294,7 @@ class SettingsActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        statusHandler.removeCallbacks(statusTicker)
         saveFromViews()
     }
 
@@ -323,7 +379,50 @@ class SettingsActivity : Activity() {
      * conseguia ENTRAR numa sala criada na web — comecar uma mesa exigia um
      * navegador aberto.
      */
+    /**
+     * Entra na sala digitada. Espelha o "Entrar" da web, com a diferenca que
+     * aqui quem mantem a conexao e o OverlayService — sem o botao flutuante
+     * ligado nao ha o que conectar, e dizer isso e melhor que fingir que
+     * conectou.
+     */
+    private fun joinRoom() {
+        val codigo = editRoomCode.text.toString().trim()
+        val problema = RolaiSettings.customCodeIssue(codigo)
+        // Codigo curto pode ser sala EXISTENTE criada pelo backend (8 chars
+        // do CSPRNG): so barra o que nem como codigo serve.
+        if (!RolaiSettings.isValidRoomCode(codigo)) {
+            toast(problema ?: "código de sala inválido")
+            return
+        }
+        saveFromViews()
+        if (!RolaiSettings.isOverlayEnabled(this)) {
+            toast(getString(R.string.room_needs_overlay))
+            renderRoomStatus()
+            return
+        }
+        toast(getString(R.string.room_joining, codigo))
+        // saveFromViews ja avisou o servico; ele reconecta com o codigo novo.
+        renderRoomStatus()
+    }
+
+    private fun toast(mensagem: String) {
+        Toast.makeText(this, mensagem, Toast.LENGTH_LONG).show()
+    }
+
     private fun createRoom(button: android.view.View) {
+        val escolhido = editRoomCode.text.toString().trim()
+        // Campo preenchido = a sala QUE VOCE ESCOLHEU (mesmo comportamento da
+        // web): o backend cria ao entrar num codigo valido inexistente, entao
+        // aqui e so validar e conectar. Vazio = codigo aleatorio via REST.
+        if (escolhido.isNotEmpty()) {
+            val problema = RolaiSettings.customCodeIssue(escolhido)
+            if (problema != null) {
+                toast(problema)
+                return
+            }
+            joinRoom()
+            return
+        }
         val server = editServer.text.toString().trim()
         val wsBase = if (RolaiSettings.isValidWsBaseUrl(server)) server
         else RolaiSettings.DEFAULT_WS_BASE_URL
@@ -335,14 +434,11 @@ class SettingsActivity : Activity() {
                 button.isEnabled = true
                 editRoomCode.setText(code)
                 saveFromViews()
+                renderRoomStatus()
             },
             onError = { message ->
                 button.isEnabled = true
-                Toast.makeText(
-                    this,
-                    getString(R.string.create_room_failed, message),
-                    Toast.LENGTH_LONG,
-                ).show()
+                toast(getString(R.string.create_room_failed, message))
             },
         )
     }
