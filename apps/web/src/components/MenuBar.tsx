@@ -1,14 +1,15 @@
 // Barra de menu do app shell: logo à esquerda; à direita, status da sala
 // (quando conectado) e os atalhos Sala / Preferências / Ajuda / Sobre.
 //
-// No celular os atalhos colapsam num menu sanduíche. A alternativa que
-// existia antes — encolher botão, esconder rótulo, deixar a faixa rolar —
-// era remendo: o código da sala continuava disputando espaço com quatro
-// botões, e a informação MAIS útil durante a mesa (qual sala, conectado ou
-// não) era a que apertava. Colapsando, a sala fica inteira na barra.
+// Os atalhos vivem SEMPRE num menu sanduíche, em qualquer largura. A
+// alternativa — quatro botões soltos na barra — disputava espaço com o
+// código da sala, que é a informação mais consultada durante o jogo, e
+// obrigava a duas versões da mesma barra. Com o menu recolhido, a barra tem
+// só o que se olha (marca e sala) e o resto fica a um toque.
 
 import { useEffect, useRef, useState } from "react";
 import type { ConnectionStatus } from "../room/reducer";
+import { AboutIcon, HelpIcon, RoomIcon, SettingsIcon } from "./Glyphs";
 
 interface MenuBarProps {
   roomCode: string | null;
@@ -112,9 +113,11 @@ export function MenuBar({
             Mora no Sobre, que e onde se procura "o que mais tem aqui". */}
         <div className={`menu-links${aberto ? " is-open" : ""}`}>
           <button type="button" className="menu-button" onClick={item(onOpenRoom)}>
+            <RoomIcon />
             Sala
           </button>
           <button type="button" className="menu-button" onClick={item(onOpenSettings)}>
+            <SettingsIcon />
             Preferências
           </button>
           <button
@@ -123,9 +126,11 @@ export function MenuBar({
             onClick={item(onOpenHelp)}
             title="Como escrever uma rolagem"
           >
+            <HelpIcon />
             Ajuda
           </button>
           <button type="button" className="menu-button" onClick={item(onOpenAbout)}>
+            <AboutIcon />
             Sobre
           </button>
         </div>

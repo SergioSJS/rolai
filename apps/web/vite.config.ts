@@ -25,7 +25,7 @@ export default defineConfig({
         // mp3 entra: a lib faz `throw` no initialize() se um arquivo de som
         // faltar. Sem precache, o app offline perderia o renderer inteiro —
         // nao so o audio.
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,webp,webmanifest,mp3}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webp,webmanifest,mp3,woff2}"],
         // config.js e resolvido em RUNTIME pelo container (entrypoint le as
         // envs); precachear congelaria a URL do backend do build.
         globIgnores: ["**/config.js"],
