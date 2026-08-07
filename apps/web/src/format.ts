@@ -34,6 +34,53 @@ export function outcomeLabel(outcome: string): string {
   return OUTCOME_LABELS[outcome] ?? outcome;
 }
 
+/**
+ * Tom do resultado, pra UI pintar sucesso e falha diferente.
+ *
+ * Ate aqui TODO outcome saia verde — uma falha crítica no d20 tinha
+ * exatamente a mesma cara de um acerto crítico, e quem le de longe (ou na
+ * stream) so via "deu alguma coisa".
+ *
+ * `neutral` e a resposta honesta pra outcome que este mapa nao conhece
+ * (profile custom, versao nova de um profile): pintar de verde uma falha e
+ * pior do que nao pintar. Fica com a cor de acento, como antes.
+ *
+ * Isto e APRESENTACAO, nao regra: quem decide o outcome sao as
+ * `outcome_rules` do profile (packages/rules-engine/profiles/*.yaml). Por
+ * isso mora aqui e nao no motor — e por isso o bundle headless do Android
+ * nao muda por causa dele.
+ */
+export type OutcomeTone = "success" | "partial" | "failure" | "neutral";
+
+const OUTCOME_TONES: Record<string, OutcomeTone> = {
+  // Falha: e o que precisava de vermelho.
+  miss: "failure",
+  fail: "failure",
+  critical_failure: "failure",
+  fumble: "failure",
+  // Meio do caminho — sucesso com custo, ou empate. Nem verde, nem vermelho.
+  weak_hit: "partial",
+  partial_success: "partial",
+  tie: "partial",
+  // Sucesso.
+  strong_hit: "success",
+  full_success: "success",
+  success: "success",
+  success_with_style: "success",
+  critical_success: "success",
+  critical: "success",
+  extreme_success: "success",
+  hard_success: "success",
+  regular_success: "success",
+  // Ironsworn: "match" e os dois dados de desafio iguais — um EVENTO que
+  // pode acontecer junto de acerto ou de falha, entao nao tem tom proprio.
+  match: "neutral",
+};
+
+export function outcomeTone(outcome: string): OutcomeTone {
+  return OUTCOME_TONES[outcome] ?? "neutral";
+}
+
 // Campo opcional que pode chegar como `null` (JSON de outro cliente/servidor)
 // em vez de ausente. Vira undefined pra UI nunca imprimir "null".
 function optionalNumber(value: number | null | undefined): number | undefined {
@@ -54,10 +101,16 @@ export function formatGroup(group: RollGroup): string {
   return `${rolls}${modifier}${total}`;
 }
 
+// So os dados: "[4, 5] + 3 = 12". Separado do outcome porque a UI precisa
+// pintar o outcome (sucesso/falha) sem pintar os numeros junto.
+export function summarizeDice(result: RollResult): string {
+  const groups = Object.values(result.groups).map(formatGroup).join(" vs ");
+  return groups === "" ? result.notation : groups;
+}
+
 // Resumo curto de uma linha: "2d6+3: [4, 5] + 3 = 12" (mais outcome, se houver).
 export function summarizeResult(result: RollResult): string {
-  const groups = Object.values(result.groups).map(formatGroup).join(" vs ");
-  const base = groups === "" ? result.notation : groups;
+  const base = summarizeDice(result);
   return typeof result.outcome === "string"
     ? `${base} — ${outcomeLabel(result.outcome)}`
     : base;

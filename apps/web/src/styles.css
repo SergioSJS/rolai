@@ -530,12 +530,47 @@ body.stream-mode .stage canvas {
     0 4px 20px rgba(0, 0, 0, 0.8);
 }
 
+/* Falha e meio-termo no stream tem cor propria, mais clara que a do tema: o
+   contorno preto ja garante a leitura sobre qualquer fundo, mas um vermelho
+   escuro sobre gameplay escuro sumiria. */
+.stream-root .result-headline.is-outcome.tone-failure {
+  color: #ff6b6b;
+  text-shadow:
+    -2px -2px 0 rgba(0, 0, 0, 0.9),
+    2px -2px 0 rgba(0, 0, 0, 0.9),
+    -2px 2px 0 rgba(0, 0, 0, 0.9),
+    2px 2px 0 rgba(0, 0, 0, 0.9),
+    0 0 22px rgba(255, 107, 107, 0.5),
+    0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+.stream-root .result-headline.is-outcome.tone-partial {
+  color: #ffc65c;
+  text-shadow:
+    -2px -2px 0 rgba(0, 0, 0, 0.9),
+    2px -2px 0 rgba(0, 0, 0, 0.9),
+    -2px 2px 0 rgba(0, 0, 0, 0.9),
+    2px 2px 0 rgba(0, 0, 0, 0.9),
+    0 0 22px rgba(255, 198, 92, 0.45),
+    0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
 /* Chips solidos pelo mesmo motivo da placa: alpha aqui deixa passar o que
    estiver atras da janela, e o numero do dado e o que mais importa ler. */
 .stream-root .result-flag {
   background: #12171c;
   border-color: rgba(255, 255, 255, 0.32);
   color: #2ee6a8;
+}
+
+.stream-root .result-flag.tone-failure {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.55);
+}
+
+.stream-root .result-flag.tone-partial {
+  color: #ffc65c;
+  border-color: rgba(255, 198, 92, 0.5);
 }
 
 .stream-root .die-chip {
@@ -1057,6 +1092,23 @@ button:disabled {
     0 2px 12px rgba(0, 0, 0, 0.55);
 }
 
+/* Tom do resultado. Antes todo outcome saia verde: falha crítica no d20
+   tinha a mesma cara de acerto crítico. `neutral` (profile custom, outcome
+   que o mapa nao conhece) fica no acento — chutar cor e pior que nao pintar. */
+.result-headline.is-outcome.tone-failure {
+  color: var(--error);
+  text-shadow:
+    0 0 26px rgba(224, 108, 117, 0.4),
+    0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+.result-headline.is-outcome.tone-partial {
+  color: var(--warn);
+  text-shadow:
+    0 0 26px rgba(229, 192, 123, 0.35),
+    0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
 .result-flag {
   display: inline-block;
   margin-top: 0.5rem;
@@ -1069,6 +1121,16 @@ button:disabled {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.result-flag.tone-failure {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.result-flag.tone-partial {
+  border-color: var(--warn);
+  color: var(--warn);
 }
 
 .result-groups {
@@ -1499,6 +1561,18 @@ input[type="range"]:focus {
   font-size: 0.75rem;
 }
 
+/* Outcome da linha do historico: mesmo tom da placa, pra varrer a lista e
+   ver de relance onde falhou. Os numeros ao lado ficam na cor normal. */
+.history-outcome {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.history-outcome::before {
+  content: "— ";
+  color: var(--muted);
+}
+
 .history-flag {
   border: 1px solid var(--accent);
   color: var(--accent-strong);
@@ -1506,6 +1580,24 @@ input[type="range"]:focus {
   padding: 0 0.5rem;
   font-size: 0.7rem;
   font-weight: 600;
+}
+
+.history-outcome.tone-failure {
+  color: var(--error);
+}
+
+.history-outcome.tone-partial {
+  color: var(--warn);
+}
+
+.history-flag.tone-failure {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.history-flag.tone-partial {
+  border-color: var(--warn);
+  color: var(--warn);
 }
 
 /* Estado vazio: a coluna do historico ocupa a tela inteira, entao um

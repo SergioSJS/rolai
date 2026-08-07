@@ -2,7 +2,7 @@
 // quando fora de sala).
 
 import type { HistoryEntry } from "../room/reducer";
-import { outcomeLabel, summarizeResult } from "../format";
+import { outcomeLabel, outcomeTone, summarizeDice } from "../format";
 import { PlayerTag } from "./PlayerTag";
 
 export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
@@ -33,10 +33,17 @@ export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
         <li key={`${entry.result.timestamp}-${i}`}>
           <PlayerTag name={entry.player} style={entry.style} />
           <span className="history-notation">{entry.result.notation}</span>
-          <span className="history-result">{summarizeResult(entry.result)}</span>
+          <span className="history-result">{summarizeDice(entry.result)}</span>
+          {/* Outcome separado dos numeros justamente pra poder ir vermelho
+              sem levar os dados junto. */}
+          {typeof entry.result.outcome === "string" && (
+            <span className={`history-outcome tone-${outcomeTone(entry.result.outcome)}`}>
+              {outcomeLabel(entry.result.outcome)}
+            </span>
+          )}
           {entry.result.outcome_flags?.map((flag) =>
             flag === entry.result.outcome ? null : (
-              <span key={flag} className="history-flag">
+              <span key={flag} className={`history-flag tone-${outcomeTone(flag)}`}>
                 {outcomeLabel(flag)}
               </span>
             ),

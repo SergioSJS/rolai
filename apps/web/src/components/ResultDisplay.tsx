@@ -5,7 +5,7 @@
 
 import type { RollResult } from "@rolai/rules-engine";
 import type { DiceStyle } from "../settings";
-import { dieFaceLabel, displayGroups, outcomeLabel } from "../format";
+import { dieFaceLabel, displayGroups, outcomeLabel, outcomeTone } from "../format";
 import { PlayerTag } from "./PlayerTag";
 
 export function ResultDisplay({
@@ -59,15 +59,21 @@ export function ResultDisplay({
           <span className="result-player-verb">rolou</span>
         </div>
       )}
+      {/* Falha nao pode ter a cara de acerto: o tom vem do outcome (ver
+          outcomeTone). Sem outcome — rolagem livre — nao ha o que afirmar. */}
       <div
-        className={`result-headline${typeof result.outcome === "string" ? " is-outcome" : ""}`}
+        className={
+          typeof result.outcome === "string"
+            ? `result-headline is-outcome tone-${outcomeTone(result.outcome)}`
+            : "result-headline"
+        }
       >
         {headline}
       </div>
       {result.outcome_flags
         ?.filter((flag) => flag !== result.outcome)
         .map((flag) => (
-          <div key={flag} className="result-flag">
+          <div key={flag} className={`result-flag tone-${outcomeTone(flag)}`}>
             {outcomeLabel(flag)}
           </div>
         ))}
