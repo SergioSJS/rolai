@@ -57,11 +57,20 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## Testes
 
 ```bash
-npm test -w @rolai/rules-engine     # 79
-npm test -w @rolai/web              # 131
-cd services/backend && uv run pytest # 49
-cd apps/android && ./gradlew test
+npm test -w @rolai/rules-engine      # 79
+npm test -w @rolai/web               # 144
+cd services/backend && uv run pytest # 56
+cd apps/android && ./gradlew testDebugUnitTest   # 20 (JVM, sem aparelho)
 ```
+
+Instrumentados do Android (precisam de aparelho/emulador conectado):
+
+```bash
+apps/android/scripts/run-instrumented.sh   # 8
+```
+
+Não rodam no CI de propósito — emulador em Actions é lento e instável.
+Rode antes de gerar release.
 
 ## Modo stream (OBS)
 

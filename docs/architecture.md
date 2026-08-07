@@ -101,5 +101,16 @@ recebe o snapshot atual, não só eventos futuros.
 - O motor de regras (parser + profiles) roda numa WebView headless mantida
   "morna" pelo Service — sem canvas, sem WebGL, só JS puro computando.
 - Nenhuma lógica de regras é duplicada em Kotlin.
+- **Palco de dados 3D**: uma segunda janela de overlay com uma WebView no
+  modo stream do `apps/web`. O Service **empurra** cada rolagem por
+  `window.rolaiStream.play(resultado, style)` — inclusive as que chegam da
+  sala pelo WebSocket dele.
+  Antes o palco entrava na sala como **espectador**, uma segunda conexão WS
+  por aparelho, e a animação dependia inteira dela: quando não subia, o dado
+  simplesmente não aparecia, sem erro em lugar nenhum. Empurrar tira essa
+  dependência e economiza uma conexão por aparelho (o teto de
+  `WS_CONNECT_LIMIT_PER_MINUTE` é por IP).
+  No OBS o espectador continua fazendo sentido — lá é outra máquina, sem
+  ninguém pra empurrar.
 
 Ver `specs/04-android-overlay.md` para o detalhamento de implementação.

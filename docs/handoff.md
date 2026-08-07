@@ -152,16 +152,20 @@ Implementado e documentado em `docs/security.md` (seção "Abuso e recursos"):
   INFO pra sala criada/profile criado/WS aberta-fechada/expurgo, WARNING
   pra todo limite atingido e payload rejeitado.
 
-Backend agora com **44 testes** (38 + 6 novos em
-`tests/test_global_caps.py`), `ruff` + `mypy` limpos.
+Backend naquele momento com 44 testes. **Hoje (2026-08-07): 56**, `ruff` +
+`mypy` limpos. Contagem atual das outras frentes: web 144, Android 20 JVM +
+8 instrumentados.
 
-### 3. Etapa 04 — overlay Android — FEITO (2026-08-05, code-only: SEM SDK)
+### 3. Etapa 04 — overlay Android — FEITO e VALIDADO EM APARELHO (2026-08-07)
 
-Implementada inteira, mas **nada compilou**: o ambiente não tem Android
-SDK/gradle/emulador e instalar estava fora de questão. A primeira
-compilação real provavelmente pede ajustes menores — ver "pontos de
-atenção" no fim desta seção. O que foi validado de verdade roda fora do
-SDK (bundle headless, ver abaixo).
+Escrita sem SDK em 2026-08-05 (nada compilava na época); desde então
+compilada, assinada, publicada e exercitada num aparelho físico:
+
+- APK de **release assinado** nas Releases (chave própria, secrets no CI);
+- TWA verificada pelo Android — `pm get-app-links` devolve
+  `rolai.app: verified`, abre sem barra de URL;
+- **8 testes instrumentados** passando (`scripts/run-instrumented.sh`);
+- conexão de sala sobrevive a 160s ociosa com a tela apagada.
 
 - **TWA**: `TwaActivity` (androidbrowserhelper 2.6.0) → `https://rolai.app`,
   intent-filter `autoVerify`. `apps/web/public/.well-known/assetlinks.json`
@@ -186,8 +190,10 @@ SDK (bundle headless, ver abaixo).
   (status da sala, ROLAR, resultado, últimas atividades). Sem campo de
   texto → `FLAG_NOT_FOCUSABLE`, nunca rouba teclado do app em primeiro
   plano. Tier texto puro, nunca 3D (docs/architecture.md).
-- **RoomClient** (OkHttp WS): handshake `/rooms/{code}?name=...` (sem
-  `style`/`spectator` de propósito), envia `{"type":"roll","result":...}`
+- **RoomClient** (OkHttp WS): handshake
+  `/rooms/{code}?name=...&style={json}` — o `style` é a aparência de dado
+  DESTE aparelho, e sem ele a mesa animava a nossa rolagem com a cor dela.
+  `spectator` fica de fora de propósito (o overlay é jogador). Envia `{"type":"roll","result":...}`
   já calculado, parseia snapshot/roster/roll/error, reconexão com backoff
   exponencial 1s→30s (`ReconnectBackoff`), **não** reconecta em close
   4404 (sala inexistente).
@@ -207,7 +213,7 @@ SDK (bundle headless, ver abaixo).
   properties Gradle 8.7 (sem `gradlew`/jar versionados — gerar no 1º
   open). Deps: androidbrowserhelper 2.6.0, appcompat 1.7.0 (LauncherActivity
   exige tema AppCompat — `Theme.RolaiTwa`), core 1.13.1, okhttp 4.12.0.
-- **Verificado de verdade (sem SDK)**: `npm run build:headless` verde;
+- **Verificado na época (sem SDK)**: `npm run build:headless` verde;
   `apps/web/src/headless.test.ts` (5 testes) carrega o bundle real e
   prova paridade com o rules-engine na mesma fila determinística; web
   inteiro verde (**123 testes**, 118+5) e `npm run build` (tsc + vite)
