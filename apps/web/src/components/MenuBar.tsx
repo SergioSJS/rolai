@@ -3,6 +3,8 @@
 
 import type { ConnectionStatus } from "../room/reducer";
 
+import { APK_LATEST_URL } from "../config";
+
 interface MenuBarProps {
   roomCode: string | null;
   roomStatus: ConnectionStatus;
@@ -67,6 +69,18 @@ export function MenuBar({
         <button type="button" className="menu-button" onClick={onOpenSettings}>
           Preferências
         </button>
+        {/* Link direto pro APK: enterrado so no "Sobre" quase ninguem acha.
+            Escondido no celular por CSS — quem ja esta no Android chega pelo
+            Sobre, e a barra e estreita demais pra mais um item. */}
+        <a
+          className="menu-button menu-apk"
+          href={APK_LATEST_URL}
+          target="_blank"
+          rel="noreferrer"
+          title="Baixar o app Android (fora da Play Store)"
+        >
+          APK
+        </a>
         <button type="button" className="menu-button" onClick={onOpenAbout}>
           Sobre
         </button>

@@ -1488,3 +1488,39 @@ input[type="range"]:focus {
     gap: 0.15rem;
   }
 }
+
+/* Link do APK na barra: e um <a> com cara de botao de menu. */
+.menu-apk {
+  text-decoration: none;
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--panel-border);
+}
+
+.menu-apk:hover {
+  background: var(--chip-bg);
+}
+
+/* Link do APK dentro do "Sobre". */
+.apk-link {
+  display: inline-block;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.apk-link:hover {
+  background: var(--accent-strong);
+}
+
+/* No celular a barra nao tem espaco, e quem ja esta no Android acha o link
+   pelo "Sobre". */
+@media (max-width: 720px) {
+  .menu-apk {
+    display: none;
+  }
+}

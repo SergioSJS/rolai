@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { RollResult } from "@rolai/rules-engine";
 import { availableProfiles } from "./profiles";
+import { APK_LATEST_URL } from "./config";
 import type {
   DiceStyle,
   QualityTier,
@@ -477,6 +478,28 @@ export function App() {
               As rolagens são calculadas localmente pelo rules-engine
               (Ironsworn, PbtA e FitD embutidos, ou notação livre) e retransmitidas
               pra sala — todo mundo vê o mesmo resultado.
+            </p>
+            <p>
+              <strong>No celular:</strong> o app Android tem um botão flutuante
+              que rola dados por cima de qualquer outro app (leitor de PDF,
+              ficha) e funciona <strong>sem internet</strong> — só a sala
+              precisa de rede.
+            </p>
+            <p>
+              <a
+                className="apk-link"
+                href={APK_LATEST_URL}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Baixar o APK (Android)
+              </a>
+              <span className="settings-hint">
+                {" "}
+                Não está na Play Store: baixe o arquivo <code>.apk</code> da
+                página de Releases e permita a instalação quando o Android
+                perguntar.
+              </span>
             </p>
             <p className="settings-hint">
               Dica pra stream: Sala → "Copiar link pro OBS" e cadastre essa

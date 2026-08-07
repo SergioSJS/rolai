@@ -71,3 +71,8 @@ export function exportUrl(code: string, format: "json" | "csv" | "md"): string {
   const base = apiBaseUrl().replace(/\/$/, "");
   return `${base}/rooms/${encodeURIComponent(code)}/export?format=${format}`;
 }
+
+// Ultima versao do APK, sem hardcodar numero: o GitHub redireciona
+// /releases/latest pra tag mais nova. Se um dia o repo mudar de dono/nome,
+// e o unico lugar a tocar.
+export const APK_LATEST_URL = "https://github.com/SergioSJS/rolai/releases/latest";
