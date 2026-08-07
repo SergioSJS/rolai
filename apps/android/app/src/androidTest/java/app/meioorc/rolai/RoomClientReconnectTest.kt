@@ -62,7 +62,7 @@ class RoomClientReconnectTest {
                 connected.countDown()
             }
 
-            override fun onRoll(player: String, resultJson: String) = Unit
+            override fun onRoll(player: String, resultJson: String, styleJson: String?) = Unit
             override fun onRoster(memberNames: List<String>) = Unit
             override fun onError(message: String) = Unit
 
@@ -106,7 +106,7 @@ class RoomClientReconnectTest {
         val sawReconnecting = AtomicBoolean(false)
         val client = RoomClient(object : RoomClient.Listener {
             override fun onConnected() = Unit
-            override fun onRoll(player: String, resultJson: String) = Unit
+            override fun onRoll(player: String, resultJson: String, styleJson: String?) = Unit
             override fun onRoster(memberNames: List<String>) = Unit
             override fun onError(message: String) = Unit
 

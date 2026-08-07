@@ -66,6 +66,16 @@ class OverlayService : Service() {
         overlayAttached = false
         startForegroundWithNotification()
 
+        // O service so existe enquanto o usuario QUER o botao flutuante. Sem
+        // isto, qualquer startService (um RELOAD atrasado, um START_STICKY
+        // depois do usuario desligar) ressuscitava o overlay: o onCreate roda
+        // ANTES do onStartCommand, entao a view ja subia antes de qualquer
+        // checagem de acao. Flagrado pelo teste instrumentado.
+        if (!RolaiSettings.isOverlayEnabled(this)) {
+            stopSelf()
+            return
+        }
+
         if (!Settings.canDrawOverlays(this)) {
             // Nao deveria acontecer (a SettingsActivity so inicia o service
             // com a permissao concedida), mas a permissao pode ter sido

@@ -1,11 +1,13 @@
 package app.meioorc.rolai
 
+import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.rule.ServiceTestRule
+import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.TimeUnit
@@ -14,56 +16,95 @@ import java.util.concurrent.TimeUnit
  * Instrumented test (criterio de aceite de specs/04-android-overlay.md):
  * o Service inicia em foreground e desenha a view flutuante no WindowManager.
  *
- * NAO EXECUTADO neste ambiente (sem Android SDK/emulador — ver
- * apps/android/README.md). Pre-requisito no dispositivo/emulador:
+ * NAO usa ServiceTestRule: ela faz BIND e espera um binder, e o
+ * OverlayService.onBind() devolve null de proposito (e servico INICIADO, nao
+ * vinculado). Com ela, todo teste aqui morria com "Waited for 5 SECONDS, but
+ * service was never connected" — e como a suite nunca tinha sido executada,
+ * o erro ficou escondido por meses. Aqui iniciamos como o app inicia.
+ *
+ * Pre-requisito no dispositivo (conceder antes de rodar):
  *   adb shell appops set app.meioorc.rolai SYSTEM_ALERT_WINDOW allow
- *   adb shell appops set app.meioorc.rolai POST_NOTIFICATIONS allow  (API 33+)
+ *   adb shell pm grant app.meioorc.rolai android.permission.POST_NOTIFICATIONS
  * Sem a permissao de overlay o service se encerra sozinho e o teste falha.
  */
 @RunWith(AndroidJUnit4::class)
 class OverlayServiceTest {
 
-    @get:Rule
-    val serviceRule = ServiceTestRule()
+    private val context: Context get() = ApplicationProvider.getApplicationContext()
+
+    @Before
+    fun ligaPreferencia() {
+        // O service so sobe se o usuario tiver ligado o botao flutuante (a
+        // SettingsActivity grava a flag ANTES de dar start). Sem isto o
+        // onCreate faz stopSelf e nada monta — que e o comportamento certo.
+        RolaiSettings.setOverlayEnabled(context, true)
+    }
+
+    @After
+    fun desligaOverlay() {
+        RolaiSettings.setOverlayEnabled(context, false)
+        context.startService(intentDe(OverlayService.ACTION_STOP))
+        esperar(esperado = false)
+    }
+
+    private fun intentDe(action: String) =
+        Intent(context, OverlayService::class.java).setAction(action)
+
+    /** Espera o overlay chegar ao estado pedido; devolve se chegou. */
+    private fun esperar(esperado: Boolean, segundos: Long = 10): Boolean {
+        val limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(segundos)
+        while (OverlayService.overlayAttached != esperado && System.nanoTime() < limite) {
+            Thread.sleep(100)
+        }
+        return OverlayService.overlayAttached == esperado
+    }
 
     @Test
     fun serviceIniciaEDesenhaAViewFlutuante() {
-        val intent = Intent(
-            ApplicationProvider.getApplicationContext(),
-            OverlayService::class.java,
-        ).setAction(OverlayService.ACTION_START)
-
-        serviceRule.startService(intent)
-
-        // A view e anexada no onCreate; a flag existe justamente pra este
-        // teste observar sem depender de internals do WindowManager.
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-        while (!OverlayService.overlayAttached && System.nanoTime() < deadline) {
-            Thread.sleep(100)
-        }
-        assertTrue("overlay nao foi anexado ao WindowManager", OverlayService.overlayAttached)
+        ContextCompat.startForegroundService(context, intentDe(OverlayService.ACTION_START))
+        assertTrue("overlay nao foi anexado ao WindowManager", esperar(esperado = true))
     }
 
     @Test
     fun actionStopEncerraOService() {
-        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val start = Intent(context, OverlayService::class.java)
-            .setAction(OverlayService.ACTION_START)
-        serviceRule.startService(start)
+        ContextCompat.startForegroundService(context, intentDe(OverlayService.ACTION_START))
+        assertTrue(esperar(esperado = true))
 
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-        while (!OverlayService.overlayAttached && System.nanoTime() < deadline) {
-            Thread.sleep(100)
-        }
-        assertTrue(OverlayService.overlayAttached)
+        context.startService(intentDe(OverlayService.ACTION_STOP))
+        assertTrue("overlay nao foi removido apos ACTION_STOP", esperar(esperado = false))
+    }
 
-        context.startService(
-            Intent(context, OverlayService::class.java).setAction(OverlayService.ACTION_STOP),
+    /**
+     * REGRESSAO: RELOAD chegando com o service fora do ar nao pode derrubar
+     * o processo.
+     *
+     * `overlayAttached` e estatico, entao um `true` deixado por uma instancia
+     * anterior ficava visivel pra proxima; um RELOAD nessa janela tocava
+     * `windowManager` ainda nao inicializado e o app morria com
+     * UninitializedPropertyAccessException — o "fecha com erro" ao desligar e
+     * religar o botao flutuante. A correcao (isReady) foi feita por analise,
+     * porque o intent nao entra por adb: o service nao e exportado. Este
+     * teste roda DENTRO do app, entao prova o que o adb nao provava.
+     */
+    @Test
+    fun reloadComServiceParadoNaoDerrubaOApp() {
+        ContextCompat.startForegroundService(context, intentDe(OverlayService.ACTION_START))
+        assertTrue(esperar(esperado = true))
+        // Desligar de verdade e o que a tela faz: apaga a preferencia E para
+        // o service. E nesse intervalo que o RELOAD atrasado chegava.
+        RolaiSettings.setOverlayEnabled(context, false)
+        context.startService(intentDe(OverlayService.ACTION_STOP))
+        assertTrue(esperar(esperado = false))
+
+        // O que quebrava: RELOAD depois do STOP.
+        context.startService(intentDe(OverlayService.ACTION_RELOAD))
+        Thread.sleep(1500)
+
+        // Chegar vivo aqui ja e o teste: um crash derrubaria o processo do
+        // app e levaria a suite inteira junto.
+        assertTrue(
+            "RELOAD com service parado nao pode remontar nada",
+            !OverlayService.overlayAttached,
         )
-        val stopDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-        while (OverlayService.overlayAttached && System.nanoTime() < stopDeadline) {
-            Thread.sleep(100)
-        }
-        assertTrue("overlay nao foi removido apos ACTION_STOP", !OverlayService.overlayAttached)
     }
 }

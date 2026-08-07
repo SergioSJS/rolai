@@ -5,11 +5,10 @@ overlay flutuante que rola dados e acompanha a sala sem sair do app em
 primeiro plano (ex: leitor de PDF). Escopo e critérios de aceite em
 `specs/04-android-overlay.md`.
 
-> **Estado: code-only, ainda não compilado.** Este módulo foi escrito num
-> ambiente **sem Android SDK/gradle/emulador**. Nada aqui passou por um
-> build real — a primeira compilação provavelmente expõe ajustes menores.
-> O que JÁ foi validado de verdade: o bundle headless do rules-engine
-> (build + testes em `apps/web`, ver abaixo).
+> **Estado: compilado, assinado e validado em aparelho.** APK de release
+> assinado publicado nas Releases, TWA verificada pelo Android
+> (`pm get-app-links` → `rolai.app: verified`, abre sem barra de URL) e as
+> três suítes instrumentadas passando num aparelho físico.
 
 ## Arquitetura
 
@@ -97,9 +96,14 @@ A TWA só abre sem barra de URL se o Digital Asset Links estiver certo:
 # JVM locais (lógica pura: backoff, validação de código/apelido, URL do WS)
 ./gradlew testDebugUnitTest
 
-# Instrumented — NUNCA executados neste ambiente (sem SDK/emulador).
-./gradlew connectedDebugAndroidTest
+# Instrumented — precisam de aparelho/emulador conectado.
+scripts/run-instrumented.sh
 ```
+
+Use o script, **não** `./gradlew connectedDebugAndroidTest` direto: o AGP
+desinstala o app ao fim e leva junto a permissão de overlay concedida por
+appops, então a execução seguinte falha por motivo que não é o código.
+O script instala, concede e só então roda.
 
 Pré-requisitos dos instrumented tests no dispositivo/emulador:
 
@@ -143,11 +147,15 @@ app/src/main/assets/headless/
 
 ## Chave de assinatura (keystore) — quando e por quê
 
+> **Já está feito** — a chave existe, os secrets estão no repositório e as
+> Releases saem assinadas. Esta seção fica como registro do porquê e de como
+> refazer.
+
 ### O problema
 
-Todo APK Android é assinado. Hoje o APK das Releases é **debug**: o CI assina
-com a chave de debug que o Android gera sozinho, e como o runner do GitHub é
-descartado a cada build, **essa chave é diferente toda vez**.
+Todo APK Android é assinado. Antes, o APK das Releases era **debug**: o CI
+assinava com a chave de debug que o Android gera sozinho, e como o runner do
+GitHub é descartado a cada build, **essa chave era diferente toda vez**.
 
 Isso não impede instalar o app. Impede uma coisa só: **abrir em tela cheia**.
 O Android só deixa a TWA esconder a barra de URL se o site provar que confia
@@ -212,3 +220,17 @@ nos secrets do GitHub (que o runner descarta no fim do build).
 APK assinado com chave diferente não instala por cima do antigo. Quem já tem o
 APK de debug instalado precisa **desinstalar antes** de instalar o assinado.
 Vale avisar na descrição da Release.
+
+## Testes instrumentados
+
+Precisam de aparelho ou emulador conectado:
+
+```bash
+scripts/run-instrumented.sh
+```
+
+Nao rodam no CI (exigem emulador, que e lento e instavel la) — rode antes de
+gerar release. O script existe porque `./gradlew connectedDebugAndroidTest`
+sozinho nao funciona: o AGP desinstala o app ao fim e leva junto a permissao
+de overlay concedida por appops, fazendo a execucao seguinte falhar por
+motivo que nao e o codigo.
