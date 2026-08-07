@@ -142,6 +142,27 @@ class OverlayService : Service() {
         loadLastRoll()?.let { saved -> lastRollAction = { headlessRoller.roll(saved) } }
         overlay.onOpenApp = { launchFromOverlay(TwaActivity.intentFor(this)) }
         overlay.onOpenSettings = { launchFromOverlay(Intent(this, SettingsActivity::class.java)) }
+        // Acoes de sala do painel do overlay. Entrar/criar exigem digitar
+        // codigo, e o overlay nao tem campo de texto de proposito (roubaria
+        // teclado do app de baixo) — entao abrem a tela de config, que ja
+        // tem o fluxo inteiro. Sair, nao: e um toque so.
+        overlay.onJoinRoom = {
+            launchFromOverlay(Intent(this, SettingsActivity::class.java))
+        }
+        overlay.onCreateRoom = {
+            launchFromOverlay(Intent(this, SettingsActivity::class.java))
+        }
+        overlay.onLeaveRoom = {
+            val atual = RolaiSettings.load(this)
+            if (atual.roomCode.isNotEmpty()) {
+                RolaiSettings.save(this, atual.copy(roomCode = ""))
+            }
+            roomClient?.disconnect()
+            roomClient = null
+            lastHandshakeUrl = null
+            overlay.setRoster(emptyList())
+            publishStatus(getString(R.string.status_disconnected), RoomState.NONE)
+        }
         overlay.onCloseOverlay = {
             // Mesma coisa que desligar o toggle: apaga a preferencia ANTES de
             // parar, senao o onCreate do proximo start religaria (o service so
@@ -406,6 +427,7 @@ class OverlayService : Service() {
         }
 
         override fun onRoster(memberNames: List<String>) {
+            overlay.setRoster(memberNames)
             // Snapshot chegou: agora sim esta na sala.
             publishStatus("${memberNames.size} na sala", RoomState.CONNECTED)
         }

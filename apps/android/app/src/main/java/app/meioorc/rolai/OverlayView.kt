@@ -68,6 +68,14 @@ class OverlayView(context: Context) {
     /** Desligar o botao flutuante sem passar pela tela de configuracoes. */
     var onCloseOverlay: (() -> Unit)? = null
 
+    /** Acoes de sala do painel do overlay (espelham a tela de config). */
+    var onJoinRoom: (() -> Unit)? = null
+    var onCreateRoom: (() -> Unit)? = null
+    var onLeaveRoom: (() -> Unit)? = null
+
+    /** Ultimo roster recebido — exibido no painel de sala. */
+    private var roster: List<String> = emptyList()
+
     /** Mini-bolha de rolagem do fan: ultima rolagem, ou a configurada. */
     var onQuickRoll: (() -> Unit)? = null
     var onOpenApp: (() -> Unit)? = null
@@ -77,16 +85,19 @@ class OverlayView(context: Context) {
      *  o FLAG_NOT_FOCUSABLE. Quem troca o flag e o OverlayService. */
     var onWindowFocusMode: ((Boolean) -> Unit)? = null
 
-    private enum class Mode { COLLAPSED, FAN, PANEL, HISTORY, RESULT }
+    private enum class Mode { COLLAPSED, FAN, PANEL, HISTORY, ROOM, RESULT }
     private var mode = Mode.COLLAPSED
 
     private val bubble: ImageView
     private val fan: LinearLayout
     private val panel: LinearLayout
     private val historyPanel: LinearLayout
+    private val roomPanel: LinearLayout
     private val resultFlash: TextView
     private lateinit var dragHandle: TextView
     private lateinit var historyDragHandle: TextView
+    private lateinit var roomStatusView: TextView
+    private lateinit var roomRosterView: TextView
     private lateinit var statusDot: TextView
     private lateinit var statusView: TextView
     private lateinit var panelResultView: TextView
@@ -139,6 +150,8 @@ class OverlayView(context: Context) {
         panel.visibility = View.GONE
         historyPanel = buildHistoryPanel(context)
         historyPanel.visibility = View.GONE
+        roomPanel = buildRoomPanel(context)
+        roomPanel.visibility = View.GONE
 
         // Flash de resultado da rolagem pelo atalho: compacto, some sozinho
         // (RESULT_FLASH_MS) ou ao toque. NAO abre o cartao de historico.
@@ -162,6 +175,7 @@ class OverlayView(context: Context) {
         root.addView(fan)
         root.addView(panel)
         root.addView(historyPanel)
+        root.addView(roomPanel)
         root.addView(resultFlash)
     }
 
@@ -183,6 +197,11 @@ class OverlayView(context: Context) {
             addView(
                 miniBubble(context, R.drawable.ic_history, "historico de rolagens") {
                     setMode(Mode.HISTORY)
+                },
+            )
+            addView(
+                miniBubble(context, R.drawable.ic_people, "sala e jogadores") {
+                    setMode(Mode.ROOM)
                 },
             )
             addView(
@@ -411,6 +430,80 @@ class OverlayView(context: Context) {
         }
     }
 
+    /**
+     * Painel de sala do overlay: quem esta na mesa, status da conexao e as
+     * mesmas acoes da tela de configuracoes.
+     *
+     * Existe porque saber "quem entrou" e acao de meio-de-jogo — abrir o app
+     * inteiro so pra isso tira a pessoa do PDF/ficha que ela esta lendo, que
+     * e justamente o que o overlay evita.
+     */
+    private fun buildRoomPanel(context: Context): LinearLayout {
+        val titulo = TextView(context).apply {
+            setText(R.string.overlay_room_title)
+            setTextColor(TEXT)
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(titulo)
+            addView(collapseButton(context))
+        }
+
+        roomStatusView = TextView(context).apply {
+            setTextColor(MUTED)
+            textSize = 12f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        roomRosterView = TextView(context).apply {
+            setTextColor(TEXT)
+            textSize = 13f
+            setText(R.string.overlay_room_empty)
+        }
+
+        val acoes = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(
+                actionButton(context, R.string.overlay_room_join) { onJoinRoom?.invoke() },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(
+                actionButton(context, R.string.overlay_room_create) { onCreateRoom?.invoke() },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(
+                actionButton(context, R.string.overlay_room_leave) {
+                    onLeaveRoom?.invoke()
+                }.apply { setTextColor(DANGER) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+        }
+
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = cardBackground()
+            elevation = 12.dp().toFloat()
+            setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
+            layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
+            addView(header)
+            addView(roomStatusView, vParams(topMargin = 6))
+            addView(roomRosterView, vParams(topMargin = 10))
+            addView(acoes, vParams(topMargin = 12))
+        }
+    }
+
+    private fun renderRoom() {
+        roomStatusView.text = statusView.text
+        roomRosterView.text = if (roster.isEmpty()) {
+            roomRosterView.context.getString(R.string.overlay_room_empty)
+        } else {
+            roster.joinToString("\n") { "• $it" }
+        }
+    }
+
     private fun renderHistory() {
         val lines = history.toList().takeLast(HISTORY_CARD_LINES)
         historyLinesView.text = if (lines.isEmpty()) {
@@ -595,10 +688,15 @@ class OverlayView(context: Context) {
         }
         mode = newMode
         bubble.visibility =
-            if (newMode == Mode.PANEL || newMode == Mode.HISTORY) View.GONE else View.VISIBLE
+            if (newMode == Mode.PANEL || newMode == Mode.HISTORY || newMode == Mode.ROOM) {
+                View.GONE
+            } else {
+                View.VISIBLE
+            }
         fan.visibility = if (newMode == Mode.FAN) View.VISIBLE else View.GONE
         panel.visibility = if (newMode == Mode.PANEL) View.VISIBLE else View.GONE
         historyPanel.visibility = if (newMode == Mode.HISTORY) View.VISIBLE else View.GONE
+        roomPanel.visibility = if (newMode == Mode.ROOM) View.VISIBLE else View.GONE
         resultFlash.visibility = if (newMode == Mode.RESULT) View.VISIBLE else View.GONE
         root.removeCallbacks(hideResultRunnable)
         if (newMode == Mode.RESULT) root.postDelayed(hideResultRunnable, RESULT_FLASH_MS)
@@ -606,10 +704,18 @@ class OverlayView(context: Context) {
         onWindowFocusMode?.invoke(newMode == Mode.PANEL)
         if (newMode != Mode.PANEL) hideKeyboard()
         if (newMode == Mode.HISTORY) renderHistory()
+        if (newMode == Mode.ROOM) renderRoom()
+    }
+
+    /** Roster da sala, vindo do RoomClient via OverlayService. */
+    fun setRoster(names: List<String>) {
+        roster = names
+        if (mode == Mode.ROOM) renderRoom()
     }
 
     fun setStatus(text: String) {
         statusView.text = text
+        if (mode == Mode.ROOM) renderRoom()
         val connected = text.contains("conectado", ignoreCase = true) &&
             !text.contains("desconectado", ignoreCase = true)
         statusDot.setTextColor(if (connected) ACCENT_BRIGHT else MUTED)

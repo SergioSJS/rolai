@@ -44,6 +44,11 @@
     <string name="overlay_action_settings">config</string>
     <string name="overlay_action_open_app">abrir app</string>
     <string name="overlay_action_close">fechar</string>
+    <string name="overlay_room_title">Sala</string>
+    <string name="overlay_room_empty">ninguém na sala ainda</string>
+    <string name="overlay_room_create">criar sala</string>
+    <string name="overlay_room_join">conectar</string>
+    <string name="overlay_room_leave">sair da sala</string>
     <string name="label_dice_preset">Estilo</string>
     <string name="section_general">Botão flutuante</string>
     <string name="section_room">Conexão e sala</string>
