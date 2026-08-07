@@ -400,8 +400,18 @@ class SettingsActivity : Activity() {
             renderRoomStatus()
             return
         }
-        toast(getString(R.string.room_joining, codigo))
-        // saveFromViews ja avisou o servico; ele reconecta com o codigo novo.
+        // Codigo abaixo do piso so funciona se a sala JA existir: o backend
+        // se recusa a cria-la (docs/security.md). Avisar antes evita o
+        // "tentei e nao deu nada" — a pessoa entende o que esperar.
+        if (problema != null) {
+            toast(getString(R.string.room_joining_weak, codigo, problema))
+        } else {
+            toast(getString(R.string.room_joining, codigo))
+        }
+        // Forca a reconexao: o RELOAD normal so age quando algo mudou, entao
+        // tentar de novo na MESMA sala (depois de uma falha, por exemplo) nao
+        // faria nada.
+        OverlayService.requestReconnect(this)
         renderRoomStatus()
     }
 

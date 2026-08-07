@@ -131,6 +131,15 @@ class OverlayService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_RECONNECT && isReady()) {
+            // Pedido EXPLICITO do usuario (botao Entrar): reconecta mesmo que
+            // nada tenha mudado. Sem isto, tentar de novo na mesma sala era
+            // no-op — inclusive depois de uma falha, deixando a pessoa presa
+            // no "desconectado" sem nenhuma forma de repetir.
+            stageHandler.removeCallbacks(settingsReloadRunnable)
+            applySettings(force = true)
+            return START_STICKY
+        }
         if (intent?.action == ACTION_RELOAD && isReady()) {
             // DEBOUNCE, nao aplicar direto: a tela de config salva a cada
             // toque (cor, spinner, slider) — sao 11 pontos chamando save.
@@ -256,8 +265,11 @@ class OverlayService : Service() {
     private fun isReady(): Boolean =
         ::windowManager.isInitialized && ::overlay.isInitialized && viewAttached
 
-    private fun applySettings() {
-        if (!isReady()) return
+    private fun applySettings(force: Boolean = false) {
+        if (!isReady()) {
+            android.util.Log.w("rolai", "RELOAD ignorado: servico nao montado")
+            return
+        }
         val settings = RolaiSettings.load(this)
         overlay.setQuickNotation(settings.notation)
         val quickKey = quickKeyOf(settings)
@@ -310,7 +322,11 @@ class OverlayService : Service() {
         } else {
             null
         }
-        if (handshakeUrl == lastHandshakeUrl) return
+        if (handshakeUrl == lastHandshakeUrl && !force) {
+            android.util.Log.d("rolai", "sala inalterada (${settings.roomCode}) — nao reconecta")
+            return
+        }
+        android.util.Log.d("rolai", "reconectando na sala '${settings.roomCode}'")
         lastHandshakeUrl = handshakeUrl
         roomClient?.disconnect()
         roomClient = null
@@ -337,7 +353,11 @@ class OverlayService : Service() {
 
     private val roomListener = object : RoomClient.Listener {
         override fun onConnected() {
-            publishStatus("sala: conectado")
+            // Ainda NAO e "conectado": o backend aceita o handshake antes de
+            // validar a sala (services/backend/app/rooms.py), entao dizer
+            // conectado aqui vira mentira de meio segundo quando o codigo nao
+            // existe. Quem confirma de verdade e o snapshot, no onRoster.
+            publishStatus(getString(R.string.status_connecting))
         }
 
         override fun onRoll(player: String, resultJson: String) {
@@ -438,6 +458,7 @@ class OverlayService : Service() {
      * botao "Criar" criava a sala e o usuario ficava no escuro.
      */
     private fun publishStatus(text: String) {
+        android.util.Log.d("rolai", "status: $text")
         roomStatus = text
         overlay.setStatus(text)
     }
@@ -490,6 +511,19 @@ class OverlayService : Service() {
         /** Config mudou: remonta palco e sala sem religar o botao. */
         const val ACTION_RELOAD = "app.meioorc.rolai.action.RELOAD"
 
+        /** Usuario pediu pra conectar: reconecta mesmo sem mudanca. */
+        const val ACTION_RECONNECT = "app.meioorc.rolai.action.RECONNECT"
+
+        /** Reconexao pedida na mao (botao Entrar). */
+        fun requestReconnect(context: Context) {
+            if (!RolaiSettings.isOverlayEnabled(context)) return
+            runCatching {
+                context.startService(
+                    Intent(context, OverlayService::class.java).setAction(ACTION_RECONNECT),
+                )
+            }.onFailure { android.util.Log.w("rolai", "RECONNECT nao entregue", it) }
+        }
+
         /** Avisa o servico, se estiver de pe. Sem overlay ativo, nao faz nada. */
         fun notifySettingsChanged(context: Context) {
             if (!RolaiSettings.isOverlayEnabled(context)) return
@@ -497,6 +531,11 @@ class OverlayService : Service() {
                 context.startService(
                     Intent(context, OverlayService::class.java).setAction(ACTION_RELOAD),
                 )
+            }.onFailure {
+                // Nao pode sumir em silencio: se o RELOAD nao chega, a
+                // configuracao nova simplesmente nao vale e o usuario fica
+                // sem entender por que.
+                android.util.Log.w("rolai", "RELOAD nao entregue ao servico", it)
             }
         }
         private const val CHANNEL_ID = "overlay"
