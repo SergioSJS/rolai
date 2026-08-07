@@ -487,6 +487,9 @@ body.stream-mode .stage canvas {
 
 .panel {
   position: relative;
+  /* Ancora das container queries dos filhos (ex.: a grade de dados decide
+     4 ou 8 colunas pela largura DO PAINEL, nao da janela). */
+  container: panel / inline-size;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
@@ -744,24 +747,34 @@ button:disabled {
   color: #fff;
 }
 
+/* Os 8 dados: uma linha de 8 ou DUAS DE 4 — nunca 5+3, 6+2 ou 7+1.
+   Com flex-wrap cabia o que coubesse e a segunda linha ficava torta.
+   Grade fixa de 4 colunas resolve; a de 8 entra por container query
+   (a largura que importa e a do painel, nao a da janela: o painel e
+   estreito na barra lateral do desktop e largo no celular). */
 .composer-dice {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   /* folga pros badges "−" e contador, que sobram pra fora do slot */
   gap: 0.55rem;
   margin-top: 0.8rem;
 }
 
+/* ~620px = 8 slots de 68px + 7 gaps. Abaixo disso, 4+4. */
+@container panel (min-width: 620px) {
+  .composer-dice {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
 /* Slot = botao de adicionar + botao "−" sobreposto (HTML nao aceita
    button dentro de button). flex: 1 faz a ultima linha preencher a largura
    em vez de deixar buraco. */
+/* Slot = celula da grade. Sem flex: quem decide a largura e a grade, e e
+   isso que mantem as duas linhas iguais. */
 .die-slot {
   position: relative;
-  /* cresce pra fechar a linha, mas com teto: dois dados sozinhos na ultima
-     linha nao viram dois botoes gigantes. */
-  flex: 1 1 68px;
-  min-width: 68px;
-  max-width: 120px;
+  min-width: 0;
 }
 
 .die-button {
