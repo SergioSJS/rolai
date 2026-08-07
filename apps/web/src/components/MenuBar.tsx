@@ -1,6 +1,13 @@
-// Barra de menu do app shell: logo a esquerda; a direita, status da sala
-// (quando conectado) e os atalhos Sala / Preferências / Sobre.
+// Barra de menu do app shell: logo à esquerda; à direita, status da sala
+// (quando conectado) e os atalhos Sala / Preferências / Ajuda / Sobre.
+//
+// No celular os atalhos colapsam num menu sanduíche. A alternativa que
+// existia antes — encolher botão, esconder rótulo, deixar a faixa rolar —
+// era remendo: o código da sala continuava disputando espaço com quatro
+// botões, e a informação MAIS útil durante a mesa (qual sala, conectado ou
+// não) era a que apertava. Colapsando, a sala fica inteira na barra.
 
+import { useEffect, useRef, useState } from "react";
 import type { ConnectionStatus } from "../room/reducer";
 
 interface MenuBarProps {
@@ -28,6 +35,33 @@ export function MenuBar({
   onOpenSettings,
   onOpenAbout,
 }: MenuBarProps) {
+  const [aberto, setAberto] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+
+  // Fecha ao clicar fora ou apertar Esc — comportamento esperado de menu
+  // suspenso; sem isso ele fica preso na tela até alguém acertar o botão.
+  useEffect(() => {
+    if (!aberto) return;
+    const onDown = (event: MouseEvent) => {
+      if (!navRef.current?.contains(event.target as Node)) setAberto(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAberto(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [aberto]);
+
+  // Abrir um modal fecha o menu: senão ele fica aberto atrás da janela.
+  const item = (acao: () => void) => () => {
+    setAberto(false);
+    acao();
+  };
+
   return (
     <header className="menu-bar">
       <div className="menu-brand">
@@ -47,33 +81,54 @@ export function MenuBar({
         </svg>
         <span className="brand-name">Rolaí</span>
       </div>
-      <nav className="menu-items">
-        {roomCode !== null && (
-          <span className={`status status-${roomStatus}`}>
-            {STATUS_DOT[roomStatus]} · <code className="room-code">{roomCode}</code>
-          </span>
-        )}
+
+      {/* Status fora do <nav>: é informação, não navegação — e assim ele
+          fica na barra mesmo com o menu recolhido. */}
+      {roomCode !== null && (
+        <button
+          type="button"
+          className={`status status-${roomStatus} status-button`}
+          onClick={onOpenRoom}
+          title="Abrir a sala"
+        >
+          {STATUS_DOT[roomStatus]} · <code className="room-code">{roomCode}</code>
+        </button>
+      )}
+
+      <nav className="menu-items" ref={navRef}>
+        <button
+          type="button"
+          className="menu-toggle"
+          aria-expanded={aberto}
+          aria-label="Menu"
+          onClick={() => setAberto((v) => !v)}
+        >
+          <span className="menu-toggle-bars" aria-hidden />
+        </button>
+
         {/* Ordem por FREQUENCIA de uso: Sala (mexe toda sessao) ->
             Preferencias -> Ajuda -> Sobre. O APK sai da barra: e acao de
             uma vez so na vida, e disputava espaco com o que se usa sempre.
             Mora no Sobre, que e onde se procura "o que mais tem aqui". */}
-        <button type="button" className="menu-button" onClick={onOpenRoom}>
-          Sala
-        </button>
-        <button type="button" className="menu-button" onClick={onOpenSettings}>
-          Preferências
-        </button>
-        <button
-          type="button"
-          className="menu-button"
-          onClick={onOpenHelp}
-          title="Como escrever uma rolagem"
-        >
-          Ajuda
-        </button>
-        <button type="button" className="menu-button" onClick={onOpenAbout}>
-          Sobre
-        </button>
+        <div className={`menu-links${aberto ? " is-open" : ""}`}>
+          <button type="button" className="menu-button" onClick={item(onOpenRoom)}>
+            Sala
+          </button>
+          <button type="button" className="menu-button" onClick={item(onOpenSettings)}>
+            Preferências
+          </button>
+          <button
+            type="button"
+            className="menu-button"
+            onClick={item(onOpenHelp)}
+            title="Como escrever uma rolagem"
+          >
+            Ajuda
+          </button>
+          <button type="button" className="menu-button" onClick={item(onOpenAbout)}>
+            Sobre
+          </button>
+        </div>
       </nav>
     </header>
   );

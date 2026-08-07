@@ -139,6 +139,81 @@ body.stream-mode {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  /* Ancora do menu suspenso no celular. */
+  position: relative;
+}
+
+.menu-links {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Sanduiche: so existe no celular (ver media query). */
+.menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  border-radius: 9px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+}
+
+.menu-toggle[aria-expanded="true"] {
+  background: var(--chip-bg);
+}
+
+/* Tres barras em CSS: um SVG a mais aqui nao paga o custo de manutencao. */
+.menu-toggle-bars,
+.menu-toggle-bars::before,
+.menu-toggle-bars::after {
+  display: block;
+  width: 1.05rem;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.menu-toggle-bars {
+  position: relative;
+}
+
+.menu-toggle-bars::before,
+.menu-toggle-bars::after {
+  content: "";
+  position: absolute;
+  left: 0;
+}
+
+.menu-toggle-bars::before {
+  top: -6px;
+}
+
+.menu-toggle-bars::after {
+  top: 6px;
+}
+
+/* Status da sala e clicavel: abre o modal Sala. Como e <button>, precisa
+   perder a cara de botao de formulario. */
+.status-button {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.status-button:hover {
+  background: var(--chip-bg);
+  border-color: var(--panel-border);
 }
 
 .menu-button {
@@ -1388,68 +1463,57 @@ input[type="range"]:focus {
     max-height: 50vh;
   }
 
-  /* Barra no celular: com sala aberta eram 4 botoes + o codigo, e o codigo
-     quebrava em duas linhas empurrando tudo. Agora a barra rola na
-     horizontal e nada quebra — o status fica antes dos botoes, que e a
-     ordem de leitura. */
+  /* Celular: os atalhos viram sanduiche (ver MenuBar.tsx) e a barra fica
+     com logo + sala. A info da sala e o que mais se consulta durante o
+     jogo, entao e ela que ganha o espaco. */
   .menu-bar {
     padding: 0.5rem 0.8rem;
     gap: 0.5rem;
   }
 
   .menu-bar .brand-name {
-    /* A marca some: o logo ja identifica, e o espaco vale mais pros
-       controles. */
     display: none;
   }
 
-  .menu-items {
-    flex: 1;
-    min-width: 0;
-    overflow-x: auto;
-    /* Sem isto os botoes encolhem ate o texto quebrar. */
-    flex-wrap: nowrap;
-    justify-content: flex-end;
-    scrollbar-width: none;
+  .menu-toggle {
+    display: inline-flex;
   }
 
-  .menu-items::-webkit-scrollbar {
+  /* Suspenso ancorado a direita, abaixo da barra. */
+  .menu-links {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 11rem;
+    padding: 0.35rem;
+    border-radius: 12px;
+    background: var(--bg-soft);
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
     display: none;
   }
 
-  .menu-items > * {
-    flex: 0 0 auto;
-  }
-
-  .menu-button {
-    padding: 0.4rem 0.55rem;
-    font-size: 0.9rem;
-  }
-
-  /* Codigo da sala: uma linha so, cortado com reticencias se for longo
-     (codigo de mesa fixa tem 16+ caracteres). O nome inteiro fica no
-     modal Sala. */
-  .menu-bar .status {
-    flex: 0 1 auto;
-    min-width: 0;
+  .menu-links.is-open {
     display: flex;
-    align-items: center;
-    gap: 0.3rem;
-    white-space: nowrap;
-    overflow: hidden;
   }
 
-  /* "em sala ·" some no celular: o codigo com cara de codigo ja diz o que
-     e, e o rotulo comia o espaco que o proprio codigo precisa. */
-  .menu-bar .status {
-    font-size: 0;
+  .menu-links .menu-button {
+    text-align: left;
+    padding: 0.6rem 0.7rem;
   }
 
-  .menu-bar .status .room-code {
-    font-size: 0.78rem;
+  .menu-bar .status-button {
+    /* Ocupa a sobra entre logo e sanduiche, sem empurrar ninguem. */
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .menu-bar .status-button .room-code {
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 12ch;
   }
 }
 
