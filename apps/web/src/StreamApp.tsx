@@ -40,8 +40,19 @@ declare global {
   }
 }
 
+// O resultado na tela mais o numero da rolagem que o colocou ali. O numero
+// so existe pra virar `key` no DOM: sem ele o React reusa o mesmo no na
+// rolagem seguinte, a animacao CSS nao reinicia, e quem rolou durante o
+// fade out herdava a animacao ja terminada — `forwards` prende em
+// opacity 0 e o resultado nunca mais aparece (cada rolagem nova reagenda o
+// clear, entao o no tambem nunca desmonta pra se recuperar sozinho).
+interface Shown {
+  result: RollResult;
+  seq: number;
+}
+
 export function StreamApp({ options }: { options: StreamOptions }) {
-  const [lastResult, setLastResult] = useState<RollResult | null>(null);
+  const [shown, setShown] = useState<Shown | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<RollRenderer | null>(null);
@@ -99,7 +110,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
     fadeTimerRef.current = setTimeout(() => {
       fadeTimerRef.current = null;
       rendererRef.current?.clear();
-      setLastResult(null);
+      setShown(null);
     }, STREAM_RESULT_MS);
   }, []);
 
@@ -108,7 +119,8 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       // Dados da rolagem anterior saem antes da nova entrar: sem ninguem
       // clicando pra dispensar, eles se acumulariam na mesa.
       rendererRef.current?.clear();
-      setLastResult(result);
+      // seq+1 troca a `key` do overlay: no novo, animacao do zero.
+      setShown((prev) => ({ result, seq: (prev?.seq ?? 0) + 1 }));
       if (!exceedsAnimationCap(result)) {
         rendererRef.current?.roll(result, style).catch((err: unknown) => {
           console.warn("[rolai] animacao falhou:", err);
@@ -162,7 +174,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
           fadeTimerRef.current = null;
         }
         rendererRef.current?.clear();
-        setLastResult(null);
+        setShown(null);
       },
     };
     window.rolaiStream = bridge;
@@ -173,17 +185,18 @@ export function StreamApp({ options }: { options: StreamOptions }) {
 
   return (
     <main className="stream-root">
-      {options.scrim > 0 && lastResult !== null && (
+      {options.scrim > 0 && shown !== null && (
         <div
+          key={shown.seq}
           className="stream-scrim"
           style={{ background: `rgba(0, 0, 0, ${options.scrim})` }}
         />
       )}
       <div className="stage" ref={stageRef} aria-label="Palco de rolagem" />
       <div className="stage-overlay">
-        {lastResult !== null && (
-          <div className="stream-result">
-            <ResultDisplay result={lastResult} showDismissHint={false} />
+        {shown !== null && (
+          <div key={shown.seq} className="stream-result">
+            <ResultDisplay result={shown.result} showDismissHint={false} />
           </div>
         )}
         {status !== null && <p className="stream-status">{status}</p>}

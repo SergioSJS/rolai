@@ -1,15 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { RollResult } from "@rolai/rules-engine";
 import { parseStreamParams } from "../stream";
+import type { StreamOptions } from "../stream";
 import { roomWsUrl } from "../config";
 import { RoomClient } from "../room/client";
 import { ResultDisplay } from "../components/ResultDisplay";
+import { StreamApp } from "../StreamApp";
 
 const RESULT: RollResult = {
   notation: "2d6",
   groups: { roll: { rolls: [3, 4], total: 7 } },
   timestamp: "2026-08-05T12:00:00.000Z",
+};
+
+const OTHER: RollResult = {
+  notation: "1d20",
+  groups: { roll: { rolls: [19], total: 19 } },
+  timestamp: "2026-08-05T12:00:04.000Z",
 };
 
 describe("parseStreamParams", () => {
@@ -101,6 +109,46 @@ describe("resultado no modo stream", () => {
     expect(screen.queryByText(/clique ou Esc/)).toBeNull();
     // Headline e chips continuam: o resultado aparece na stream.
     expect(screen.getByText("7")).toBeTruthy();
+  });
+
+  // Regressao: rolar durante o fade out deixava o resultado invisivel pra
+  // sempre. O no do DOM era reusado, a animacao CSS (`forwards`) ja tinha
+  // acabado em opacity 0, e como cada rolagem reagenda o clear o no nunca
+  // desmontava pra recomecar. A `key` por rolagem forca no novo.
+  it("rolagem nova troca o no do overlay (animacao de fade reinicia)", () => {
+    const options: StreamOptions = {
+      room: "",
+      chroma: null,
+      styleId: "",
+      scrim: 0.5,
+      scale: 0,
+      quality: "",
+      style: null,
+    };
+    const { container } = render(<StreamApp options={options} />);
+
+    act(() => {
+      window.rolaiStream?.play(RESULT);
+    });
+    const first = container.querySelector(".stream-result");
+    const firstScrim = container.querySelector(".stream-scrim");
+    expect(first).toBeTruthy();
+    expect(firstScrim).toBeTruthy();
+
+    act(() => {
+      window.rolaiStream?.play(OTHER);
+    });
+    const second = container.querySelector(".stream-result");
+    expect(second).toBeTruthy();
+    expect(second).not.toBe(first);
+    // O veu tem a mesma animacao e o mesmo problema.
+    expect(container.querySelector(".stream-scrim")).not.toBe(firstScrim);
+    expect(second?.textContent).toContain("19");
+
+    // Nao deixa o timer de 8s vivo pro proximo teste.
+    act(() => {
+      window.rolaiStream?.clear();
+    });
   });
 });
 

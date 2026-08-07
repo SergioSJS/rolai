@@ -425,6 +425,23 @@ body.stream-mode .stage canvas {
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
 }
 
+/* Placa do resultado no modo stream: quase opaca e SEM backdrop-filter.
+   O blur de `.result-display` so borra o que esta no compositing da
+   PAGINA — e aqui atras da placa nao tem pagina nenhuma: no overlay
+   Android e outra janela do sistema (o leitor de PDF), no OBS e o
+   gameplay. O blur virava no-op e sobrava alpha 0.62 de fundo escuro
+   disputando com o que estivesse embaixo. Solido resolve, e ainda poupa
+   uma camada de composicao na janela do overlay. */
+.stream-root .result-display {
+  background: rgba(9, 12, 15, 0.95);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.75),
+    0 14px 44px rgba(0, 0, 0, 0.7);
+}
+
 /* Legibilidade do resultado em cima de QUALQUER fundo (o OBS pode estar
    sobre gameplay colorido/claro): contorno preto em camadas no texto e
    chips com fundo escuro solido, em vez dos tokens de tema — no modo
@@ -451,24 +468,26 @@ body.stream-mode .stage canvas {
     0 4px 20px rgba(0, 0, 0, 0.8);
 }
 
+/* Chips solidos pelo mesmo motivo da placa: alpha aqui deixa passar o que
+   estiver atras da janela, e o numero do dado e o que mais importa ler. */
 .stream-root .result-flag {
-  background: rgba(10, 12, 14, 0.85);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: #12171c;
+  border-color: rgba(255, 255, 255, 0.32);
   color: #2ee6a8;
 }
 
 .stream-root .die-chip {
-  background: rgba(10, 12, 14, 0.85);
-  border-color: rgba(255, 255, 255, 0.28);
+  background: #12171c;
+  border-color: rgba(255, 255, 255, 0.3);
   color: #f4f7f5;
 }
 
 .stream-root .die-chip-sides {
-  color: rgba(244, 247, 245, 0.65);
+  color: rgba(244, 247, 245, 0.7);
 }
 
 .stream-root .die-chip-mod {
-  background: rgba(10, 12, 14, 0.6);
+  background: #1b2228;
   color: #2ee6a8;
 }
 
