@@ -89,22 +89,16 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp" />
 
-        <TextView
-            android:id="@+id/txt_inputs_hint"
+        <!-- Campos do sistema escolhido (CD, modificador, vantagem...),
+             gerados em runtime a partir de assets/headless/systems.json.
+             Antes isto era um EditText onde se digitava o JSON cru dos
+             inputs — ver ProfileForm.kt. -->
+        <LinearLayout
+            android:id="@+id/inputs_form"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:textColor="#8B95A1"
-            android:textSize="12sp" />
-
-        <EditText
-            android:id="@+id/edit_inputs"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint='{"mod": 1}'
-            android:importantForAutofill="no"
-            android:inputType="text"
-            android:textColor="#E8ECF0" />
+            android:layout_marginTop="4dp"
+            android:orientation="vertical" />
 
         <TextView
             style="@style/Rolai.SectionHeader"
@@ -341,6 +335,33 @@
             android:inputType="textPersonName"
             android:maxLength="24"
             android:textColor="#E8ECF0" />
+
+        <TextView
+            style="@style/Rolai.SectionHeader"
+            android:text="@string/section_about" />
+
+        <!-- Versao instalada. O app nao esta na Play Store: sem isto nao ha
+             como saber o que esta rodando no aparelho. -->
+        <TextView
+            android:id="@+id/txt_version"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="#9AA6B2"
+            android:textSize="14sp" />
+
+        <!-- Aviso de versao nova. Nasce GONE e so aparece quando a API do
+             GitHub responde com uma release maior — offline nao mostra nada. -->
+        <TextView
+            android:id="@+id/txt_update"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="#12261F"
+            android:padding="12dp"
+            android:textColor="#2EE6A8"
+            android:textSize="14sp"
+            android:visibility="gone" />
 
     </LinearLayout>
 </ScrollView>

@@ -13,6 +13,7 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
@@ -35,8 +36,7 @@ class SettingsActivity : Activity() {
     private lateinit var editNotation: EditText
     private lateinit var spinnerSystem: Spinner
     private lateinit var spinnerDice: Spinner
-    private lateinit var txtInputsHint: TextView
-    private lateinit var editInputs: EditText
+    private lateinit var inputsForm: LinearLayout
     private lateinit var editServer: EditText
     private lateinit var seekScale: android.widget.SeekBar
     private lateinit var txtScaleLabel: TextView
@@ -55,7 +55,10 @@ class SettingsActivity : Activity() {
 
     // Ids de sistema na ordem do spinner; indice 0 = notacao livre ("").
     private var systemIds = mutableListOf("")
-    private var systemInputs = mutableListOf("")
+    // Spec dos inputs de cada sistema (indice 0 = notacao livre, sem input).
+    private var systemInfos = mutableListOf<SystemInfo?>(null)
+    // Views do formulario gerado, por id de input — lidas no saveFromViews.
+    private val inputViews = mutableMapOf<String, View>()
 
     // Guarda contra o listener do switch disparar em setChecked programatico.
     private var updatingSwitch = false
@@ -100,7 +103,6 @@ class SettingsActivity : Activity() {
                 RolaiSettings.DICE_PRESET_LABELS,
             )
         }
-        txtInputsHint = findViewById(R.id.txt_inputs_hint)
         txtScaleLabel = findViewById(R.id.txt_scale_label)
         txtRoomStatus = findViewById(R.id.txt_room_status)
         seekScale = findViewById<android.widget.SeekBar>(R.id.seek_scale).apply {
@@ -152,12 +154,14 @@ class SettingsActivity : Activity() {
                 RolaiSettings.QUALITY_LABELS,
             )
         }
-        editInputs = findViewById(R.id.edit_inputs)
+        inputsForm = findViewById(R.id.inputs_form)
         editServer = findViewById(R.id.edit_server)
 
         findViewById<Button>(R.id.btn_open_twa).setOnClickListener {
             startActivity(TwaActivity.intentFor(this))
         }
+
+        showVersion()
 
         loadSystemsFromAssets()
         loadIntoViews(RolaiSettings.load(this))
@@ -188,7 +192,7 @@ class SettingsActivity : Activity() {
         val saveOnBlur = View.OnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) saveFromViews()
         }
-        for (campo in listOf(editRoomCode, editName, editNotation, editInputs, editServer)) {
+        for (campo in listOf(editRoomCode, editName, editNotation, editServer)) {
             campo.onFocusChangeListener = saveOnBlur
         }
         spinnerDice.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -202,7 +206,10 @@ class SettingsActivity : Activity() {
         }
         spinnerSystem.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                updateInputsHint(position)
+                // Trocar de sistema remonta os campos (a CD do d20 nao
+                // existe no PbtA). Os valores salvos do sistema anterior
+                // ficam no prefs ate a proxima gravacao.
+                renderInputsForm(position, RolaiSettings.load(this@SettingsActivity).inputsJson)
                 saveFromViews()
             }
 
@@ -288,6 +295,34 @@ class SettingsActivity : Activity() {
 
     // ---------- overlay ----------
 
+    /**
+     * Versao instalada na tela e, se houver, aviso de uma mais nova.
+     *
+     * Esta Activity e o launcher do app, entao o aviso aparece pra quem abre
+     * o Rolaí — nao e uma tela escondida. Sem rede nada muda: o
+     * `UpdateCheck` falha em silencio e o bloco continua GONE.
+     */
+    private fun showVersion() {
+        findViewById<TextView>(R.id.txt_version).text =
+            getString(R.string.version_installed, BuildConfig.VERSION_NAME)
+        val aviso = findViewById<TextView>(R.id.txt_update)
+        UpdateCheck.check { release ->
+            if (isFinishing || isDestroyed) return@check
+            aviso.text = getString(R.string.version_update_available, release.version)
+            aviso.visibility = View.VISIBLE
+            aviso.setOnClickListener {
+                // Abre a pagina da Release; quem baixa e instala e a pessoa.
+                // Baixar o APK aqui exigiria REQUEST_INSTALL_PACKAGES.
+                runCatching {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.pageUrl)))
+                }.onFailure {
+                    Toast.makeText(this, R.string.version_update_available, Toast.LENGTH_SHORT)
+                        .show()
+                }
+            }
+        }
+    }
+
     private fun enableOverlay() {
         if (!Settings.canDrawOverlays(this)) {
             // UNICO ponto do app que pede SYSTEM_ALERT_WINDOW — acao
@@ -336,11 +371,10 @@ class SettingsActivity : Activity() {
         editRoomCode.setText(settings.roomCode)
         editName.setText(settings.playerName)
         editNotation.setText(settings.notation)
-        editInputs.setText(settings.inputsJson)
         editServer.setText(settings.wsBaseUrl)
         val systemIndex = systemIds.indexOf(settings.system).takeIf { it >= 0 } ?: 0
         spinnerSystem.setSelection(systemIndex)
-        updateInputsHint(systemIndex)
+        renderInputsForm(systemIndex, settings.inputsJson)
         spinnerDice.setSelection(
             RolaiSettings.DICE_PRESET_IDS.indexOf(settings.dicePreset).coerceAtLeast(0)
         )
@@ -451,7 +485,7 @@ class SettingsActivity : Activity() {
                 playerName = editName.text.toString(),
                 notation = editNotation.text.toString().ifEmpty { RolaiSettings.DEFAULT_NOTATION },
                 system = systemIds[position],
-                inputsJson = editInputs.text.toString(),
+                inputsJson = inputsFromForm(position),
                 wsBaseUrl = if (RolaiSettings.isValidWsBaseUrl(server)) server
                 else RolaiSettings.DEFAULT_WS_BASE_URL,
                 // Sem campo proprio na tela por ora: mantem o que ja estava
@@ -496,20 +530,10 @@ class SettingsActivity : Activity() {
         val labels = mutableListOf(getString(R.string.system_none))
         try {
             val json = assets.open("headless/systems.json").bufferedReader().use { it.readText() }
-            val systems = org.json.JSONArray(json)
-            for (i in 0 until systems.length()) {
-                val system = systems.getJSONObject(i)
-                systemIds.add(system.getString("system"))
-                labels.add(system.getString("label"))
-                val inputs = system.optJSONArray("inputs")
-                val inputIds = buildList {
-                    if (inputs != null) {
-                        for (j in 0 until inputs.length()) {
-                            add(inputs.getJSONObject(j).getString("id"))
-                        }
-                    }
-                }
-                systemInputs.add(inputIds.joinToString(", "))
+            for (info in ProfileForm.parseSystems(json)) {
+                systemIds.add(info.system)
+                labels.add(info.label)
+                systemInfos.add(info)
             }
         } catch (e: Exception) {
             // systems.json ausente/corrompido: fica so a notacao livre —
@@ -643,14 +667,87 @@ class SettingsActivity : Activity() {
         txtScaleLabel.text = getString(R.string.label_dice_scale) + " — $percent%"
     }
 
-    private fun updateInputsHint(position: Int) {
-        val hasSystem = position > 0
-        editInputs.visibility = if (hasSystem) View.VISIBLE else View.GONE
-        txtInputsHint.visibility = if (hasSystem) View.VISIBLE else View.GONE
-        if (hasSystem) {
-            txtInputsHint.text = "inputs: ${systemInputs[position]}"
+    /**
+     * Monta os campos do sistema escolhido (CD, modificador, vantagem...).
+     *
+     * Antes daqui saia um EditText onde se digitava o JSON dos inputs. Alem
+     * de hostil, era facil errar em silencio: JSON invalido virava "sem
+     * inputs" e a CD deixava de valer sem aviso nenhum.
+     *
+     * Notacao livre (posicao 0) nao tem input — o formulario some inteiro.
+     */
+    private fun renderInputsForm(position: Int, inputsJson: String) {
+        inputsForm.removeAllViews()
+        inputViews.clear()
+        val info = systemInfos.getOrNull(position)
+        if (info == null || !info.needsForm) {
+            inputsForm.visibility = View.GONE
+            return
+        }
+        inputsForm.visibility = View.VISIBLE
+        val salvos = ProfileForm.fromJson(inputsJson)
+        for (input in info.inputs) {
+            inputsForm.addView(fieldLabel(input.label))
+            val view = if (input.isSelect) selectField(input, salvos[input.id])
+            else numberField(input, salvos[input.id])
+            inputViews[input.id] = view
+            inputsForm.addView(view)
         }
     }
+
+    private fun fieldLabel(text: String): TextView = TextView(this).apply {
+        this.text = text
+        setTextColor(0xFF8B95A1.toInt())
+        textSize = 12f
+        setPadding(0, 10.dpToPx(), 0, 0)
+    }
+
+    private fun numberField(input: ProfileInput, valor: String?): EditText = EditText(this).apply {
+        // numberSigned: modificador negativo (-1) e comum, e o teclado
+        // numerico puro nao tem o sinal.
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        setTextColor(0xFFE8ECF0.toInt())
+        setText(valor.orEmpty())
+        hint = input.label
+        importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) saveFromViews()
+        }
+    }
+
+    private fun selectField(input: ProfileInput, valor: String?): Spinner = Spinner(this).apply {
+        adapter = ArrayAdapter(
+            this@SettingsActivity,
+            android.R.layout.simple_spinner_dropdown_item,
+            input.options.map { it.label },
+        )
+        val index = input.options.indexOfFirst { it.value == valor }.coerceAtLeast(0)
+        setSelection(index)
+        onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) =
+                saveFromViews()
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+    }
+
+    /** Le o formulario e devolve o JSON que vai pro motor. */
+    private fun inputsFromForm(position: Int): String {
+        val info = systemInfos.getOrNull(position) ?: return ""
+        if (!info.needsForm) return ""
+        val valores = mutableMapOf<String, String>()
+        for (input in info.inputs) {
+            valores[input.id] = when (val view = inputViews[input.id]) {
+                is EditText -> view.text.toString()
+                is Spinner -> input.options.getOrNull(view.selectedItemPosition)?.value.orEmpty()
+                else -> ""
+            }
+        }
+        return ProfileForm.toJson(valores, info.inputs)
+    }
+
+    private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
 
     /**
      * Aplica um preset nas cores/textura/material. Os valores espelham

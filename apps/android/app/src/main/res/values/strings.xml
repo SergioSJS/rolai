@@ -54,6 +54,11 @@
     <string name="section_room">Conexão e sala</string>
     <string name="section_quickroll">Rolagem rápida</string>
     <string name="section_appearance">Aparência do dado</string>
+    <string name="section_about">Versão</string>
+    <!-- %1$s = versão instalada (BuildConfig.VERSION_NAME). -->
+    <string name="version_installed">Rolaí %1$s</string>
+    <!-- %1$s = versão nova encontrada nas Releases do GitHub. -->
+    <string name="version_update_available">Versão %1$s disponível — toque para baixar</string>
     <string name="label_dice_scale">Tamanho do dado</string>
     <string name="label_quality">Qualidade do 3D</string>
     <string name="settings_subtitle">configurações</string>

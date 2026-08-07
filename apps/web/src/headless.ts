@@ -23,7 +23,15 @@ export interface RolaiJsBridge {
 export interface RolaiSystemInfo {
   system: string;
   label: string;
-  inputs: { id: string; label: string; type: "number" | "select" }[];
+  inputs: {
+    id: string;
+    label: string;
+    type: "number" | "select";
+    // Opcoes do select (vazio nos numericos). SEM elas a tela nativa nao tem
+    // como montar o campo — era por isso que o app pedia o JSON cru
+    // (`{"mode":"adv"}`) em vez de um seletor "Normal/Vantagem/Desvantagem".
+    options: { value: string; label: string }[];
+  }[];
 }
 
 export interface RolaiHeadlessApi {
@@ -77,7 +85,12 @@ const api: RolaiHeadlessApi = {
     const infos: RolaiSystemInfo[] = availableProfiles().map((p) => ({
       system: p.system,
       label: p.label,
-      inputs: p.inputs.map((i) => ({ id: i.id, label: i.label, type: i.type })),
+      inputs: p.inputs.map((i) => ({
+        id: i.id,
+        label: i.label,
+        type: i.type,
+        options: (i.options ?? []).map((o) => ({ value: o.value, label: o.label })),
+      })),
     }));
     return JSON.stringify(infos);
   },

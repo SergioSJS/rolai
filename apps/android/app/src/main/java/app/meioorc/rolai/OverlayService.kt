@@ -121,6 +121,7 @@ class OverlayService : Service() {
         overlay.onRollClicked = ::rollNow
         overlay.onQuickRoll = { (lastRollAction ?: ::rollNow).invoke() }
         overlay.onRollNotation = { notation -> rollNotation(notation) }
+        overlay.onRollWithInputs = ::rollWithInputs
         overlay.onComposedNotation = { notation ->
             // Compor e minimizar SEM rolar nao mudava nada: o botao recolhido
             // dispara a rolagem rapida das configuracoes, e a composicao vivia
@@ -506,14 +507,42 @@ class OverlayService : Service() {
         windowManager.updateViewLayout(overlay.root, overlayParams)
     }
 
+    /**
+     * Spec dos inputs de cada sistema, lido uma vez de
+     * `assets/headless/systems.json` (gerado pelo bundle do motor).
+     */
+    private val systems: Map<String, SystemInfo> by lazy {
+        runCatching {
+            assets.open("headless/systems.json").bufferedReader().use { it.readText() }
+        }.map { ProfileForm.parseSystems(it).associateBy(SystemInfo::system) }
+            .getOrDefault(emptyMap())
+    }
+
     private fun rollNow() {
         val settings = RolaiSettings.load(this)
         overlay.setQuickNotation(settings.notation)
         if (settings.system.isEmpty()) {
             headlessRoller.roll(settings.notation)
-        } else {
-            headlessRoller.rollWithProfile(settings.system, settings.inputsJson)
+            return
         }
+        // Sistema com input (CD, modificador, vantagem): pergunta ANTES de
+        // rolar, ja preenchido com os ultimos valores. Antes esses valores so
+        // podiam ser mudados na tela de configuracoes, escritos como JSON —
+        // trocar a CD de um teste custava sair do jogo.
+        val info = systems[settings.system]
+        if (info != null && info.needsForm) {
+            overlay.askInputs(info, ProfileForm.fromJson(settings.inputsJson))
+            return
+        }
+        headlessRoller.rollWithProfile(settings.system, settings.inputsJson)
+    }
+
+    /** Rola com o que foi preenchido no painel e guarda como novo padrao. */
+    private fun rollWithInputs(inputsJson: String) {
+        val settings = RolaiSettings.load(this)
+        if (settings.system.isEmpty()) return
+        RolaiSettings.save(this, settings.copy(inputsJson = inputsJson))
+        headlessRoller.rollWithProfile(settings.system, inputsJson)
     }
 
     /**
@@ -543,7 +572,7 @@ class OverlayService : Service() {
     }
 
     private fun onRollCalculated(resultJson: String) {
-        overlay.showResult(formatResult(resultJson))
+        overlay.showResult(formatResult(resultJson), toneOf(resultJson))
         // Propaga o resultado JA calculado (relay burro — o backend nao
         // recalcula, ver docs/architecture.md). Em sala, quem anima e o eco
         // do servidor, pela WebView espectadora: empurrar TAMBEM aqui faria
@@ -647,6 +676,18 @@ class OverlayService : Service() {
          * docs/roll-notation.md), soma os rolls na hora de EXIBIR — nao e
          * regra de negocio, e apresentacao.
          */
+        /**
+         * Tom do resultado pro overlay pintar falha de vermelho. JSON que nao
+         * parseia, ou rolagem livre (sem profile, logo sem outcome), vale
+         * neutro — nao ha o que afirmar.
+         */
+        fun toneOf(resultJson: String): OutcomeTone {
+            val outcome = runCatching {
+                JSONObject(resultJson).optString("outcome", "")
+            }.getOrDefault("")
+            return if (outcome.isEmpty()) OutcomeTone.NEUTRAL else outcomeTone(outcome)
+        }
+
         fun formatResult(resultJson: String): String {
             return try {
                 val result = JSONObject(resultJson)

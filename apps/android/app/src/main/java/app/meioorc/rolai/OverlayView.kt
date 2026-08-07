@@ -16,8 +16,10 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ArrayAdapter
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.Spinner
 import android.widget.TextView
 import kotlin.math.abs
 
@@ -108,6 +110,14 @@ class OverlayView(context: Context) {
 
     /** Mini-bolha de rolagem do fan: ultima rolagem, ou a configurada. */
     var onQuickRoll: (() -> Unit)? = null
+
+    /**
+     * Rolagem de sistema com os inputs preenchidos no painel (JSON pronto
+     * pro motor). Existe pra CD e bonus deixarem de morar so na tela de
+     * configuracoes: perguntar aqui e o que evita sair do jogo pra mudar
+     * uma CD.
+     */
+    var onRollWithInputs: ((String) -> Unit)? = null
     var onOpenApp: (() -> Unit)? = null
     var onOpenSettings: (() -> Unit)? = null
 
@@ -115,7 +125,7 @@ class OverlayView(context: Context) {
      *  o FLAG_NOT_FOCUSABLE. Quem troca o flag e o OverlayService. */
     var onWindowFocusMode: ((Boolean) -> Unit)? = null
 
-    private enum class Mode { COLLAPSED, FAN, PANEL, HISTORY, ROOM, RESULT }
+    private enum class Mode { COLLAPSED, FAN, PANEL, HISTORY, ROOM, SYSTEM, RESULT }
     private var mode = Mode.COLLAPSED
 
     private val bubble: ImageView
@@ -123,6 +133,13 @@ class OverlayView(context: Context) {
     private val panel: LinearLayout
     private val historyPanel: LinearLayout
     private val roomPanel: LinearLayout
+    private val systemPanel: LinearLayout
+    private lateinit var systemTitle: TextView
+    private lateinit var systemFields: LinearLayout
+    // Views do formulario aberto, por id de input, com o spec ao lado — sem
+    // ele nao da pra saber se um valor vazio e "Normal" (select) ou campo em
+    // branco (numero).
+    private val systemInputViews = LinkedHashMap<String, Pair<ProfileInput, View>>()
     private val resultFlash: TextView
     private lateinit var dragHandle: TextView
     private lateinit var historyDragHandle: TextView
@@ -181,6 +198,7 @@ class OverlayView(context: Context) {
         historyPanel = buildHistoryPanel(context)
         historyPanel.visibility = View.GONE
         roomPanel = buildRoomPanel(context)
+        systemPanel = buildSystemPanel(context)
         roomPanel.visibility = View.GONE
 
         // Flash de resultado da rolagem pelo atalho: compacto, some sozinho
@@ -206,6 +224,7 @@ class OverlayView(context: Context) {
         root.addView(panel)
         root.addView(historyPanel)
         root.addView(roomPanel)
+        root.addView(systemPanel)
         root.addView(resultFlash)
     }
 
@@ -525,6 +544,107 @@ class OverlayView(context: Context) {
         }
     }
 
+    // ---------- painel de inputs do sistema ----------
+
+    /**
+     * Painel que pergunta CD, modificador e afins ANTES de rolar.
+     *
+     * Antes, esses valores so existiam na tela de configuracoes, escritos
+     * como JSON cru: mudar a CD de um teste exigia sair do jogo, abrir o app,
+     * achar "Rolagem rapida" e digitar. Aqui eles ficam a um toque, sem sair
+     * do que estiver na tela.
+     */
+    private fun buildSystemPanel(context: Context): LinearLayout {
+        systemTitle = TextView(context).apply {
+            setTextColor(TEXT)
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(systemTitle)
+            addView(collapseButton(context))
+        }
+        systemFields = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+
+        val rolar = actionButton(context, R.string.roll_button) {
+            onRollWithInputs?.invoke(currentInputsJson())
+            setMode(Mode.COLLAPSED)
+        }.apply { setTextColor(ACCENT_BRIGHT) }
+
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = cardBackground()
+            elevation = 12.dp().toFloat()
+            setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
+            layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
+            addView(header)
+            addView(systemFields, vParams(topMargin = 4))
+            addView(rolar, vParams(topMargin = 12))
+        }
+    }
+
+    /**
+     * Abre o painel com os campos do sistema, preenchidos com os ultimos
+     * valores usados. Chamado pelo OverlayService no lugar de rolar direto.
+     */
+    fun askInputs(info: SystemInfo, saved: Map<String, String>) {
+        systemTitle.text = info.label
+        systemFields.removeAllViews()
+        systemInputViews.clear()
+        val context = systemFields.context
+        for (input in info.inputs) {
+            systemFields.addView(
+                TextView(context).apply {
+                    text = input.label
+                    setTextColor(MUTED)
+                    textSize = 11f
+                },
+                vParams(topMargin = 8),
+            )
+            val view: View = if (input.isSelect) {
+                Spinner(context).apply {
+                    adapter = ArrayAdapter(
+                        context,
+                        android.R.layout.simple_spinner_dropdown_item,
+                        input.options.map { it.label },
+                    )
+                    setSelection(
+                        input.options.indexOfFirst { it.value == saved[input.id] }
+                            .coerceAtLeast(0),
+                    )
+                }
+            } else {
+                EditText(context).apply {
+                    // numberSigned: modificador negativo e comum, e o teclado
+                    // numerico puro nao tem sinal.
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                        android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+                    setTextColor(TEXT)
+                    textSize = 15f
+                    setText(saved[input.id].orEmpty())
+                }
+            }
+            systemInputViews[input.id] = input to view
+            systemFields.addView(view, vParams(topMargin = 2))
+        }
+        setMode(Mode.SYSTEM)
+    }
+
+    private fun currentInputsJson(): String {
+        val valores = systemInputViews.mapValues { (_, par) ->
+            val (input, view) = par
+            when (view) {
+                is EditText -> view.text.toString()
+                is Spinner -> input.options.getOrNull(view.selectedItemPosition)?.value.orEmpty()
+                else -> ""
+            }
+        }
+        return ProfileForm.toJson(valores, systemInputViews.values.map { it.first })
+    }
+
     private fun renderRoom() {
         roomStatusView.text = statusView.text
         roomRosterView.text = if (roster.isEmpty()) {
@@ -725,7 +845,9 @@ class OverlayView(context: Context) {
         }
         mode = newMode
         bubble.visibility =
-            if (newMode == Mode.PANEL || newMode == Mode.HISTORY || newMode == Mode.ROOM) {
+            if (newMode == Mode.PANEL || newMode == Mode.HISTORY ||
+                newMode == Mode.ROOM || newMode == Mode.SYSTEM
+            ) {
                 View.GONE
             } else {
                 View.VISIBLE
@@ -734,12 +856,15 @@ class OverlayView(context: Context) {
         panel.visibility = if (newMode == Mode.PANEL) View.VISIBLE else View.GONE
         historyPanel.visibility = if (newMode == Mode.HISTORY) View.VISIBLE else View.GONE
         roomPanel.visibility = if (newMode == Mode.ROOM) View.VISIBLE else View.GONE
+        systemPanel.visibility = if (newMode == Mode.SYSTEM) View.VISIBLE else View.GONE
         resultFlash.visibility = if (newMode == Mode.RESULT) View.VISIBLE else View.GONE
         root.removeCallbacks(hideResultRunnable)
         if (newMode == Mode.RESULT) root.postDelayed(hideResultRunnable, RESULT_FLASH_MS)
-        // So o PANEL tem campo de texto — so ele precisa de janela focavel.
-        onWindowFocusMode?.invoke(newMode == Mode.PANEL)
-        if (newMode != Mode.PANEL) hideKeyboard()
+        // Campo de texto = janela focavel. Vale pro compositor e pro
+        // formulario de sistema (CD e modificador sao digitados).
+        val comTeclado = newMode == Mode.PANEL || newMode == Mode.SYSTEM
+        onWindowFocusMode?.invoke(comTeclado)
+        if (!comTeclado) hideKeyboard()
         if (newMode == Mode.HISTORY) renderHistory()
         if (newMode == Mode.ROOM) renderRoom()
     }
@@ -758,7 +883,17 @@ class OverlayView(context: Context) {
         statusDot.setTextColor(if (connected) ACCENT_BRIGHT else MUTED)
     }
 
-    fun showResult(text: String) {
+    fun showResult(text: String, tone: OutcomeTone = OutcomeTone.NEUTRAL) {
+        // Falha em vermelho: rolando por cima de outro app, a linha some no
+        // meio do que estiver embaixo se sucesso e falha tiverem a mesma cor.
+        val cor = when (tone) {
+            OutcomeTone.FAILURE -> FAILURE_TEXT
+            OutcomeTone.PARTIAL -> PARTIAL_TEXT
+            else -> TEXT
+        }
+        panelResultView.setTextColor(cor)
+        historyResultView.setTextColor(cor)
+        resultFlash.setTextColor(cor)
         panelResultView.text = text
         historyResultView.text = text
         resultFlash.text = text
@@ -860,6 +995,12 @@ class OverlayView(context: Context) {
         private val CARD_STROKE = Color.argb(0x66, 0x1D, 0x9E, 0x75)
         private val TEXT = Color.rgb(0xE8, 0xEC, 0xF0)
         private val MUTED = Color.rgb(0x8B, 0x95, 0xA1)
+
+        // Mesmas cores do modo stream (apps/web/src/styles.css): claras de
+        // proposito, porque a janela do overlay fica sobre outro app e um
+        // vermelho escuro sumiria sobre fundo escuro.
+        private val FAILURE_TEXT = Color.rgb(0xFF, 0x6B, 0x6B)
+        private val PARTIAL_TEXT = Color.rgb(0xFF, 0xC6, 0x5C)
         private const val MAX_ACTIVITY_LINES = 3
         private const val HISTORY_CARD_LINES = 10
         private const val MAX_HISTORY = 20

@@ -74,6 +74,23 @@ describe("bundle headless (WebView Android)", () => {
     }
   });
 
+  // A tela nativa monta o formulario a partir DESTE json (systems.json, ver
+  // scripts/install-headless.mjs). Sem as opcoes do select o app nao tinha
+  // como oferecer "Vantagem" e pedia o JSON cru do input.
+  it("systems() leva as opcoes dos selects, nao so o id", () => {
+    const systems = JSON.parse(globalThis.rolai.systems()) as {
+      system: string;
+      inputs: { id: string; type: string; options: { value: string; label: string }[] }[];
+    }[];
+    const d20 = systems.find((s) => s.system === "d20");
+    const modo = d20?.inputs.find((i) => i.id === "mode");
+    expect(modo?.type).toBe("select");
+    expect(modo?.options.map((o) => o.label)).toEqual(["Normal", "Vantagem", "Desvantagem"]);
+    // Campo numerico nao tem opcao — o array existe vazio, pra tela nao
+    // precisar checar ausencia.
+    expect(d20?.inputs.find((i) => i.id === "dc")?.options).toEqual([]);
+  });
+
   it("roll() bate com o rules-engine na mesma fila deterministica", async () => {
     const capture = installBridge();
     await globalThis.rolai.roll(
