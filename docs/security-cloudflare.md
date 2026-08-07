@@ -120,6 +120,33 @@ não expõe ping/pong de baixo nível):
 - Cliente antigo que ignore o ping não quebra: o ping sozinho já reseta o
   timer ocioso da CF.
 
+**Verificado em produção (2026-08-06)**, com um espectador ocioso ligado em
+`wss://api.rolai.app` atravessando a Cloudflare laranja:
+
+```
+[  0s] snapshot
+[ 19s] ping de PROTOCOLO (opcode 0x9)  -> pong automatico
+[ 30s] ping de APLICACAO {"type":"ping"} -> {"type":"pong"}
+[ 60s] ping de APLICACAO
+[ 90s] ping de APLICACAO
+[120s] ping de APLICACAO
+conexao VIVA aos 139s
+```
+
+**Duas camadas de keepalive, não uma** — e isso importa para quem escrever
+cliente que não seja navegador:
+
+1. **Protocolo** (RFC 6455, opcode 0x9/0xA), a cada ~20s, vindo da
+   infraestrutura. Navegador e OkHttp respondem **sozinhos**. Um cliente cru
+   que ignore esse frame é derrubado em ~40s, mesmo com o heartbeat de
+   aplicação funcionando — foi exatamente o que aconteceu na primeira
+   tentativa deste teste.
+2. **Aplicação** (`{"type":"ping"}`), a cada `ws_heartbeat_seconds`, que é o
+   que este projeto controla.
+
+Ou seja: se um cliente novo cair sozinho depois de ~40s ociosos, suspeite do
+pong de protocolo antes de mexer no heartbeat de aplicação.
+
 Com isso o `api.rolai.app` **pode** ir pra laranja — a recomendação anterior
 de mantê-lo em cinza não se aplica mais.
 
