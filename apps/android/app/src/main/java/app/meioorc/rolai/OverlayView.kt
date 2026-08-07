@@ -521,11 +521,18 @@ class OverlayView(context: Context) {
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { this.topMargin = topMargin.dp() }
 
+    /**
+     * Fundo dos tres cartoes do overlay (compor, historico, sala).
+     *
+     * Mesmo verde escuro das mini-bolhas, com aro verde: em cinza neutro os
+     * cartoes nao pareciam do mesmo app que a bolha, e sobre wallpaper
+     * escuro a borda sumia. Um ponto so — os tres painies chamam daqui.
+     */
     private fun cardBackground(): GradientDrawable =
         GradientDrawable().apply {
             cornerRadius = 20.dp().toFloat()
-            setColor(PANEL)
-            setStroke(1.dp(), BORDER)
+            setColor(FAN_BG)
+            setStroke(1.dp(), CARD_STROKE)
         }
 
     private fun circle(color: Int): GradientDrawable =
@@ -815,6 +822,9 @@ class OverlayView(context: Context) {
         private val SURFACE = Color.argb(0x1F, 0x25, 0xC4, 0x8F)
         private val FAN_BG = Color.rgb(0x10, 0x2A, 0x22)
         private val DANGER = Color.rgb(0xE0, 0x6C, 0x75)
+        // Aro dos cartoes: verde da marca a meia opacidade — visivel sobre
+        // qualquer wallpaper sem virar moldura berrante.
+        private val CARD_STROKE = Color.argb(0x66, 0x1D, 0x9E, 0x75)
         private val TEXT = Color.rgb(0xE8, 0xEC, 0xF0)
         private val MUTED = Color.rgb(0x8B, 0x95, 0xA1)
         private const val MAX_ACTIVITY_LINES = 3

@@ -39,6 +39,16 @@
          Material (ver ColorWheelDialog). -->
     <style name="Theme.RolaiDialog" parent="Theme.AppCompat.Dialog.Alert">
         <item name="colorAccent">#1D9E75</item>
+        <!-- Mesmo verde escuro dos cartoes do overlay (FAN_BG em
+             OverlayView): sem isto o dialogo vinha no cinza padrao do
+             AppCompat e destoava do resto do app. -->
+        <item name="android:background">#102A22</item>
+        <item name="android:windowBackground">@drawable/bg_dialog</item>
+        <item name="android:textColor">#E8ECF0</item>
+        <item name="android:textColorPrimary">#E8ECF0</item>
+        <item name="android:textColorSecondary">#8B95A1</item>
+        <item name="colorPrimary">#1D9E75</item>
+        <item name="colorButtonNormal">#102A22</item>
     </style>
 
     <!-- A LauncherActivity da TWA estende AppCompatActivity, entao o tema
