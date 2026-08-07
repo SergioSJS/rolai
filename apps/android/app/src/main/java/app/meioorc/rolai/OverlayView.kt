@@ -57,12 +57,25 @@ class OverlayView(context: Context) {
      * desvanecer; como a area extra e transparente e a janela nao e
      * tocavel fora dos filhos, nao muda o alvo do toque.
      */
+    /**
+     * Raiz do overlay.
+     *
+     * O padding e o espaco onde a SOMBRA do elevation desenha: sem ele a
+     * janela (WRAP_CONTENT) termina na borda da bolha e a sombra sai cortada
+     * reto. Mas ele tambem empurra a bolha pra dentro — e essa era a folga
+     * que deixava o botao longe da borda.
+     *
+     * Solucao: padding pequeno aqui + x negativo na janela
+     * (OverlayService.EDGE_INSET_DP) compensando quase todo ele. Sobra uma
+     * bordinha fina, e a sombra continua inteira.
+     *
+     * clipChildren/clipToPadding = false: sem isso o padding nao adianta,
+     * o desenho e recortado nos limites mesmo assim.
+     */
     val root: FrameLayout = FrameLayout(context).apply {
         clipChildren = false
         clipToPadding = false
-        // Mesmo valor de OverlayService.SHADOW_PAD_DP: o serviço compensa
-        // esta folga no x da janela pra bolha ficar rente à borda.
-        val folga = (14 * context.resources.displayMetrics.density).toInt()
+        val folga = (SHADOW_PAD_DP * context.resources.displayMetrics.density).toInt()
         setPadding(folga, folga, folga, folga)
     }
 
@@ -839,6 +852,9 @@ class OverlayView(context: Context) {
         private val SURFACE = Color.argb(0x1F, 0x25, 0xC4, 0x8F)
         private val FAN_BG = Color.rgb(0x10, 0x2A, 0x22)
         private val DANGER = Color.rgb(0xE0, 0x6C, 0x75)
+
+        /** Espaco pra sombra do elevation desenhar sem ser cortada. */
+        const val SHADOW_PAD_DP = 12
         // Aro dos cartoes: verde da marca a meia opacidade — visivel sobre
         // qualquer wallpaper sem virar moldura berrante.
         private val CARD_STROKE = Color.argb(0x66, 0x1D, 0x9E, 0x75)
