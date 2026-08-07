@@ -335,6 +335,13 @@ body.stream-mode {
 .stage {
   position: fixed;
   inset: 0;
+  /* Faixa reservada embaixo: a mesa termina onde a placa de resultado
+     comeca, senao o dado para em cima do numero e ninguem le. A dice-box
+     monta o mundo fisico a partir DESTE elemento, entao encurtar aqui
+     encurta a mesa de verdade (ver stage/floor.ts). O valor e sobrescrito
+     em runtime pela medida da placa; o `min()` mantem o teto valendo ao
+     girar o aparelho. */
+  bottom: var(--stage-bottom, min(210px, 45vh));
   z-index: 60;
   display: flex;
   align-items: center;
@@ -342,6 +349,61 @@ body.stream-mode {
   gap: 1rem;
   flex-wrap: wrap;
   pointer-events: none;
+}
+
+/* Barreiras: uma por borda. Ficam a 3.5% da beirada do palco, que e onde a
+   parede da fisica esta de verdade (0.93 do meio pra borda) — a posicao vem
+   do JS, nao daqui. Sem impacto o elemento nao desenha nada: no OBS com
+   fundo alpha nao pode aparecer faixa nenhuma com o palco parado. */
+.stage-barrier {
+  position: absolute;
+  pointer-events: none;
+}
+
+.stage-barrier.is-top,
+.stage-barrier.is-bottom {
+  left: 0;
+  right: 0;
+  height: 0;
+}
+
+.stage-barrier.is-left,
+.stage-barrier.is-right {
+  top: 0;
+  bottom: 0;
+  width: 0;
+}
+
+/* Clarao de um impacto: nasce na posicao do dado que bateu, ao longo da
+   borda. Nas verticais e o mesmo traco girado 90 graus (o JS poe a rotacao
+   nos keyframes, senao a animacao sobrescreveria o transform daqui). */
+.stage-barrier-hit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: min(38vmin, 320px);
+  height: 3px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(120, 240, 200, 0.75) 35%,
+    rgba(190, 255, 235, 0.95) 50%,
+    rgba(120, 240, 200, 0.75) 65%,
+    transparent
+  );
+  box-shadow:
+    0 0 10px rgba(80, 230, 190, 0.65),
+    0 0 26px rgba(80, 230, 190, 0.35);
+  opacity: 0;
+}
+
+/* Quem pediu menos animacao nao quer um flash a cada dado. */
+@media (prefers-reduced-motion: reduce) {
+  .stage-barrier-hit {
+    display: none;
+  }
 }
 
 .stage canvas {

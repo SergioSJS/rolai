@@ -24,6 +24,11 @@ export interface RollRenderer {
   roll(result: RollResult, style?: DiceStyle | null): Promise<void>;
   // Tira os dados da tela sem destruir o renderer (clique pra dispensar).
   clear(): void;
+  // Avisa que o container mudou de tamanho (a faixa reservada no pe do palco
+  // cresceu — ver stage/floor.ts). Opcional: so o tier 3D tem mundo fisico
+  // pra reconstruir, e a dice-box nao observa o container sozinha. NUNCA
+  // chamar com dado no ar: as paredes andam por baixo dos dados em voo.
+  resize?(): void;
   dispose(): void;
 }
 

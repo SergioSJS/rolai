@@ -49,12 +49,75 @@ const SOUND_INIT_TIMEOUT_MS = 2500;
 // quem rolou). Curto: e o intervalo entre pedir a rolagem e ver o dado.
 const THEME_SWAP_TIMEOUT_MS = 1200;
 
+// --- Barreira do pe do palco (spec 06) ------------------------------------
+//
+// A escala mundo->tela da lib e fixa: a meia-altura visivel vale
+// `containerHeight` unidades e `clientHeight/2` px, entao 1 unidade = 0.5 px
+// (a camera do arremesso usa sempre `cameraHeight.far`). Disso sai tudo:
+
+export const WORLD_TO_PX = 0.5;
+
+// As paredes ficam em 0.93 do meio pra borda, logo a 3.5% da beirada do
+// palco — o brilho nasce ali, nao no fim do palco.
+export const BARRIER_INSET_PCT = 3.5;
+
+// Bordas na orientacao da TELA. Nao usar os nomes da lib aqui: `leftWall`
+// dela e a borda direita da tela (ver DiceBoxInstance.box_body).
+export type BarrierEdge = "top" | "bottom" | "left" | "right";
+
+const EDGES: readonly BarrierEdge[] = ["top", "bottom", "left", "right"];
+
+// Piso de velocidade pra acender. Dado parado encostado na parede continua
+// gerando contato; sem piso a barreira piscaria sozinha. (A lib usa 250 pro
+// som pelo mesmo motivo.)
+const IMPACT_MIN_SPEED = 200;
+
+// Dois dados batendo no mesmo instante viram um brilho so.
+const IMPACT_THROTTLE_MS = 60;
+
+const IMPACT_FLASH_MS = 380;
+
+// Teto de brilhos simultaneos: 20d6 caindo juntos nao vira estrobo.
+const MAX_CONCURRENT_HITS = 4;
+
+// Corpo da fisica (cannon) — so o que a deteccao de impacto le.
+export interface PhysicsBody {
+  mass: number;
+  position: { x: number; y: number; z: number };
+  velocity: { length(): number };
+}
+
+// `body` e o OUTRO corpo da colisao (mass 0 = parede ou mesa); `target` e o
+// dado que recebeu o evento.
+export interface CollideEvent {
+  body?: PhysicsBody;
+  target?: PhysicsBody;
+}
+
 type DiceBoxInstance = {
   DiceFactory?: DiceFactoryLike;
   initialize(): Promise<unknown>;
   roll(notation: string): Promise<unknown>;
   clearDice(): void;
   updateConfig(config: { theme_customColorset: DiceColorset }): Promise<unknown>;
+  // Recalcula mundo, camera e paredes a partir do container. Sincrono — a
+  // lib so faria isso sozinha num `window.resize`.
+  setDimensions(dimensions: { x: number; y: number }): void;
+  // Paredes e mesa. Os corpos sao RECRIADOS a cada setDimensions, entao a
+  // comparacao por identidade tem que ler daqui na hora do evento.
+  //
+  // ATENCAO aos nomes: `leftWall` fica em +X (a DIREITA da tela) e
+  // `rightWall` em -X (a esquerda). Sao invertidos na lib — conferido no
+  // bundle. Confiar no nome faz o brilho acender do lado errado.
+  box_body?: {
+    topWall?: PhysicsBody;
+    bottomWall?: PhysicsBody;
+    leftWall?: PhysicsBody;
+    rightWall?: PhysicsBody;
+  };
+  // "simulate" e a passada headless que decide o resultado antes de animar.
+  animstate?: string;
+  eventCollide(event: CollideEvent): void;
 };
 
 // Colorset da lib a partir das preferencias. material "auto" = nao
@@ -204,9 +267,88 @@ export function makeOutlineVisible(box: DiceBoxInstance): void {
   };
 }
 
+/**
+ * Corrige o tamanho do dado depois que o palco encurtou.
+ *
+ * O tamanho aparente do dado e proporcional a `diagonal/altura` do container
+ * (a lib usa `scale = √(w²+h²)/13` e a camera escala com a altura). Encurtar
+ * o palco derruba a diagonal MENOS que a altura, entao o dado cresceria na
+ * tela — ~30% num desktop 1280×833 com faixa de 240px. Este fator devolve o
+ * dado ao tamanho que ele tinha com o palco inteiro.
+ *
+ * Aplicado so na CONSTRUCAO: a `DiceFactory` cacheia a geometria por tipo de
+ * dado no primeiro uso (`scaleGeometry()` e vazio nesta versao da lib), entao
+ * mexer em `baseScale` depois nao teria efeito — e ainda deixaria tipos
+ * diferentes com escalas diferentes. Se a faixa crescer no meio da sessao, o
+ * dado fica alguns por cento maior; e imperceptivel e nao vale a cirurgia no
+ * cache da lib.
+ */
+export function scaleCompensation(
+  width: number,
+  stageHeight: number,
+  viewportHeight: number,
+): number {
+  if (width <= 0 || stageHeight <= 0 || viewportHeight <= stageHeight) return 1;
+  const cheio = Math.hypot(width, viewportHeight) / viewportHeight;
+  const curto = Math.hypot(width, stageHeight) / stageHeight;
+  // Teto em 1 (nunca AUMENTAR o dado) e piso pra um layout torto nao sumir
+  // com ele.
+  return Math.min(1, Math.max(0.5, cheio / curto));
+}
+
+export interface Impact {
+  edge: BarrierEdge;
+  // Posicao em px AO LONGO da borda: x nas horizontais, y nas verticais.
+  pos: number;
+}
+
+/**
+ * Onde o brilho deve nascer, ou `null` quando a colisao nao deve acender.
+ *
+ * As recusas, todas por um motivo concreto:
+ *
+ * - `simulate`: e a passada headless que decide o resultado ANTES de animar.
+ *   Acender ali faria a barreira piscar sem dado nenhum na tela.
+ * - colisao com outro dado, com a mesa, ou com um mundo que ja foi recriado:
+ *   so parede acende.
+ * - lento demais: dado parado encostado na parede continua gerando contato.
+ * - cedo demais NAQUELA borda: varios dados batendo juntos viram um brilho
+ *   so, mas bordas diferentes acendem em paralelo.
+ */
+export function impactAt(
+  event: CollideEvent,
+  ctx: {
+    animstate?: string;
+    // Chaves na orientacao da TELA — quem monta este mapa e que resolve a
+    // inversao de nomes da lib.
+    walls: Partial<Record<BarrierEdge, PhysicsBody | undefined>>;
+    containerWidth: number;
+    containerHeight: number;
+    sinceLast: (edge: BarrierEdge) => number;
+  },
+): Impact | null {
+  if (ctx.animstate === "simulate") return null;
+  const die = event.target;
+  const hit = event.body;
+  if (!die || !hit) return null;
+  const edge = EDGES.find((candidate) => ctx.walls[candidate] === hit);
+  if (edge === undefined) return null;
+  if (die.velocity.length() < IMPACT_MIN_SPEED) return null;
+  if (ctx.sinceLast(edge) < IMPACT_THROTTLE_MS) return null;
+  // Y do mundo cresce pra CIMA; y da tela cresce pra baixo.
+  const pos =
+    edge === "top" || edge === "bottom"
+      ? ctx.containerWidth / 2 + die.position.x * WORLD_TO_PX
+      : ctx.containerHeight / 2 - die.position.y * WORLD_TO_PX;
+  return { edge, pos };
+}
+
 export class DiceBoxRenderer implements RollRenderer {
   private box: DiceBoxInstance | null = null;
   private container: HTMLElement | null = null;
+  // Uma faixa de brilho por borda; cada impacto vira um filho efemero.
+  private barriers: Partial<Record<BarrierEdge, HTMLElement>> = {};
+  private lastImpact: Partial<Record<BarrierEdge, number>> = {};
   // Aparencia atualmente carregada no motor (troca por rolagem de outro
   // jogador; evita recarregar o tema quando nao mudou).
   private currentStyle: DiceStyle | null = null;
@@ -222,15 +364,26 @@ export class DiceBoxRenderer implements RollRenderer {
     // As imagens de textura sao pedidas como
     // `${assetPath}textures/<nome>.webp` — os arquivos vivem em
     // public/textures (copiados do pacote da lib).
+    // O palco ja sobe com a faixa reservada embaixo (stage/floor.ts), entao
+    // o container aqui e mais baixo que a janela — daí a compensacao.
+    const compensacao = scaleCompensation(
+      container.clientWidth,
+      container.clientHeight,
+      window.innerHeight,
+    );
+    // O .d.ts da lib nao declara `setDimensions` nem `eventCollide`, que
+    // existem em runtime (conferido no bundle) e sao o que sustenta a faixa
+    // do pe do palco e o brilho da barreira. Os dois usos tem guarda de
+    // runtime, entao uma versao futura que os remova vira no-op, nao crash.
     const build = (sounds: boolean): DiceBoxInstance =>
       withPatchedContext(() => new DiceBox(`#${container.id}`, {
         assetPath: "./",
         shadows: this.options.shadows,
         light_intensity: this.options.lightIntensity,
         sounds,
-        baseScale: Math.round(100 * this.options.scale),
+        baseScale: Math.round(100 * this.options.scale * compensacao),
         theme_customColorset: toColorset(this.options.style),
-      }));
+      }) as unknown as DiceBoxInstance);
 
     // Som e opcional; dado 3D nao e.
     //
@@ -262,6 +415,103 @@ export class DiceBoxRenderer implements RollRenderer {
     makeOutlineVisible(box);
     this.box = box;
     this.currentStyle = this.options.style;
+    this.mountBarrier(container);
+    this.watchImpacts(box);
+  }
+
+  /** Uma faixa por borda. Vazias enquanto ninguem bate. */
+  private mountBarrier(container: HTMLElement): void {
+    this.barriers = {};
+    for (const edge of EDGES) {
+      const barrier = document.createElement("div");
+      barrier.className = `stage-barrier is-${edge}`;
+      barrier.setAttribute("aria-hidden", "true");
+      // A posicao vem da parede (0.93 do meio pra borda), nao de chute.
+      const inset = `${BARRIER_INSET_PCT}%`;
+      const far = `${100 - BARRIER_INSET_PCT}%`;
+      if (edge === "top") barrier.style.top = inset;
+      else if (edge === "bottom") barrier.style.top = far;
+      else if (edge === "left") barrier.style.left = inset;
+      else barrier.style.left = far;
+      container.appendChild(barrier);
+      this.barriers[edge] = barrier;
+    }
+  }
+
+  /**
+   * Engancha na deteccao de colisao da propria lib.
+   *
+   * Cada dado nasce com `body.addEventListener("collide", this.eventCollide
+   * .bind(this))`, e o `bind` resolve `eventCollide` NA CRIACAO do dado. Como
+   * os dados sao recriados a cada rolagem, trocar o metodo uma vez aqui vale
+   * pra todas as rolagens seguintes.
+   */
+  private watchImpacts(box: DiceBoxInstance): void {
+    if (typeof box.eventCollide !== "function") return;
+    const original = box.eventCollide.bind(box);
+    box.eventCollide = (event: CollideEvent): void => {
+      original(event);
+      // O erro nosso nao pode subir: isto roda dentro do passo da fisica.
+      try {
+        this.onImpact(event);
+      } catch (err: unknown) {
+        console.warn("[rolai] brilho da barreira falhou:", err);
+      }
+    };
+  }
+
+  private onImpact(event: CollideEvent): void {
+    const box = this.box;
+    const container = this.container;
+    if (!box || !container) return;
+    const now = Date.now();
+    // Ler as paredes AGORA: `setDimensions` recria os corpos, e uma
+    // referencia guardada apontaria pro mundo anterior. Aqui tambem e onde a
+    // inversao de nomes da lib e desfeita — `leftWall` fica na DIREITA.
+    const body = box.box_body;
+    const impact = impactAt(event, {
+      animstate: box.animstate,
+      walls: {
+        top: body?.topWall,
+        bottom: body?.bottomWall,
+        left: body?.rightWall,
+        right: body?.leftWall,
+      },
+      containerWidth: container.clientWidth,
+      containerHeight: container.clientHeight,
+      sinceLast: (edge) => now - (this.lastImpact[edge] ?? 0),
+    });
+    if (impact === null) return;
+    this.lastImpact[impact.edge] = now;
+    this.flash(impact);
+  }
+
+  private flash({ edge, pos }: Impact): void {
+    const barrier = this.barriers[edge];
+    if (!barrier || barrier.childElementCount >= MAX_CONCURRENT_HITS) return;
+    const vertical = edge === "left" || edge === "right";
+    const hit = document.createElement("span");
+    hit.className = "stage-barrier-hit";
+    // Nas verticais o clarao e o mesmo traco, deitado 90 graus.
+    const gira = vertical ? " rotate(90deg)" : "";
+    if (vertical) hit.style.top = `${Math.round(pos)}px`;
+    else hit.style.left = `${Math.round(pos)}px`;
+    barrier.appendChild(hit);
+    // WAAPI quando existe (jsdom nao tem `animate`); a classe CSS cuida do
+    // desenho nos dois casos.
+    if (typeof hit.animate === "function") {
+      const anim = hit.animate(
+        [
+          { opacity: 0, transform: `translate(-50%, -50%)${gira} scaleX(0.5)` },
+          { opacity: 1, transform: `translate(-50%, -50%)${gira} scaleX(1)`, offset: 0.2 },
+          { opacity: 0, transform: `translate(-50%, -50%)${gira} scaleX(1.3)` },
+        ],
+        { duration: IMPACT_FLASH_MS, easing: "ease-out" },
+      );
+      void anim.finished.catch(() => undefined).then(() => hit.remove());
+    } else {
+      setTimeout(() => hit.remove(), IMPACT_FLASH_MS);
+    }
   }
 
   async roll(result: RollResult, style?: DiceStyle | null): Promise<void> {
@@ -299,9 +549,24 @@ export class DiceBoxRenderer implements RollRenderer {
     this.box?.clearDice();
   }
 
+  /**
+   * Refaz mundo, camera e paredes com o tamanho atual do container.
+   *
+   * A lib so faria isso sozinha num `window.resize` — quando a faixa do pe do
+   * palco cresce, quem avisa e o `stage/floor.ts`. Chamado SEMPRE entre
+   * rolagens, nunca com dado no ar.
+   */
+  resize(): void {
+    const box = this.box;
+    const container = this.container;
+    if (!box || !container || typeof box.setDimensions !== "function") return;
+    box.setDimensions({ x: container.clientWidth, y: container.clientHeight });
+  }
+
   dispose(): void {
     // A lib nao expoe destroy; remover o canvas basta pra esta etapa.
     this.box = null;
+    this.barriers = {};
     this.container?.replaceChildren();
     this.container = null;
   }

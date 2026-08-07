@@ -45,6 +45,7 @@ import { RoomPanel } from "./components/RoomPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { HistoryList } from "./components/HistoryList";
 import { ResultDisplay } from "./components/ResultDisplay";
+import { useStageFloor } from "./stage/floor";
 import { RosterCard } from "./components/RosterCard";
 import { NotationHelp } from "./components/NotationHelp";
 import { checkCooldown, initialCooldown } from "./rollCooldown";
@@ -93,10 +94,13 @@ export function App() {
   const [modal, setModal] = useState<ModalKind>(null);
 
   const stageRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<RollRenderer | null>(null);
   const clientRef = useRef<RoomClient | null>(null);
   const pendingRef = useRef(new PendingRolls());
   const selfNameRef = useRef("anonymous");
+  // Reserva a faixa do pe do palco com a placa JA na tela e so entao rola.
+  const queueRoll = useStageFloor(stageRef, overlayRef, rendererRef);
 
   // Ciclo de vida do renderer: recria quando o tier ou a aparencia dos dados
   // muda (a dice-box aplica o colorset na inicializacao). Se o 3D falhar
@@ -177,11 +181,15 @@ export function App() {
         return;
       }
       setNotice(null);
-      rendererRef.current?.roll(result, style).catch((err: unknown) => {
-        console.warn("animacao falhou:", err);
+      // Depois do commit: a faixa do pe do palco e medida da placa que
+      // acabou de entrar na tela, e so entao o dado voa (stage/floor.ts).
+      queueRoll(() => {
+        rendererRef.current?.roll(result, style).catch((err: unknown) => {
+          console.warn("animacao falhou:", err);
+        });
       });
     },
-    [],
+    [queueRoll],
   );
 
   // Eventos WS vindos do RoomClient.
@@ -415,7 +423,7 @@ export function App() {
       {/* Palco: overlay fixed acima de TODA a UI (dados voam pela tela
           inteira); o resultado fica num overlay logo acima do canvas. */}
       <div className="stage" ref={stageRef} aria-label="Palco de rolagem" />
-      <div className="stage-overlay">
+      <div className="stage-overlay" ref={overlayRef}>
         {notice !== null && <p className="notice">{notice}</p>}
         <ResultDisplay
           result={lastResult}

@@ -22,6 +22,7 @@ import { TextRenderer } from "./renderers/text";
 import { RoomClient } from "./room/client";
 import type { RoomEvent } from "./room/reducer";
 import { ResultDisplay } from "./components/ResultDisplay";
+import { useStageFloor } from "./stage/floor";
 import type { StreamOptions } from "./stream";
 
 // Tempo com o resultado (e os dados parados) na tela antes de limpar. Na
@@ -55,9 +56,12 @@ export function StreamApp({ options }: { options: StreamOptions }) {
   const [shown, setShown] = useState<Shown | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<RollRenderer | null>(null);
   const clientRef = useRef<RoomClient | null>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Reserva a faixa do pe do palco com a placa JA na tela e so entao rola.
+  const queueRoll = useStageFloor(stageRef, overlayRef, rendererRef);
 
   // Fundo: alpha real (padrao) ou chroma solido. A classe desliga o fundo
   // de tema do body (ver styles.css).
@@ -122,13 +126,16 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       // seq+1 troca a `key` do overlay: no novo, animacao do zero.
       setShown((prev) => ({ result, seq: (prev?.seq ?? 0) + 1 }));
       if (!exceedsAnimationCap(result)) {
-        rendererRef.current?.roll(result, style).catch((err: unknown) => {
-          console.warn("[rolai] animacao falhou:", err);
+        // Depois do commit: a placa precisa estar na tela pra ser medida.
+        queueRoll(() => {
+          rendererRef.current?.roll(result, style).catch((err: unknown) => {
+            console.warn("[rolai] animacao falhou:", err);
+          });
         });
       }
       scheduleClear();
     },
-    [scheduleClear],
+    [scheduleClear, queueRoll],
   );
 
   // Espectador: rolagem dos outros anima; qualquer erro vira mensagem
@@ -193,7 +200,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
         />
       )}
       <div className="stage" ref={stageRef} aria-label="Palco de rolagem" />
-      <div className="stage-overlay">
+      <div className="stage-overlay" ref={overlayRef}>
         {shown !== null && (
           <div key={shown.seq} className="stream-result">
             <ResultDisplay result={shown.result} showDismissHint={false} />
