@@ -105,22 +105,42 @@ describe("roll", () => {
 
   it("keep highest: 4d6kh3", () => {
     const result = roll("4d6kh3", { deterministic: [2, 6, 1, 4] });
-    expect(result.groups["roll"]).toEqual({ rolls: [2, 6, 4], total: 12 });
+    // `dropped` guarda o que caiu fora: a UI mostra os 4 dados, com o
+    // descartado apagado. Sem isso, "4d6kh3" exibia so 3 e escondia metade
+    // do que aconteceu.
+    expect(result.groups["roll"]).toEqual({ rolls: [2, 6, 4], dropped: [1], total: 12 });
   });
 
   it("keep lowest: 4d6kl1", () => {
     const result = roll("4d6kl1", { deterministic: [2, 6, 1, 4] });
-    expect(result.groups["roll"]).toEqual({ rolls: [1], total: 1 });
+    expect(result.groups["roll"]).toEqual({ rolls: [1], dropped: [2, 6, 4], total: 1 });
   });
 
   it("drop highest: 4d6dh1", () => {
     const result = roll("4d6dh1", { deterministic: [2, 6, 1, 4] });
-    expect(result.groups["roll"]).toEqual({ rolls: [2, 1, 4], total: 7 });
+    expect(result.groups["roll"]).toEqual({ rolls: [2, 1, 4], dropped: [6], total: 7 });
   });
 
   it("drop lowest: 4d6dl1", () => {
     const result = roll("4d6dl1", { deterministic: [2, 6, 1, 4] });
-    expect(result.groups["roll"]).toEqual({ rolls: [2, 6, 4], total: 12 });
+    expect(result.groups["roll"]).toEqual({ rolls: [2, 6, 4], dropped: [1], total: 12 });
+  });
+
+  it("sem keep/drop nao existe campo dropped", () => {
+    // Payload identico ao de antes pra quem nao usa keep/drop — e o JSON
+    // que trafega na sala fica menor.
+    expect(roll("2d6", { deterministic: [3, 4] }).groups["roll"]).toEqual({
+      rolls: [3, 4],
+    });
+  });
+
+  it("pool grande mostra tudo que rolou", () => {
+    // O caso que motivou: 10d6kh1 exibia 1 dado de 10.
+    const dados = [3, 1, 6, 2, 5, 4, 6, 1, 2, 3];
+    const result = roll("10d6kh1", { deterministic: dados });
+    const grupo = result.groups["roll"]!;
+    expect(grupo.rolls.length + grupo.dropped!.length).toBe(10);
+    expect(grupo.total).toBe(6);
   });
 
   it("reroll condicional rerola uma vez quem bate a condicao", () => {
@@ -130,10 +150,12 @@ describe("roll", () => {
   });
 
   it("adv mantem o maior; dis mantem o menor", () => {
+    // O dado perdedor fica em `dropped`: vantagem sem mostrar os dois d20
+    // esconde justamente o que torna a rolagem interessante.
     const adv = roll("1d20adv", { deterministic: [7, 15] });
-    expect(adv.groups["roll"]).toEqual({ rolls: [15], total: 15 });
+    expect(adv.groups["roll"]).toEqual({ rolls: [15], dropped: [7], total: 15 });
     const dis = roll("1d20dis", { deterministic: [7, 15] });
-    expect(dis.groups["roll"]).toEqual({ rolls: [7], total: 7 });
+    expect(dis.groups["roll"]).toEqual({ rolls: [7], dropped: [15], total: 7 });
   });
 
   it("grupo vs: arrays separados, sem soma entre grupos", () => {
@@ -211,8 +233,14 @@ describe("pool misto (extensao multi-termo)", () => {
 
   it("roll: keep/drop por termo nao mistura dados de termos diferentes", () => {
     // 4d6kh3 mantem os 3 maiores do PRIMEIRO termo; o d20 nao participa.
+    // O descartado do termo aparece em `dropped` (pra UI mostrar o pool
+    // inteiro) sem entrar no total.
     const result = roll("4d6kh3+1d20", { deterministic: [1, 6, 3, 4, 12] });
-    expect(result.groups["roll"]).toEqual({ rolls: [6, 3, 4, 12], total: 25 });
+    expect(result.groups["roll"]).toEqual({
+      rolls: [6, 3, 4, 12],
+      dropped: [1],
+      total: 25,
+    });
   });
 
   it("roll: multi-termo sempre tem total, mesmo sem modificador", () => {

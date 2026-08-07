@@ -78,6 +78,19 @@ Regras:
   continua sendo o primeiro termo + modificador, pra compatibilidade).
 - O contrato `RollResult`/`RollGroup` não muda.
 
+### Dados descartados (`dropped`)
+
+Keep/drop não some com o dado: `RollGroup.dropped` guarda o que caiu fora,
+na ordem em que caiu. `rolls` continua sendo só o que CONTA no total.
+
+O motivo é de leitura: `4d6kh3` mostrando 3 dados esconde metade do que
+aconteceu, e `10d6kh1` mostrava 1 de 10 — não parecia a rolagem pedida. A
+UI exibe o pool inteiro (descartado apagado e riscado) e o palco 3D rola
+todos.
+
+Campo **ausente** quando não houve descarte — o payload de quem não usa
+keep/drop fica idêntico ao de antes.
+
 ## Saída canônica (contrato entre rules-engine e o resto do sistema)
 
 Todo resultado de rolagem, com ou sem profile, produz este formato — é o

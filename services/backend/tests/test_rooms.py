@@ -255,3 +255,30 @@ def test_weak_custom_code_is_still_refused(client: TestClient) -> None:
     pode virar sala, senao `?room=teste` e sala publica adivinhavel."""
     for fraco in ("teste", "aaaaaaaaaaaaaaaaaaaa", "12341234123412341234", "mesa"):
         assert_ws_rejected(client, f"/rooms/{fraco}", 4404)
+
+
+def test_roll_com_keep_drop_atravessa_a_sala(client: TestClient) -> None:
+    """Rolagem com keep/drop nao pode ser rejeitada no relay.
+
+    O campo `dropped` nasceu no cliente (pra UI mostrar o pool inteiro); se
+    o schema do backend nao o conhecer, `extra=forbid` derruba a rolagem e o
+    dado some pra mesa toda.
+    """
+    code = client.post("/rooms").json()["code"]
+    with client.websocket_connect(f"/rooms/{code}?name=Sergio") as ws:
+        assert next_event(ws)["type"] == "snapshot"
+        ws.send_json(
+            {
+                "type": "roll",
+                "result": {
+                    "notation": "4d6kh3",
+                    "groups": {
+                        "roll": {"rolls": [6, 4, 3], "dropped": [1], "total": 13},
+                    },
+                    "timestamp": "2026-08-07T00:00:00Z",
+                },
+            },
+        )
+        evento = next_event(ws)
+        assert evento["type"] == "roll", evento
+        assert evento["result"]["groups"]["roll"]["dropped"] == [1]

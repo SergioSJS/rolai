@@ -88,6 +88,18 @@ export function ResultDisplay({
                   )}
                 </span>
               ))}
+              {/* Descartados: mesma cara, apagados. A ordem (mantidos
+                  primeiro) mantem o total facil de conferir. */}
+              {group.dropped?.map((value, i) => (
+                <span key={`d${i}`} className="die-chip is-dropped" title="descartado">
+                  {dieFaceLabel(value, group.fudge)}
+                  {group.sides !== null && (
+                    <span className="die-chip-sides">
+                      {group.fudge ? "dF" : `d${group.sides}`}
+                    </span>
+                  )}
+                </span>
+              ))}
               {group.modifier !== undefined && group.modifier !== 0 && (
                 <span className="die-chip die-chip-mod">
                   {group.modifier > 0 ? `+${group.modifier}` : group.modifier}

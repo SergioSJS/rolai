@@ -3,8 +3,6 @@
 
 import type { ConnectionStatus } from "../room/reducer";
 
-import { APK_LATEST_URL } from "../config";
-
 interface MenuBarProps {
   roomCode: string | null;
   roomStatus: ConnectionStatus;
@@ -55,8 +53,15 @@ export function MenuBar({
             {STATUS_DOT[roomStatus]} · <code className="room-code">{roomCode}</code>
           </span>
         )}
+        {/* Ordem por FREQUENCIA de uso: Sala (mexe toda sessao) ->
+            Preferencias -> Ajuda -> Sobre. O APK sai da barra: e acao de
+            uma vez so na vida, e disputava espaco com o que se usa sempre.
+            Mora no Sobre, que e onde se procura "o que mais tem aqui". */}
         <button type="button" className="menu-button" onClick={onOpenRoom}>
           Sala
+        </button>
+        <button type="button" className="menu-button" onClick={onOpenSettings}>
+          Preferências
         </button>
         <button
           type="button"
@@ -66,21 +71,6 @@ export function MenuBar({
         >
           Ajuda
         </button>
-        <button type="button" className="menu-button" onClick={onOpenSettings}>
-          Preferências
-        </button>
-        {/* Link direto pro APK: enterrado so no "Sobre" quase ninguem acha.
-            Escondido no celular por CSS — quem ja esta no Android chega pelo
-            Sobre, e a barra e estreita demais pra mais um item. */}
-        <a
-          className="menu-button menu-apk"
-          href={APK_LATEST_URL}
-          target="_blank"
-          rel="noreferrer"
-          title="Baixar o app Android (fora da Play Store)"
-        >
-          APK
-        </a>
         <button type="button" className="menu-button" onClick={onOpenAbout}>
           Sobre
         </button>

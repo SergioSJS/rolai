@@ -47,7 +47,22 @@ import kotlin.math.abs
  */
 class OverlayView(context: Context) {
 
-    val root: FrameLayout = FrameLayout(context)
+    /**
+     * Raiz do overlay.
+     *
+     * `clipChildren/clipToPadding = false` + padding: a janela e
+     * WRAP_CONTENT, entao terminava exatamente na borda da bolha e a SOMBRA
+     * (elevation) era cortada reto embaixo — uma linha horizontal estranha
+     * atras do botao. O padding da a folga que a sombra precisa pra
+     * desvanecer; como a area extra e transparente e a janela nao e
+     * tocavel fora dos filhos, nao muda o alvo do toque.
+     */
+    val root: FrameLayout = FrameLayout(context).apply {
+        clipChildren = false
+        clipToPadding = false
+        val folga = (14 * context.resources.displayMetrics.density).toInt()
+        setPadding(folga, folga, folga, folga)
+    }
 
     /** ROLAR do painel com o campo vazio: rolagem rapida das configuracoes. */
     var onRollClicked: (() -> Unit)? = null

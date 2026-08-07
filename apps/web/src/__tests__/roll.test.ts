@@ -111,11 +111,21 @@ describe("diceFromResult", () => {
     ]);
   });
 
-  it("funciona pra notacao livre com keep/drop (anima so os mantidos)", () => {
+  it("keep/drop anima TODOS os dados, mantidos e descartados", () => {
+    // Antes so os mantidos rolavam: "4d6kh3" jogava 3 dados na tela e
+    // "10d6kh1" jogava 1 de 10 — nao parecia a rolagem que foi pedida.
     const result = rollFromNotation("4d6kh3");
     const dice = diceFromResult(result);
-    expect(dice).toHaveLength(3);
+    expect(dice).toHaveLength(4);
     expect(dice.every((d) => d.sides === 6)).toBe(true);
+  });
+
+  it("pool grande com keep/drop anima o pool inteiro", () => {
+    expect(diceFromResult(rollFromNotation("10d6kh1"))).toHaveLength(10);
+  });
+
+  it("vantagem anima os dois d20", () => {
+    expect(diceFromResult(rollFromNotation("1d20adv"))).toHaveLength(2);
   });
 });
 
@@ -163,14 +173,21 @@ describe("pool misto (multi-termo)", () => {
     expect(result.groups["roll"]?.total).toBeDefined();
   });
 
-  it("keep/drop por termo: so os mantidos do termo viram dados animados", () => {
+  it("keep/drop por termo: descartado anima junto, sem entrar no total", () => {
     const fixed = roll("4d6kh3+1d20", { deterministic: [1, 6, 3, 4, 12] });
-    expect(fixed.groups["roll"]).toEqual({ rolls: [6, 3, 4, 12], total: 25 });
+    expect(fixed.groups["roll"]).toEqual({
+      rolls: [6, 3, 4, 12],
+      dropped: [1],
+      total: 25,
+    });
+    // O descartado sai com as faces do PRIMEIRO termo do grupo (o keep/drop
+    // pertence a um termo unico — a gramatica nao permite espalhar).
     expect(diceFromResult(fixed)).toEqual([
       { sides: 6, value: 6 },
       { sides: 6, value: 3 },
       { sides: 6, value: 4 },
       { sides: 20, value: 12 },
+      { sides: 6, value: 1 },
     ]);
   });
 

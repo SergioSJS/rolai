@@ -469,41 +469,44 @@ export function App() {
       {modal === "about" && (
         <Modal title="Sobre" onClose={() => setModal(null)}>
           <div className="about">
-            <p>
-              <strong>Rolaí</strong> — dice roller multiplayer pra mesas de RPG.
-              Role dados 3D com física, compartilhe uma sala com a mesa via link
-              e exporte o histórico da sessão.
+            <p className="about-lead">
+              Dice roller multiplayer pra mesas de RPG: dados 3D com física,
+              sala compartilhada por link e histórico exportável.
             </p>
+
+            <h3>Como funciona</h3>
             <p>
-              As rolagens são calculadas localmente pelo rules-engine
-              (Ironsworn, PbtA e FitD embutidos, ou notação livre) e retransmitidas
-              pra sala — todo mundo vê o mesmo resultado.
+              As rolagens são calculadas no seu aparelho (Ironsworn, PbtA,
+              FitD, Fate, d20 e d100 embutidos, ou notação livre) e
+              retransmitidas pra sala — todo mundo vê o mesmo resultado, com o
+              dado na cor de quem rolou.
             </p>
+
+            <h3>App Android</h3>
             <p>
-              <strong>No celular:</strong> o app Android tem um botão flutuante
-              que rola dados por cima de qualquer outro app (leitor de PDF,
-              ficha) e funciona <strong>sem internet</strong> — só a sala
-              precisa de rede.
+              Botão flutuante que rola dados por cima de qualquer outro app —
+              leitor de PDF, ficha, o que estiver aberto. Funciona{" "}
+              <strong>sem internet</strong>: só a sala precisa de rede.
             </p>
-            <p>
-              <a
-                className="apk-link"
-                href={APK_LATEST_URL}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Baixar o APK (Android)
-              </a>
-              <span className="settings-hint">
-                {" "}
-                Não está na Play Store: baixe o arquivo <code>.apk</code> da
-                página de Releases e permita a instalação quando o Android
-                perguntar.
-              </span>
-            </p>
+            <a
+              className="apk-link"
+              href={APK_LATEST_URL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Baixar o APK
+            </a>
             <p className="settings-hint">
-              Dica pra stream: Sala → "Copiar link pro OBS" e cadastre essa
-              URL como Browser Source — só os dados, com fundo transparente.
+              Não está na Play Store — baixe o <code>.apk</code> da página de
+              Releases e permita a instalação quando o Android perguntar.
+            </p>
+
+            <h3>Transmissão (OBS)</h3>
+            <p className="settings-hint">
+              Em <strong>Sala</strong>, use "Copiar link pro OBS" e cadastre a
+              URL como Browser Source: só os dados, com fundo transparente. Um
+              código de sala escolhido por você funciona como mesa fixa — a
+              mesma URL vale pra sempre.
             </p>
           </div>
         </Modal>

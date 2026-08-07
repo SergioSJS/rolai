@@ -2,7 +2,17 @@
 // Todo resultado que trafega pelo WS ou vai pro historico usa este formato.
 
 export interface RollGroup {
+  /** Dados que CONTAM no total (após keep/drop). */
   rolls: number[];
+  /**
+   * Dados descartados pelo keep/drop, na ordem em que caíram.
+   *
+   * Ausente quando não houve descarte. Existe pra UI poder mostrar a
+   * rolagem inteira — `4d6kh3` que exibe só 3 dados esconde metade do que
+   * aconteceu, e em pool grande (`10d6kh1`) fica absurdo: 10 dados rolam,
+   * 1 aparece. O total ignora estes valores.
+   */
+  dropped?: number[];
   modifier?: number;
   total?: number;
 }

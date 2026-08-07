@@ -13,6 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class RollGroup(BaseModel):
     rolls: list[int]
+    # Dados descartados pelo keep/drop ("4d6kh3", "1d20adv"): a UI mostra o
+    # pool inteiro, com o descartado apagado. Sem este campo aqui, uma
+    # rolagem com keep/drop feita por um cliente novo seria REJEITADA na
+    # sala — o backend valida payload por modelo (docs/security.md).
+    dropped: list[int] | None = None
     modifier: int | None = None
     total: int | None = None
 

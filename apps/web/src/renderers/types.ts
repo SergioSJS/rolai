@@ -68,6 +68,19 @@ export function diceFromResult(result: RollResult): RenderedDie[] {
       }
       cursor += count;
     }
+    // Os DESCARTADOS tambem rolam no palco: em "10d6kh1" caia 1 dado na
+    // tela, o que nao parece a rolagem que a pessoa pediu. O keep/drop
+    // sempre pertence a um termo unico (a gramatica nao permite espalhar),
+    // entao todos saem com as faces do primeiro termo do grupo.
+    const dropped = Array.isArray(rolled.dropped) ? rolled.dropped : [];
+    const primeiro = groupSpec.terms[0]?.dice;
+    if (primeiro) {
+      for (const value of dropped) {
+        const die: RenderedDie = { sides: primeiro.sides, value };
+        if (primeiro.fudge) die.fudge = true;
+        dice.push(die);
+      }
+    }
   });
   return dice;
 }

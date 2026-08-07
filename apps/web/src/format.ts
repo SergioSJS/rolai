@@ -69,6 +69,8 @@ export interface DisplayGroup {
   name: string;
   sides: number | null;
   rolls: number[];
+  /** Descartados pelo keep/drop — exibidos apagados, sem entrar no total. */
+  dropped?: number[];
   // Grupo de dado Fudge: o valor e sinal (-1/0/+1), nao numero de face.
   fudge?: boolean;
   modifier?: number;
@@ -98,6 +100,10 @@ export function displayGroups(result: RollResult): DisplayGroup[] {
       sides: spec?.sides ?? null,
       rolls: group.rolls,
     };
+    // Rolagem inteira na tela: "4d6kh3" mostrando so 3 dados esconde
+    // metade do que aconteceu, e "10d6kh1" mostrava 1 de 10.
+    const dropped = Array.isArray(group.dropped) ? group.dropped : undefined;
+    if (dropped !== undefined && dropped.length > 0) display.dropped = dropped;
     if (spec?.fudge) display.fudge = true;
     const modifier = optionalNumber(group.modifier);
     const total = optionalNumber(group.total);

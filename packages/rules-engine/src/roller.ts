@@ -92,6 +92,7 @@ export function rollDice(spec: DiceSpec, state: RollState): RollGroup {
   // Keep/drop: `rolls` final contem apenas os dados mantidos, na ordem
   // original em que cairam.
   let kept = rolls;
+  let dropped: number[] = [];
   if (spec.keepDrop) {
     const { type, count } = spec.keepDrop;
     const ranked = rolls
@@ -109,9 +110,15 @@ export function rollDice(spec: DiceSpec, state: RollState): RollGroup {
       for (const entry of ranked.slice(0, -count)) keepSet.add(entry.index);
     }
     kept = rolls.filter((_, index) => keepSet.has(index));
+    dropped = rolls.filter((_, index) => !keepSet.has(index));
   }
 
   const group: RollGroup = { rolls: kept };
+  // So quando houve descarte: campo ausente mantem o payload identico pra
+  // quem nao usa keep/drop (e o JSON da sala menor).
+  if (dropped.length > 0) {
+    group.dropped = dropped;
+  }
   if (spec.hasModifier) {
     group.modifier = spec.modifier;
   }
@@ -133,13 +140,21 @@ export function rollGroup(groupSpec: GroupSpec, state: RollState): RollGroup {
     return rollDice(groupSpec.dice, state);
   }
   const rolls: number[] = [];
+  // Descartados de TODOS os termos, concatenados. Sem isto, o keep/drop
+  // dentro de pool misto ("4d6kh3+1d20") perdia o descartado no caminho —
+  // o termo unico preservava, o multi-termo nao.
+  const dropped: number[] = [];
   let total = 0;
   for (const term of groupSpec.terms) {
     const termGroup = rollDice(term.dice, state);
     rolls.push(...termGroup.rolls);
+    if (termGroup.dropped) dropped.push(...termGroup.dropped);
     total += term.sign * termGroup.rolls.reduce((sum, v) => sum + v, 0);
   }
   const group: RollGroup = { rolls, total };
+  if (dropped.length > 0) {
+    group.dropped = dropped;
+  }
   if (groupSpec.dice.hasModifier) {
     group.modifier = groupSpec.dice.modifier;
     group.total = total + groupSpec.dice.modifier;

@@ -1489,19 +1489,6 @@ input[type="range"]:focus {
   }
 }
 
-/* Link do APK na barra: e um <a> com cara de botao de menu. */
-.menu-apk {
-  text-decoration: none;
-  color: var(--accent-strong);
-  font-size: 0.82rem;
-  letter-spacing: 0.04em;
-  border: 1px solid var(--panel-border);
-}
-
-.menu-apk:hover {
-  background: var(--chip-bg);
-}
-
 /* Link do APK dentro do "Sobre". */
 .apk-link {
   display: inline-block;
@@ -1517,10 +1504,32 @@ input[type="range"]:focus {
   background: var(--accent-strong);
 }
 
-/* No celular a barra nao tem espaco, e quem ja esta no Android acha o link
-   pelo "Sobre". */
-@media (max-width: 720px) {
-  .menu-apk {
-    display: none;
-  }
+/* Sobre: titulos de secao pra virar documento navegavel em vez de bloco
+   de paragrafos. */
+.about h3 {
+  margin: 1.3rem 0 0.4rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.about h3:first-of-type {
+  margin-top: 1rem;
+}
+
+.about p {
+  margin: 0 0 0.6rem;
+}
+
+.about-lead {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+/* Dado descartado pelo keep/drop: aparece, mas nao compete com o que conta. */
+.die-chip.is-dropped {
+  opacity: 0.38;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
 }
