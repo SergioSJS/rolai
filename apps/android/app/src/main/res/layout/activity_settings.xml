@@ -255,15 +255,23 @@
 
         <!-- Estado da conexao: sem isto nao havia como saber se a sala
              pegou (o botao "Criar" so criava e ficava por isso mesmo). -->
+        <!-- Indicador de conexao: cor + palavra, nao texto cinza miudo.
+             "1 jogador(es)" nao dizia a coisa mais importante — se conectou. -->
         <TextView
             android:id="@+id/txt_room_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:textSize="13sp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_status_chip"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp"
+            android:textColor="#0D1013"
+            android:textSize="15sp"
             android:textStyle="bold"
-            android:textColor="#8B95A1"
-            tools:text="sala: conectado" />
+            tools:text="CONECTADO · mesa-do-sergio · 2 na sala" />
 
         <TextView
             style="@style/Rolai.FieldLabel"

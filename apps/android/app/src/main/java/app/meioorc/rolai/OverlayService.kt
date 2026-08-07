@@ -331,9 +331,9 @@ class OverlayService : Service() {
         roomClient?.disconnect()
         roomClient = null
         if (handshakeUrl == null) {
-            publishStatus(getString(R.string.status_disconnected))
+            publishStatus(getString(R.string.status_disconnected), RoomState.NONE)
         } else {
-            publishStatus(getString(R.string.status_connecting))
+            publishStatus(getString(R.string.status_connecting), RoomState.CONNECTING)
             roomClient = RoomClient(roomListener).also { it.connect(handshakeUrl) }
         }
     }
@@ -347,12 +347,13 @@ class OverlayService : Service() {
             settings.playerName,
             settings,
         )
-        publishStatus(getString(R.string.status_connecting))
+        publishStatus(getString(R.string.status_connecting), RoomState.CONNECTING)
         roomClient = RoomClient(roomListener).also { it.connect(url) }
     }
 
     private val roomListener = object : RoomClient.Listener {
         override fun onConnected() {
+            roomState = RoomState.CONNECTING
             // Ainda NAO e "conectado": o backend aceita o handshake antes de
             // validar a sala (services/backend/app/rooms.py), entao dizer
             // conectado aqui vira mentira de meio segundo quando o codigo nao
@@ -371,14 +372,15 @@ class OverlayService : Service() {
         }
 
         override fun onRoster(memberNames: List<String>) {
-            publishStatus("sala: ${memberNames.size} jogador(es)")
+            // Snapshot chegou: agora sim esta na sala.
+            publishStatus("${memberNames.size} na sala", RoomState.CONNECTED)
         }
 
         override fun onError(message: String) {
             if (message == RoomClient.ERROR_ROOM_NOT_FOUND) {
-                publishStatus(getString(R.string.status_room_not_found))
+                publishStatus(getString(R.string.status_room_not_found), RoomState.ERROR)
             } else {
-                publishStatus("erro: $message")
+                publishStatus("erro: $message", RoomState.ERROR)
             }
         }
 
@@ -388,6 +390,7 @@ class OverlayService : Service() {
                     if (reconnecting) R.string.status_reconnecting
                     else R.string.status_disconnected,
                 ),
+                if (reconnecting) RoomState.CONNECTING else RoomState.ERROR,
             )
         }
     }
@@ -457,9 +460,10 @@ class OverlayService : Service() {
      * Sem isso a tela de config nao tinha como dizer se a sala conectou — o
      * botao "Criar" criava a sala e o usuario ficava no escuro.
      */
-    private fun publishStatus(text: String) {
+    private fun publishStatus(text: String, state: RoomState? = null) {
         android.util.Log.d("rolai", "status: $text")
         roomStatus = text
+        if (state != null) roomState = state
         overlay.setStatus(text)
     }
 
@@ -555,6 +559,17 @@ class OverlayService : Service() {
         /** Ultimo status da sala, lido pela SettingsActivity. */
         @Volatile
         var roomStatus: String = ""
+            private set
+
+        /**
+         * Estado da conexao como DADO, nao como texto. A tela precisa
+         * decidir cor e rotulo; fazer isso lendo a string de status daria
+         * um parser fragil ("1 jogador(es)" nao diz que conectou).
+         */
+        enum class RoomState { NONE, CONNECTING, CONNECTED, ERROR }
+
+        @Volatile
+        var roomState: RoomState = RoomState.NONE
             private set
 
         /**

@@ -263,15 +263,40 @@ class SettingsActivity : Activity() {
      */
     private fun renderRoomStatus() {
         val codigo = editRoomCode.text.toString().trim()
-        txtRoomStatus.text = when {
-            !RolaiSettings.isOverlayEnabled(this) && codigo.isEmpty() ->
-                getString(R.string.room_status_none)
-            !RolaiSettings.isOverlayEnabled(this) ->
-                getString(R.string.room_status_created, codigo)
-            OverlayService.roomStatus.isNotEmpty() -> OverlayService.roomStatus
-            codigo.isEmpty() -> getString(R.string.room_status_none)
-            else -> getString(R.string.status_connecting)
+        val ligado = RolaiSettings.isOverlayEnabled(this)
+        val estado = OverlayService.roomState
+
+        // A palavra vem primeiro e em CAIXA ALTA: o que importa e saber, de
+        // relance, se esta ou nao na sala. Detalhe (codigo, quantos estao
+        // dentro) vem depois.
+        val (rotulo, cor) = when {
+            !ligado && codigo.isEmpty() -> "SEM SALA" to 0xFF3A424B.toInt()
+            !ligado -> "AGUARDANDO" to 0xFFE5C07B.toInt()
+            estado == OverlayService.Companion.RoomState.CONNECTED ->
+                "CONECTADO" to 0xFF25C48F.toInt()
+            estado == OverlayService.Companion.RoomState.CONNECTING ->
+                "CONECTANDO…" to 0xFFE5C07B.toInt()
+            estado == OverlayService.Companion.RoomState.ERROR ->
+                "SEM CONEXÃO" to 0xFFE06C75.toInt()
+            codigo.isEmpty() -> "SEM SALA" to 0xFF3A424B.toInt()
+            else -> "SEM CONEXÃO" to 0xFFE06C75.toInt()
         }
+
+        val detalhe = when {
+            !ligado && codigo.isNotEmpty() ->
+                "$codigo — ative o botão flutuante para conectar"
+            !ligado -> "o dado rola só neste aparelho"
+            codigo.isEmpty() -> "o dado rola só neste aparelho"
+            OverlayService.roomStatus.isNotEmpty() -> "$codigo · ${OverlayService.roomStatus}"
+            else -> codigo
+        }
+
+        txtRoomStatus.text = "$rotulo · $detalhe"
+        txtRoomStatus.backgroundTintList = android.content.res.ColorStateList.valueOf(cor)
+        // Texto escuro sobre chip claro; sobre o cinza de "sem sala", claro.
+        txtRoomStatus.setTextColor(
+            if (rotulo == "SEM SALA") 0xFFE8ECF0.toInt() else 0xFF0D1013.toInt(),
+        )
     }
 
     override fun onResume() {
