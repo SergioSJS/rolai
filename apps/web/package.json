@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "build:headless": "vite build --config vite.headless.config.ts && node scripts/install-headless.mjs",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:stage": "vite build && node scripts/install-stage.mjs"
   },
   "dependencies": {
     "@3d-dice/dice-box-threejs": "^0.0.12",

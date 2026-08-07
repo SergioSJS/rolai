@@ -16,8 +16,8 @@ android {
         applicationId = "app.meioorc.rolai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.10.1"
+        versionCode = 17
+        versionName = "0.11.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -107,6 +107,11 @@ dependencies {
 
     // Roda de cores (HSV) pronta, com barra de brilho — Maven Central.
     implementation("com.github.skydoves:colorpickerview:2.3.0")
+
+    // WebViewAssetLoader: serve os assets do APK como https://
+    // appassets.androidplatform.net — origem SEGURA, requisito do WebGL e do
+    // localStorage. Um file:// nao serve (origem opaca).
+    implementation("androidx.webkit:webkit:1.11.0")
 
     // Cliente WebSocket do OverlayService (sala ativa).
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

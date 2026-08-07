@@ -252,7 +252,10 @@ const DICE_STYLE_KEY = "rolai.dice-style";
 const DICE_SCALE_KEY = "rolai.dice-scale";
 
 export const DEFAULT_QUALITY_TIER: QualityTier = "3d-light";
-export const DEFAULT_THEME: ThemeName = "dark";
+// Feltro por padrao: a mesa e a metafora do app, e o fundo texturizado
+// deixa o dado 3D com cara de rolagem em mesa de verdade. Quem prefere o
+// escuro liso troca em Preferencias.
+export const DEFAULT_THEME: ThemeName = "table";
 
 export function isQualityTier(value: unknown): value is QualityTier {
   return (

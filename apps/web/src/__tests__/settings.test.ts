@@ -57,8 +57,8 @@ describe("quality tier", () => {
 });
 
 describe("tema", () => {
-  it("default e escuro", () => {
-    expect(loadTheme(makeStorage())).toBe("dark");
+  it("default e mesa (feltro) — a metafora do app", () => {
+    expect(loadTheme(makeStorage())).toBe("table");
   });
 
   it("persiste e recupera cada tema", () => {
@@ -70,7 +70,7 @@ describe("tema", () => {
   });
 
   it("ignora valor invalido", () => {
-    expect(loadTheme(makeStorage({ "rolai.theme": "neon" }))).toBe("dark");
+    expect(loadTheme(makeStorage({ "rolai.theme": "neon" }))).toBe("table");
   });
 });
 

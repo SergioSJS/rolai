@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Favicon: mesmo d20 do icone do APK. O SVG e a versao boa (escala em
+         qualquer densidade); o PNG de 192 cobre navegador que ignora SVG, e
+         o apple-touch-icon vale pro atalho no iOS. -->
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
+    <meta name="theme-color" content="#1D9E75" />
+    <title>Rolaí</title>
+    <script type="module" crossorigin src="./assets/index-DIRzuswC.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BUAaGsEQ.css">
+  <link rel="manifest" href="./manifest.webmanifest"></head>
+  <body>
+    <div id="root"></div>
+    <!-- Config de runtime: reescrito pelo entrypoint do container a cada
+         start (infra/web-entrypoint.sh). No dev serve o arquivo vazio de
+         public/config.js. Precisa vir ANTES do bundle. -->
+    <script src="./config.js"></script>
+  </body>
+</html>

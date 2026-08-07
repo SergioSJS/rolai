@@ -9,6 +9,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowManager
 import android.webkit.WebView
+import androidx.webkit.WebViewAssetLoader
 import android.widget.FrameLayout
 
 /**
@@ -57,6 +58,18 @@ class DiceStageWindow(private val context: Context) {
 
     val isAttached: Boolean get() = container != null
 
+    /**
+     * Serve `assets/stage/` como `https://appassets.androidplatform.net/`.
+     *
+     * Tem que ser https e nao file://: WebGL e localStorage exigem ORIGEM
+     * SEGURA, e file:// e origem opaca. Este host e reservado pelo AndroidX
+     * justamente pra isso e nunca sai do aparelho.
+     */
+    private fun assetLoader(): WebViewAssetLoader =
+        WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+            .build()
+
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     fun attach(
         wm: WindowManager,
@@ -78,7 +91,41 @@ class DiceStageWindow(private val context: Context) {
             // localStorage: e de onde a pagina le a qualidade de render.
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
+            // Console da pagina no logcat (tag "rolai"): sem isto, falha de
+            // carga do bundle e erro de JS somem — o palco fica em branco e
+            // nao ha nada pra olhar.
+            webChromeClient = object : android.webkit.WebChromeClient() {
+                override fun onConsoleMessage(
+                    m: android.webkit.ConsoleMessage,
+                ): Boolean {
+                    android.util.Log.d(
+                        "rolai",
+                        "palco[${m.messageLevel()}] ${m.message()} @${m.sourceId()}:${m.lineNumber()}",
+                    )
+                    return true
+                }
+            }
+            val loader = assetLoader()
             webViewClient = object : android.webkit.WebViewClient() {
+                // Intercepta o host local e devolve o arquivo do APK. Todo o
+                // resto (rolai.app, quando configurado) segue pela rede.
+                override fun shouldInterceptRequest(
+                    view: WebView,
+                    request: android.webkit.WebResourceRequest,
+                ): android.webkit.WebResourceResponse? =
+                    loader.shouldInterceptRequest(request.url)
+
+                override fun onReceivedHttpError(
+                    view: WebView,
+                    request: android.webkit.WebResourceRequest,
+                    errorResponse: android.webkit.WebResourceResponse,
+                ) {
+                    android.util.Log.w(
+                        "rolai",
+                        "palco HTTP ${errorResponse.statusCode} em ${request.url}",
+                    )
+                }
+
                 override fun onReceivedError(
                     view: WebView,
                     request: android.webkit.WebResourceRequest,
@@ -91,6 +138,7 @@ class DiceStageWindow(private val context: Context) {
                     // transparente) — a rolagem continua saindo no cartao
                     // do overlay via WebView headless, que e 100% local.
                     // O play() tenta recarregar na proxima rolagem.
+                    android.util.Log.w("rolai", "palco falhou: ${error.description} @${request.url}")
                     stageLoadFailed = true
                     view.loadUrl("about:blank")
                 }
@@ -229,6 +277,43 @@ class DiceStageWindow(private val context: Context) {
          * stream do apps/web. SEM sala tambem vale: o palco fica esperando
          * rolagem pela ponte (play), que e o caminho offline do overlay.
          */
+        /** Host reservado do WebViewAssetLoader — nunca sai do aparelho. */
+        // Aponta pro ARQUIVO, nao pra pasta: o AssetsPathHandler nao faz
+        // "index de diretorio" — terminar em "/stage/" devolvia 404 e o
+        // palco ficava em branco (verificado no logcat).
+        const val LOCAL_STAGE_BASE =
+            "https://appassets.androidplatform.net/assets/stage/index.html"
+
+        /**
+         * Endereco padrao (o de producao, fixado no buildType) significa
+         * "use o palco embarcado". Endereco custom significa "quero aquele
+         * servidor" — inclusive pra desenvolvimento contra o Vite local.
+         */
+        /**
+         * Percent-encoding do que entra na query.
+         *
+         * Nao usa `Uri.encode`: em teste JVM ele e stub e devolve null, o que
+         * fazia a URL inteira sair errada SEM o teste conseguir apontar. Os
+         * valores aqui sao ids e codigos de sala (alfabeto restrito), entao
+         * um encode proprio cobre e fica testavel.
+         */
+        fun encode(valor: String): String = buildString {
+            for (c in valor) {
+                if (c.isLetterOrDigit() || c in "-_.~") {
+                    append(c)
+                } else {
+                    for (b in c.toString().toByteArray(Charsets.UTF_8)) {
+                        append('%').append("%02X".format(b))
+                    }
+                }
+            }
+        }
+
+        fun usaPalcoLocal(webBaseUrl: String): Boolean {
+            val base = webBaseUrl.trim().trimEnd('/')
+            return base.isEmpty() || base == RolaiSettings.DEFAULT_WEB_BASE_URL.trimEnd('/')
+        }
+
         fun streamUrl(
             webBaseUrl: String,
             roomCode: String,
@@ -237,12 +322,21 @@ class DiceStageWindow(private val context: Context) {
             quality: String = "",
             style: RolaiSettings? = null,
         ): String {
-            val base = webBaseUrl.trimEnd('/')
-            val room = if (roomCode.isBlank()) "" else "&room=${android.net.Uri.encode(roomCode)}"
-            val preset = if (dicePreset.isBlank()) "" else "&style=${android.net.Uri.encode(dicePreset)}"
+            // Palco do PROPRIO APK por padrao: o dado 3D roda em modo aviao,
+            // sem rede nenhuma (assets/stage, servido pelo WebViewAssetLoader).
+            // So quando o usuario aponta o app pra OUTRO servidor e que o
+            // palco vem de la — util pra testar um deploy proprio, e o unico
+            // caso em que faz sentido depender da rede pra desenhar dado.
+            val base = if (usaPalcoLocal(webBaseUrl)) {
+                LOCAL_STAGE_BASE
+            } else {
+                webBaseUrl.trimEnd('/')
+            }
+            val room = if (roomCode.isBlank()) "" else "&room=${encode(roomCode)}"
+            val preset = if (dicePreset.isBlank()) "" else "&style=${encode(dicePreset)}"
             // Locale.ROOT: escala com PONTO decimal, independente do idioma.
             val scale = "&scale=" + String.format(java.util.Locale.ROOT, "%.2f", scalePercent / 100f)
-            val tier = if (quality.isBlank()) "" else "&quality=${android.net.Uri.encode(quality)}"
+            val tier = if (quality.isBlank()) "" else "&quality=${encode(quality)}"
             // Aparencia explicita vence o preset no apps/web (stream.ts) — e
             // assim que a cor escolhida no Android chega ao palco, ja que a
             // WebView tem localStorage proprio.
@@ -250,10 +344,12 @@ class DiceStageWindow(private val context: Context) {
                 append("&body=").append(style.diceBody.removePrefix("#"))
                 append("&number=").append(style.diceNumber.removePrefix("#"))
                 append("&outline=").append(style.diceOutline.removePrefix("#"))
-                append("&texture=").append(android.net.Uri.encode(style.diceTexture))
-                append("&material=").append(android.net.Uri.encode(style.diceMaterial))
+                append("&texture=").append(encode(style.diceTexture))
+                append("&material=").append(encode(style.diceMaterial))
             }
-            return "$base/?stream=1$room$preset$scale$tier$appearance"
+            // Base local ja e um arquivo (index.html); base remota e um host.
+            val prefixo = if (base.endsWith(".html")) base else "$base/"
+            return "$prefixo?stream=1$room$preset$scale$tier$appearance"
         }
     }
 }

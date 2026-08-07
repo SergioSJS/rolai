@@ -3,6 +3,11 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // Caminhos RELATIVOS no HTML gerado. O app Android serve este mesmo build
+  // de dentro do APK, numa subpasta (assets/stage/) — com o padrao "/" o
+  // bundle pedia "/assets/..." da raiz do host e nada carregava: o dado 3D
+  // simplesmente nao aparecia. Na web o efeito e nulo (servido da raiz).
+  base: "./",
   // Porta fixa fora do range padrao do Vite (5173+) pra nao colidir com
   // outros dev servers da maquina.
   server: {

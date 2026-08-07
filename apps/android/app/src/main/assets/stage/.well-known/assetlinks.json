@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.meioorc.rolai",
+      "sha256_cert_fingerprints": [
+        "39:9C:F1:F4:FA:D4:DD:33:7A:74:1B:AA:94:28:05:58:59:A1:D6:0F:67:16:AB:6E:02:1E:E7:86:1F:2C:4D:48"
+      ]
+    }
+  }
+]

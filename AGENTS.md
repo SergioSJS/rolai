@@ -123,6 +123,26 @@ barato que validar no nativo. Ver `specs/00-overview.md`.
   `window.rolaiStream.play()` — ver `docs/architecture.md`. No OBS o
   espectador continua certo (é outra máquina, não há quem empurre).
 
+## Palco de dados offline (Android)
+
+O app roda 100% sem rede, menos sala. O palco 3D vem de `assets/stage/`
+(build do `apps/web`), servido por `WebViewAssetLoader` em
+`https://appassets.androidplatform.net/...` — tem que ser https, porque
+WebGL e localStorage exigem origem segura e `file://` é opaca.
+
+Ao mexer nisso:
+
+- `npm run build:stage -w @rolai/web` regenera os assets. Rode quando o web
+  mudar, senão o APK fica com um palco velho.
+- `vite.config.ts` usa `base: "./"`. Caminho absoluto quebra dentro do APK
+  (o palco vive numa subpasta) e o dado some sem erro visível.
+- A URL aponta pro **arquivo** `index.html`, não pra pasta: o
+  `AssetsPathHandler` não faz índice de diretório — terminar em `/` dá 404.
+- Service worker fica fora do APK (não há o que ele resolva ali), e o
+  `install-stage.mjs` remove a tag do `registerSW.js` do HTML.
+- Servidor custom nas preferências volta a usar a rede — é o caminho pra
+  testar outro deploy.
+
 ## Armadilha recorrente deste projeto
 
 A maior parte dos bugs difíceis daqui teve a mesma forma: **código decidindo
