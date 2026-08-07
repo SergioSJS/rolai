@@ -44,6 +44,9 @@ import { RoomPanel } from "./components/RoomPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { HistoryList } from "./components/HistoryList";
 import { ResultDisplay } from "./components/ResultDisplay";
+import { RosterCard } from "./components/RosterCard";
+import { NotationHelp } from "./components/NotationHelp";
+import { checkCooldown, initialCooldown } from "./rollCooldown";
 import { MenuBar } from "./components/MenuBar";
 import { Modal } from "./components/Modal";
 import { useOnline } from "./useOnline";
@@ -53,7 +56,7 @@ function roomParamFromUrl(): string {
   return new URLSearchParams(window.location.search).get("room") ?? "";
 }
 
-type ModalKind = "room" | "settings" | "about" | null;
+type ModalKind = "room" | "settings" | "about" | "help" | null;
 
 export function App() {
   const profiles = useMemo(() => availableProfiles(), []);
@@ -78,6 +81,13 @@ export function App() {
   const [room, dispatch] = useReducer(roomReducer, initialRoomState);
   const [localHistory, setLocalHistory] = useState<HistoryEntry[]>([]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
+  // Quem rolou o que esta na tela (null = eu mesmo, ou rolagem local).
+  const [lastRoller, setLastRoller] = useState<
+    { name: string; style?: DiceStyle | null } | null
+  >(null);
+  // Freio de spam (ver rollCooldown.ts). Em ref porque muda a cada rolagem
+  // e nao deve re-renderizar nada por si.
+  const cooldownRef = useRef(initialCooldown);
   const [notice, setNotice] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
 
@@ -157,8 +167,9 @@ export function App() {
   // `style` = aparencia dos dados de quem rolou (nulo = rolagem local, vale
   // a propria). Cada cliente ve o dado do outro na cor do outro.
   const animate = useCallback(
-    (result: RollResult, style?: DiceStyle | null) => {
+    (result: RollResult, style?: DiceStyle | null, player?: string) => {
       setLastResult(result);
+      setLastRoller(player === undefined ? null : { name: player, style });
       if (exceedsAnimationCap(result)) {
         // Pool grande demais: o resultado vale igual — so nao anima.
         setNotice("Pool grande demais pra animar — mostrando só o resultado.");
@@ -181,7 +192,7 @@ export function App() {
         // no historico (via reducer acima). Rolagem dos outros: anima com a
         // aparencia de dado de quem rolou.
         if (!pendingRef.current.consumeEcho(event.player, event.result)) {
-          animate(event.result, event.style);
+          animate(event.result, event.style, event.player);
         }
       }
     },
@@ -286,7 +297,25 @@ export function App() {
 
   const handleRoll = useCallback(
     (result: RollResult) => {
-      animate(result);
+      // Freio de mesa: so vale com gente junto (ver rollCooldown.ts). O
+      // aviso e a UNICA resposta — engolir o clique sem explicar pareceria
+      // travamento.
+      const veredito = checkCooldown(
+        cooldownRef.current,
+        Date.now(),
+        room.status === "connected" ? room.roster.length : 0,
+      );
+      cooldownRef.current = veredito.state;
+      if (!veredito.allowed) {
+        setNotice(
+          `Calma lá — espere ${veredito.waitSeconds}s para rolar de novo.`,
+        );
+        return;
+      }
+      // "você" tambem na propria rolagem: em sala, a dos outros mostra o
+      // nome e a nossa mostrava nada — ficava parecendo que so o resultado
+      // alheio tem dono. O historico ja usa a mesma palavra.
+      animate(result, undefined, "você");
       const client = clientRef.current;
       if (client && room.status === "connected") {
         pendingRef.current.track(selfNameRef.current, result);
@@ -295,7 +324,7 @@ export function App() {
         setLocalHistory((prev) => [...prev, { player: "você", result }]);
       }
     },
-    [animate, room.status],
+    [animate, room.status, room.roster.length],
   );
 
   const handleTierChange = useCallback((next: QualityTier) => {
@@ -350,6 +379,7 @@ export function App() {
         roomCode={room.code}
         roomStatus={room.status}
         onOpenRoom={() => openModal("room")}
+        onOpenHelp={() => openModal("help")}
         onOpenSettings={() => openModal("settings")}
         onOpenAbout={() => openModal("about")}
       />
@@ -377,6 +407,7 @@ export function App() {
             profile={profiles.find((p) => p.system === system)}
             onRoll={handleRoll}
           />
+          <RosterCard room={room} />
         </aside>
       </div>
 
@@ -385,7 +416,11 @@ export function App() {
       <div className="stage" ref={stageRef} aria-label="Palco de rolagem" />
       <div className="stage-overlay">
         {notice !== null && <p className="notice">{notice}</p>}
-        <ResultDisplay result={lastResult} />
+        <ResultDisplay
+          result={lastResult}
+          player={lastRoller?.name}
+          playerStyle={lastRoller?.style}
+        />
       </div>
 
       {modal === "room" && (
@@ -424,6 +459,12 @@ export function App() {
           />
         </Modal>
       )}
+      {modal === "help" && (
+        <Modal title="Como escrever uma rolagem" onClose={() => setModal(null)}>
+          <NotationHelp />
+        </Modal>
+      )}
+
       {modal === "about" && (
         <Modal title="Sobre" onClose={() => setModal(null)}>
           <div className="about">

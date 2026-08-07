@@ -7,6 +7,7 @@ interface MenuBarProps {
   roomCode: string | null;
   roomStatus: ConnectionStatus;
   onOpenRoom: () => void;
+  onOpenHelp: () => void;
   onOpenSettings: () => void;
   onOpenAbout: () => void;
 }
@@ -23,6 +24,7 @@ export function MenuBar({
   roomCode,
   roomStatus,
   onOpenRoom,
+  onOpenHelp,
   onOpenSettings,
   onOpenAbout,
 }: MenuBarProps) {
@@ -53,6 +55,14 @@ export function MenuBar({
         )}
         <button type="button" className="menu-button" onClick={onOpenRoom}>
           Sala
+        </button>
+        <button
+          type="button"
+          className="menu-button"
+          onClick={onOpenHelp}
+          title="Como escrever uma rolagem"
+        >
+          Ajuda
         </button>
         <button type="button" className="menu-button" onClick={onOpenSettings}>
           Preferências

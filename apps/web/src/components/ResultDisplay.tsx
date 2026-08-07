@@ -4,15 +4,24 @@
 // mostram a composicao em qualquer caso.
 
 import type { RollResult } from "@rolai/rules-engine";
+import type { DiceStyle } from "../settings";
 import { dieFaceLabel, displayGroups, outcomeLabel } from "../format";
+import { PlayerTag } from "./PlayerTag";
 
 export function ResultDisplay({
   result,
+  // Quem rolou. Em sala, saber de quem e o resultado importa tanto quanto o
+  // numero — sem isso, tres pessoas rolando viram tres numeros anonimos.
+  // Ausente = rolagem local (nao ha "outro" pra desambiguar).
+  player,
+  playerStyle,
   // Modo stream/OBS: ninguem clica pra dispensar (some sozinho), entao o
   // hint nao faz sentido na saida da stream.
   showDismissHint = true,
 }: {
   result: RollResult | null;
+  player?: string | null;
+  playerStyle?: DiceStyle | null;
   showDismissHint?: boolean;
 }) {
   // Sem resultado, nada: este overlay fica FIXO acima de toda a UI, entao
@@ -40,7 +49,16 @@ export function ResultDisplay({
         : result.notation;
 
   return (
+    // A caixa existe pro resultado sobreviver a fundo claro/colorido: o
+    // palco e transparente e o texto ficava ilegivel sobre dado claro ou
+    // wallpaper no modo stream.
     <div className="result-display">
+      {typeof player === "string" && player !== "" && (
+        <div className="result-player">
+          <PlayerTag name={player} style={playerStyle} />
+          <span className="result-player-verb">rolou</span>
+        </div>
+      )}
       <div
         className={`result-headline${typeof result.outcome === "string" ? " is-outcome" : ""}`}
       >

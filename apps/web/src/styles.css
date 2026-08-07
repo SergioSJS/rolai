@@ -768,7 +768,34 @@ button:disabled {
 
 .result-display {
   text-align: center;
-  max-width: 100%;
+  max-width: min(92vw, 40rem);
+  /* Caixa translucida: o palco e transparente, entao o resultado ficava
+     ilegivel sobre dado claro, wallpaper ou chroma no modo stream. O blur
+     resolve sem esconder a animacao atras. */
+  padding: 0.9rem 1.4rem 0.8rem;
+  border-radius: 18px;
+  background: rgba(10, 13, 16, 0.62);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* Autor da rolagem. Em sala, o numero sozinho e ambiguo — tres pessoas
+   rolando viram tres numeros sem dono. */
+.result-player {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
+
+.result-player-verb {
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
 }
 
 .result-headline {
@@ -1376,4 +1403,88 @@ input[type="range"]:focus {
 
 .field > label {
   margin-bottom: 0;
+}
+
+/* ---------- Roster no painel lateral ---------- */
+
+.roster-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.roster-card-head h2 {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- Ajuda da notação ---------- */
+
+.notation-intro,
+.notation-foot {
+  color: var(--muted);
+  font-size: 0.86rem;
+  margin: 0 0 1rem;
+}
+
+.notation-foot {
+  margin: 1rem 0 0;
+}
+
+.notation-block h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.notation-block + .notation-block {
+  margin-top: 1.1rem;
+}
+
+.notation-list {
+  margin: 0;
+}
+
+/* Grid em vez de dl solto: o exemplo e a explicacao precisam alinhar em
+   coluna, senao a leitura vira caca ao par. */
+.notation-row {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, auto) 1fr;
+  gap: 0.4rem 0.9rem;
+  align-items: baseline;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.notation-row dt,
+.notation-row dd {
+  margin: 0;
+}
+
+.notation-row code {
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  background: var(--chip-bg);
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  color: var(--text);
+}
+
+.notation-row dd {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+@media (max-width: 520px) {
+  .notation-row {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
 }
