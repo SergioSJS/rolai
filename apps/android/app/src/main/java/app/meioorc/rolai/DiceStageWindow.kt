@@ -130,10 +130,25 @@ class DiceStageWindow(private val context: Context) {
         val base = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        p.flags = if (interactive) {
-            base
+        if (interactive) {
+            p.flags = base
+            p.alpha = 1f
         } else {
-            base or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            p.flags = base or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            // ALPHA ZERO parado, e nao o 0.8 do clamp.
+            //
+            // Janela NOT_TOUCHABLE tem o alpha CLAMPADO em 0.8 pelo sistema
+            // (anti-tapjacking). O toque atravessa, mas 0.8 e exatamente o
+            // limiar em que o Android considera a tela "obscurecida": app que
+            // liga filterTouchesWhenObscured (GitHub, telas da Play Store,
+            // bancos) passa a DESCARTAR os proprios toques enquanto o palco
+            // existir — o app parece travado, sem erro nenhum.
+            // developer.android.com/privacy-and-security/risks/tapjacking
+            //
+            // Parado o palco nao desenha nada, entao alpha 0 nao muda o que
+            // se ve e tira a janela do limiar. Ao animar, a janela vira
+            // tocavel (sem clamp) e volta pra 1.
+            p.alpha = 0f
         }
         runCatching { wm.updateViewLayout(view, p) }
     }
@@ -199,7 +214,12 @@ class DiceStageWindow(private val context: Context) {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
-        ).apply { gravity = Gravity.TOP or Gravity.START }
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            // Nasce invisivel e fora do limiar de obscurecimento (ver
+            // setInteractive) — o palco so aparece quando ha dado rolando.
+            alpha = 0f
+        }
     }
 
     companion object {
