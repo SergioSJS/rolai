@@ -198,8 +198,13 @@ class OverlayView(context: Context) {
         historyPanel = buildHistoryPanel(context)
         historyPanel.visibility = View.GONE
         roomPanel = buildRoomPanel(context)
-        systemPanel = buildSystemPanel(context)
         roomPanel.visibility = View.GONE
+        systemPanel = buildSystemPanel(context)
+        // Sem isto o painel de inputs nasce VISIVEL: ligar o botao flutuante
+        // mostrava um cartao vazio com o botao ROLAR em vez da bolha, toda
+        // vez. O `setMode` nunca roda na criacao — quem esconde os paineis no
+        // inicio e esta linha, uma por painel.
+        systemPanel.visibility = View.GONE
 
         // Flash de resultado da rolagem pelo atalho: compacto, some sozinho
         // (RESULT_FLASH_MS) ou ao toque. NAO abre o cartao de historico.

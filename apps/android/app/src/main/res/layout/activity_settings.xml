@@ -33,6 +33,22 @@
             android:textColor="#8B95A1"
             android:textSize="14sp" />
 
+        <!-- Aviso de versao nova: no TOPO, logo abaixo da marca. Embaixo,
+             junto do numero da versao, so era visto por quem rolava a tela
+             inteira — e ninguem rola configuracao pra achar novidade.
+             Nasce GONE; so aparece quando a API do GitHub responde com uma
+             release maior que a instalada. -->
+        <TextView
+            android:id="@+id/txt_update"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="#12261F"
+            android:padding="12dp"
+            android:textColor="#2EE6A8"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
         <Button
             android:id="@+id/btn_open_twa"
             android:layout_width="match_parent"
@@ -349,19 +365,6 @@
             android:layout_marginTop="8dp"
             android:textColor="#9AA6B2"
             android:textSize="14sp" />
-
-        <!-- Aviso de versao nova. Nasce GONE e so aparece quando a API do
-             GitHub responde com uma release maior — offline nao mostra nada. -->
-        <TextView
-            android:id="@+id/txt_update"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="#12261F"
-            android:padding="12dp"
-            android:textColor="#2EE6A8"
-            android:textSize="14sp"
-            android:visibility="gone" />
 
     </LinearLayout>
 </ScrollView>
