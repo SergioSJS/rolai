@@ -60,6 +60,8 @@ class OverlayView(context: Context) {
     val root: FrameLayout = FrameLayout(context).apply {
         clipChildren = false
         clipToPadding = false
+        // Mesmo valor de OverlayService.SHADOW_PAD_DP: o serviço compensa
+        // esta folga no x da janela pra bolha ficar rente à borda.
         val folga = (14 * context.resources.displayMetrics.density).toInt()
         setPadding(folga, folga, folga, folga)
     }

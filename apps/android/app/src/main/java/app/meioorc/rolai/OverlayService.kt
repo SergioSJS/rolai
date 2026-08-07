@@ -225,6 +225,8 @@ class OverlayService : Service() {
 
     // ---------- foreground + notificacao ----------
 
+    private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
+
     private fun startForegroundWithNotification() {
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
@@ -289,7 +291,12 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 0
+            // NEGATIVO de propósito: a raiz do overlay tem padding pra a
+            // sombra caber (senão ela é cortada reto embaixo — ver
+            // OverlayView.root), e esse padding empurrava a bolha pra longe
+            // da borda. Compensa quase toda a folga: sobram ~2dp de respiro,
+            // sem jogar parte da bolha pra fora da tela.
+            x = -(SHADOW_PAD_DP - 2).dpToPx()
             y = 200
         }
         overlay.bindDrag(windowManager, overlayParams)
@@ -565,6 +572,9 @@ class OverlayService : Service() {
          * reconexoes.
          */
         private const val SETTINGS_DEBOUNCE_MS = 700L
+
+        /** Folga da raiz do overlay pra sombra (mesmo valor de OverlayView). */
+        const val SHADOW_PAD_DP = 14
 
         const val ACTION_START = "app.meioorc.rolai.action.START"
         const val ACTION_STOP = "app.meioorc.rolai.action.STOP"
