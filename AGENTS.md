@@ -62,34 +62,51 @@ docker compose -f infra/docker-compose.yml up
 ```
 
 Todo PR deve rodar limpo: `npm test` (rules-engine e web), `pytest`
-(backend), `ruff check` e `mypy` (backend), lint do Android (se módulo
-android for tocado).
+(backend), `ruff check` e `mypy` (backend), `./gradlew testDebugUnitTest`
+(Android, se o módulo for tocado).
+
+Os testes instrumentados do Android NÃO rodam no CI (emulador em Actions é
+lento e instável) — rode `apps/android/scripts/run-instrumented.sh` num
+aparelho antes de gerar release. Eles cobrem justamente o que teste JVM não
+alcança: ciclo de vida do Service e a janela do overlay.
 
 ## Segurança — não pular
 
 Ver `docs/security.md` para a lista completa. Os pontos que mais importam
 pra revisão de PR:
 
-- Código de sala não pode ser previsível/sequencial (usar gerador
-  criptograficamente aleatório, não incremental).
+- Código de sala GERADO pelo backend usa CSPRNG, nunca sequencial.
+- Código ESCOLHIDO pelo usuário é permitido — decisão consciente de
+  2026-08-06, registrada em `docs/security.md`. Serve pra mesa fixa (a
+  Browser Source do OBS aponta pro mesmo endereço pra sempre) e pra link
+  compartilhado que expirou. Vem com piso de entropia
+  (`is_valid_custom_code`: >=16 caracteres, >=8 distintos), replicado em
+  `apps/web/src/room/code.ts` e `RolaiSettings.customCodeIssue` só pra dizer
+  o motivo antes de gastar conexão. **Não "conserte" isso achando que é
+  falha**: o piso e o rate limit por IP são a defesa, e quem escolhe o
+  código aceita que quem tiver o link entra.
 - Rate limit por conexão WS (evitar flood de rolagens).
 - Validação de payload sempre via modelo Pydantic — nunca aceitar dict cru.
 - Nenhuma permissão Android além do estritamente necessário
   (`SYSTEM_ALERT_WINDOW` só quando o usuário ativa o overlay explicitamente).
 - CORS restrito ao(s) domínio(s) do frontend, nunca `*` em produção.
-- O IP do cliente vem do primeiro `X-Forwarded-For` e isso só vale porque o
-  Traefik é o único proxy na frente. Se entrar CDN/proxy no caminho
-  (Cloudflare em nuvem laranja), o header vira forjável e os limites param
-  de valer — ver `docs/security-cloudflare.md` antes de mexer.
+- **A Cloudflare está em nuvem laranja** (desde 2026-08-06), então o IP do
+  cliente vem de `CF-Connecting-IP`, e não do primeiro `X-Forwarded-For` —
+  atrás da CF esse header é forjável pelo cliente. O bypass direto ao VPS é
+  fechado por `ipAllowList` nos routers do rolai. Mexer em limite por IP sem
+  ler `docs/security-cloudflare.md` fura os três limites de abuso de uma vez.
 
 ## Ordem de implementação sugerida
 
-Ver `specs/00-overview.md` para o roadmap completo. Resumo: rules-engine
-primeiro (testável isoladamente, sem rede nem UI) -> backend relay -> web
-(integra os dois, testável 100% no browser) -> só depois o app Android.
-Não pule pro Android antes da fatia web estar funcionando fim-a-fim — é
-onde a maior parte do risco técnico do projeto mora, e validar lá é mais
-barato que validar no nativo.
+**As quatro etapas estão concluídas e em produção** (rolai.app +
+api.rolai.app, APK assinado nas Releases). A ordem abaixo fica como registro
+do porquê, e vale pra qualquer fatia nova:
+
+rules-engine primeiro (testável isoladamente, sem rede nem UI) -> backend
+relay -> web (integra os dois, testável 100% no browser) -> só depois o
+Android. Não pule pro Android antes da fatia web estar funcionando
+fim-a-fim — é onde a maior parte do risco técnico mora, e validar lá é mais
+barato que validar no nativo. Ver `specs/00-overview.md`.
 
 ## O que NÃO fazer
 
@@ -99,3 +116,27 @@ barato que validar no nativo.
 - Não adicione WebRTC/P2P — decisão já tomada em `docs/architecture.md`,
   não revisitar sem justificativa nova.
 - Não trave em polimento visual antes do fluxo de dados fim-a-fim funcionar.
+- Não faça o palco de dados do Android voltar a entrar na sala como
+  espectador. Era uma segunda conexão WS por aparelho e a animação inteira
+  dependia dela: quando não subia, o dado simplesmente não aparecia, sem
+  erro em lugar nenhum. Hoje o Service empurra por
+  `window.rolaiStream.play()` — ver `docs/architecture.md`. No OBS o
+  espectador continua certo (é outra máquina, não há quem empurre).
+
+## Armadilha recorrente deste projeto
+
+A maior parte dos bugs difíceis daqui teve a mesma forma: **código decidindo
+por "existe" em vez de "funcionou"**.
+
+- `roomClient != null` significa "tem código de sala salvo", não "conectado"
+  — a rolagem sumia sem erro quando a sala estava fora do ar;
+- palco anexado ao WindowManager ≠ palco animando;
+- flag estática de service ligada ≠ instância montada (crash ao religar).
+
+Some-se a isso que `try/catch` **não pega promise pendente**: `initialize()`
+e `updateConfig()` da dice-box travam em vez de rejeitar quando um asset não
+carrega, e o efeito é "não acontece nada, sem log". Onde houver `await` numa
+lib de terceiro que carrega recurso, prefira corrida com relógio.
+
+Quando algo "simplesmente não acontece" e não há erro, suspeite dessas duas
+famílias antes de procurar em outro lugar.
