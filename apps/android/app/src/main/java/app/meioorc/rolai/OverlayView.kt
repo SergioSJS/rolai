@@ -55,6 +55,19 @@ class OverlayView(context: Context) {
     /** ROLAR com notacao montada nos chips ou digitada no campo. */
     var onRollNotation: ((String) -> Unit)? = null
 
+    /**
+     * Composicao adotada como rolagem do botao.
+     *
+     * Montar o pool e minimizar SEM rolar nao mudava nada: o botao recolhido
+     * dispara a notacao das configuracoes, e a composicao vivia so no campo
+     * do painel. Quem compoe espera que aquilo passe a ser "a rolagem" —
+     * entao ao recolher, o que estiver escrito vira a rolagem rapida.
+     */
+    var onComposedNotation: ((String) -> Unit)? = null
+
+    /** Desligar o botao flutuante sem passar pela tela de configuracoes. */
+    var onCloseOverlay: (() -> Unit)? = null
+
     /** Mini-bolha de rolagem do fan: ultima rolagem, ou a configurada. */
     var onQuickRoll: (() -> Unit)? = null
     var onOpenApp: (() -> Unit)? = null
@@ -109,7 +122,9 @@ class OverlayView(context: Context) {
             imageTintList = ColorStateList.valueOf(Color.WHITE)
             val pad = 14.dp()
             setPadding(pad, pad, pad, pad)
-            background = rippled(circle(ACCENT))
+            background = rippled(
+                circle(ACCENT).apply { setStroke(2.dp(), ACCENT_BRIGHT) },
+            )
             elevation = 6.dp().toFloat()
             contentDescription = "rolai — abrir acoes de rolagem"
             layoutParams = FrameLayout.LayoutParams(56.dp(), 56.dp())
@@ -185,10 +200,13 @@ class OverlayView(context: Context) {
     ): ImageView =
         ImageView(context).apply {
             setImageResource(iconRes)
-            imageTintList = ColorStateList.valueOf(TEXT)
+            imageTintList = ColorStateList.valueOf(ACCENT_BRIGHT)
             val pad = 11.dp()
             setPadding(pad, pad, pad, pad)
-            background = rippled(circle(PANEL))
+            // Escuro, mas puxado pro verde da marca e com aro visivel: em
+            // PANEL puro as mini-bolhas sumiam sobre fundo escuro e nao
+            // pareciam do mesmo app que a bolha principal.
+            background = rippled(circle(FAN_BG).apply { setStroke(1.dp(), ACCENT) })
             elevation = 6.dp().toFloat()
             contentDescription = description
             layoutParams = LinearLayout.LayoutParams(44.dp(), 44.dp()).apply {
@@ -315,6 +333,15 @@ class OverlayView(context: Context) {
                 actionButton(context, R.string.overlay_action_open_app) {
                     onOpenApp?.invoke()
                 },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            // Fechar aqui: desligar o botao exigia abrir as configuracoes e
+            // achar o toggle — caminho longo demais pra uma acao que se quer
+            // fazer no meio de outro app.
+            addView(
+                actionButton(context, R.string.overlay_action_close) {
+                    onCloseOverlay?.invoke()
+                }.apply { setTextColor(DANGER) },
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
             )
         }
@@ -461,17 +488,27 @@ class OverlayView(context: Context) {
             },
         )
 
-    private fun rippled(content: GradientDrawable): RippleDrawable =
-        RippleDrawable(ColorStateList.valueOf(RIPPLE), content, null)
+    /**
+     * Ripple COM mascara. Sem o terceiro argumento o efeito e ilimitado e,
+     * sobre fundo transparente, some — os botoes "limpar/config/abrir app"
+     * pareciam texto morto: o toque nao dava sinal nenhum.
+     */
+    private fun rippled(content: GradientDrawable, mask: GradientDrawable? = null): RippleDrawable =
+        RippleDrawable(ColorStateList.valueOf(RIPPLE), content, mask ?: content)
 
     private fun actionButton(context: Context, resId: Int, onClick: () -> Unit): TextView =
         TextView(context).apply {
             setText(resId)
-            setTextColor(MUTED)
+            // Texto claro sobre superficie propria: em MUTED e fundo
+            // transparente nao parecia clicavel.
+            setTextColor(TEXT)
             textSize = 12f
             gravity = Gravity.CENTER
-            background = rippled(pill(Color.TRANSPARENT))
+            background = rippled(
+                pill(SURFACE).apply { setStroke(1.dp(), BORDER) },
+            )
             setPadding(4.dp(), 10.dp(), 4.dp(), 10.dp())
+            isClickable = true
             setOnClickListener { onClick() }
         }
 
@@ -549,6 +586,13 @@ class OverlayView(context: Context) {
     }
 
     private fun setMode(newMode: Mode) {
+        // Saindo do painel: adota o que foi composto (ver onComposedNotation).
+        if (mode == Mode.PANEL && newMode != Mode.PANEL) {
+            val composto = notationInput.text.toString().trim()
+            if (composto.isNotEmpty() && composto != quickNotation) {
+                onComposedNotation?.invoke(composto)
+            }
+        }
         mode = newMode
         bubble.visibility =
             if (newMode == Mode.PANEL || newMode == Mode.HISTORY) View.GONE else View.VISIBLE
@@ -659,7 +703,12 @@ class OverlayView(context: Context) {
         private val PANEL = Color.rgb(0x14, 0x18, 0x1C)
         private val BORDER = Color.argb(0x1A, 0xFF, 0xFF, 0xFF)
         private val CHIP = Color.argb(0x14, 0xFF, 0xFF, 0xFF)
-        private val RIPPLE = Color.argb(0x33, 0xFF, 0xFF, 0xFF)
+        // Ripple esverdeado: o branco puro sumia sobre o painel escuro.
+        private val RIPPLE = Color.argb(0x66, 0x25, 0xC4, 0x8F)
+        // Superficie de botao dentro do painel e fundo das mini-bolhas.
+        private val SURFACE = Color.argb(0x1F, 0x25, 0xC4, 0x8F)
+        private val FAN_BG = Color.rgb(0x10, 0x2A, 0x22)
+        private val DANGER = Color.rgb(0xE0, 0x6C, 0x75)
         private val TEXT = Color.rgb(0xE8, 0xEC, 0xF0)
         private val MUTED = Color.rgb(0x8B, 0x95, 0xA1)
         private const val MAX_ACTIVITY_LINES = 3

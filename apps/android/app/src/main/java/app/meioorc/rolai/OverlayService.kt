@@ -121,6 +121,18 @@ class OverlayService : Service() {
         overlay.onRollClicked = ::rollNow
         overlay.onQuickRoll = { (lastRollAction ?: ::rollNow).invoke() }
         overlay.onRollNotation = { notation -> rollNotation(notation) }
+        overlay.onComposedNotation = { notation ->
+            // Compor e minimizar SEM rolar nao mudava nada: o botao recolhido
+            // dispara a rolagem rapida das configuracoes, e a composicao vivia
+            // so no campo do painel. Adotar aqui faz a composicao virar "a
+            // rolagem" — incluindo a mini-bolha, que repete a ultima.
+            lastRollAction = { headlessRoller.roll(notation) }
+            getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_LAST_ROLL, notation)
+                .apply()
+            overlay.setQuickNotation(notation)
+        }
         lastQuickKey = quickKeyOf(settings)
         overlay.setQuickNotation(settings.notation)
         overlay.onWindowFocusMode = ::setOverlayFocusable
@@ -130,6 +142,13 @@ class OverlayService : Service() {
         loadLastRoll()?.let { saved -> lastRollAction = { headlessRoller.roll(saved) } }
         overlay.onOpenApp = { launchFromOverlay(TwaActivity.intentFor(this)) }
         overlay.onOpenSettings = { launchFromOverlay(Intent(this, SettingsActivity::class.java)) }
+        overlay.onCloseOverlay = {
+            // Mesma coisa que desligar o toggle: apaga a preferencia ANTES de
+            // parar, senao o onCreate do proximo start religaria (o service so
+            // vive enquanto a preferencia estiver ligada).
+            RolaiSettings.setOverlayEnabled(this, false)
+            stopSelf()
+        }
 
         if (RolaiSettings.hasRoom(settings)) {
             connectRoom(settings)

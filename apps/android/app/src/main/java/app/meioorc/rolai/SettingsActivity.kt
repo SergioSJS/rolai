@@ -135,41 +135,7 @@ class SettingsActivity : Activity() {
                 RolaiSettings.MATERIAL_LABELS,
             )
         }
-        buildPalette(
-            findViewById(R.id.palette_body),
-            getString(R.string.label_color_body),
-            { colorBody },
-        ) { color ->
-            colorBody = color
-            // Harmonia ligada: numero e contorno saem do corpo (ver
-            // DiceHarmony) — evita o dado ilegivel de tres cores soltas.
-            if (switchHarmony.isChecked) {
-                colorNumber = DiceHarmony.numberFor(color)
-                colorOutline = DiceHarmony.outlineFor(color)
-            }
-            renderPreview()
-            saveFromViews()
-        }
-        buildPalette(
-            findViewById(R.id.palette_number),
-            getString(R.string.label_color_number),
-            { colorNumber },
-        ) { color ->
-            colorNumber = color
-            switchHarmony.isChecked = false
-            renderPreview()
-            saveFromViews()
-        }
-        buildPalette(
-            findViewById(R.id.palette_outline),
-            getString(R.string.label_color_outline),
-            { colorOutline },
-        ) { color ->
-            colorOutline = color
-            switchHarmony.isChecked = false
-            renderPreview()
-            saveFromViews()
-        }
+        buildPalettes()
         switchHarmony = findViewById<Switch>(R.id.switch_harmony).apply {
             setOnCheckedChangeListener { _, checked ->
                 if (!checked) return@setOnCheckedChangeListener
@@ -195,6 +161,9 @@ class SettingsActivity : Activity() {
 
         loadSystemsFromAssets()
         loadIntoViews(RolaiSettings.load(this))
+        // Depois de carregar: a paleta foi montada com as cores padrao, e o
+        // aro de "selecionada" precisa refletir o que estava salvo.
+        buildPalettes()
 
         switchOverlay.setOnCheckedChangeListener { _, isChecked ->
             if (updatingSwitch) return@setOnCheckedChangeListener
@@ -558,6 +527,52 @@ class SettingsActivity : Activity() {
      * clicaveis (RolaiSettings.PALETTE). Suficiente pro caso de uso e
      * previsivel — color picker completo seria biblioteca nova.
      */
+    /**
+     * (Re)constroi as tres paletas. Reconstruir depois de cada escolha e o
+     * que faz o aro de "selecionada" migrar — a paleta e desenhada uma vez
+     * no onCreate, entao sem isto o indicador ficaria preso na cor inicial.
+     */
+    private fun buildPalettes() {
+        buildPalette(
+            findViewById(R.id.palette_body),
+            getString(R.string.label_color_body),
+            { colorBody },
+        ) { color ->
+            colorBody = color
+            // Harmonia ligada: numero e contorno saem do corpo (ver
+            // DiceHarmony) — evita o dado ilegivel de tres cores soltas.
+            if (switchHarmony.isChecked) {
+                colorNumber = DiceHarmony.numberFor(color)
+                colorOutline = DiceHarmony.outlineFor(color)
+            }
+            renderPreview()
+            saveFromViews()
+            buildPalettes()
+        }
+        buildPalette(
+            findViewById(R.id.palette_number),
+            getString(R.string.label_color_number),
+            { colorNumber },
+        ) { color ->
+            colorNumber = color
+            switchHarmony.isChecked = false
+            renderPreview()
+            saveFromViews()
+            buildPalettes()
+        }
+        buildPalette(
+            findViewById(R.id.palette_outline),
+            getString(R.string.label_color_outline),
+            { colorOutline },
+        ) { color ->
+            colorOutline = color
+            switchHarmony.isChecked = false
+            renderPreview()
+            saveFromViews()
+            buildPalettes()
+        }
+    }
+
     private fun buildPalette(
         row: android.widget.LinearLayout,
         title: String,
@@ -586,16 +601,25 @@ class SettingsActivity : Activity() {
             android.widget.LinearLayout.LayoutParams(size, size).apply { marginEnd = gap },
         )
 
+        // Qual esta escolhida: sem isto a paleta nao dava NENHUM indicio do
+        // que estava selecionado — so dava pra saber olhando a previa. Aro
+        // grosso e claro no escolhido, fino e discreto nos demais.
+        val escolhida = currentColor().lowercase()
         for (hex in RolaiSettings.PALETTE) {
+            val selecionada = hex.equals(escolhida, ignoreCase = true)
             val dot = View(this).apply {
                 background = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.OVAL
                     setColor(android.graphics.Color.parseColor(hex))
                     setStroke(
-                        (1 * resources.displayMetrics.density).toInt(),
-                        android.graphics.Color.argb(0x55, 0xFF, 0xFF, 0xFF),
+                        ((if (selecionada) 3 else 1) * resources.displayMetrics.density).toInt(),
+                        if (selecionada) android.graphics.Color.WHITE
+                        else android.graphics.Color.argb(0x55, 0xFF, 0xFF, 0xFF),
                     )
                 }
+                contentDescription = if (selecionada) "cor selecionada" else hex
+                // Sem isto o toque na paleta nao dava retorno nenhum.
+                isClickable = true
                 setOnClickListener { onPick(hex) }
             }
             row.addView(

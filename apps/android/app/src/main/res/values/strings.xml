@@ -43,6 +43,7 @@
     <string name="overlay_action_clear">limpar</string>
     <string name="overlay_action_settings">config</string>
     <string name="overlay_action_open_app">abrir app</string>
+    <string name="overlay_action_close">fechar</string>
     <string name="label_dice_preset">Estilo</string>
     <string name="section_general">Botão flutuante</string>
     <string name="section_room">Conexão e sala</string>
