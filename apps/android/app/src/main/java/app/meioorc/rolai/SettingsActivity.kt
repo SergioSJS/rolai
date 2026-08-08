@@ -62,10 +62,13 @@ class SettingsActivity : Activity() {
 
     // Guarda contra o listener do switch disparar em setChecked programatico.
     private var updatingSwitch = false
+    // Idem pro spinner de preset: so aplica preset quando veio de toque.
+    private var presetTocado = false
     // O usuario ligou o toggle e foi mandado pra tela de permissao do
     // sistema; ao voltar (onResume) com a permissao concedida, ativa.
     private var pendingOverlayEnable = false
 
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
@@ -195,8 +198,26 @@ class SettingsActivity : Activity() {
         for (campo in listOf(editRoomCode, editName, editNotation, editServer)) {
             campo.onFocusChangeListener = saveOnBlur
         }
+        // O AdapterView dispara onItemSelected sozinho depois do primeiro
+        // layout, INCLUSIVE pra selecao feita em codigo — e o disparo roda
+        // depois do listener ja estar instalado, entao atribuir o listener
+        // "depois do setSelection" nao protege nada. Mesma familia do
+        // updatingSwitch aqui em cima.
+        //
+        // Nos outros spinners isso so re-salvava o mesmo valor. Neste nao: o
+        // listener APLICA UM PRESET, e preset sobrescreve as tres cores. O
+        // efeito era a cor escolhida a mao ser apagada toda vez que a tela
+        // abria, voltando pra do preset salvo — quase sempre o esmeralda,
+        // dai "escolho claro e sai escuro".
+        //
+        // So conta como escolha o que veio de TOQUE.
+        spinnerDice.setOnTouchListener { _, _ ->
+            presetTocado = true
+            false // nao consome: o spinner continua abrindo normalmente
+        }
         spinnerDice.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                if (!presetTocado) return
                 // Trocar de preset reescreve as cores (o preset E um atalho).
                 applyPreset(RolaiSettings.DICE_PRESET_IDS[pos])
                 saveFromViews()
