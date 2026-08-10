@@ -295,6 +295,23 @@
             android:inputType="textUri"
             android:textColor="#E8ECF0" />
 
+        <!-- Endereco que o botao "Abrir o rolai.app" carrega. Existia so como
+             preferencia, sem campo: numa build de DEBUG o padrao e o Vite da
+             maquina (localhost:5273) e o botao falhava sem ter como corrigir
+             pela tela. O palco 3D nao depende disto — ele vem do proprio APK
+             (ver DiceStageWindow.usaPalcoLocal). -->
+        <TextView
+            style="@style/Rolai.FieldLabel"
+            android:text="@string/web_label" />
+
+        <EditText
+            android:id="@+id/edit_web"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:importantForAutofill="no"
+            android:inputType="textUri"
+            android:textColor="#E8ECF0" />
+
         <TextView
             style="@style/Rolai.FieldLabel"
             android:text="@string/room_code_label" />

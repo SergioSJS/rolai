@@ -38,6 +38,7 @@ class SettingsActivity : Activity() {
     private lateinit var spinnerDice: Spinner
     private lateinit var inputsForm: LinearLayout
     private lateinit var editServer: EditText
+    private lateinit var editWeb: EditText
     private lateinit var seekScale: android.widget.SeekBar
     private lateinit var txtScaleLabel: TextView
     private lateinit var txtRoomStatus: TextView
@@ -159,6 +160,7 @@ class SettingsActivity : Activity() {
         }
         inputsForm = findViewById(R.id.inputs_form)
         editServer = findViewById(R.id.edit_server)
+        editWeb = findViewById(R.id.edit_web)
 
         findViewById<Button>(R.id.btn_open_twa).setOnClickListener {
             startActivity(TwaActivity.intentFor(this))
@@ -195,7 +197,7 @@ class SettingsActivity : Activity() {
         val saveOnBlur = View.OnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) saveFromViews()
         }
-        for (campo in listOf(editRoomCode, editName, editNotation, editServer)) {
+        for (campo in listOf(editRoomCode, editName, editNotation, editServer, editWeb)) {
             campo.onFocusChangeListener = saveOnBlur
         }
         // O AdapterView dispara onItemSelected sozinho depois do primeiro
@@ -393,6 +395,7 @@ class SettingsActivity : Activity() {
         editName.setText(settings.playerName)
         editNotation.setText(settings.notation)
         editServer.setText(settings.wsBaseUrl)
+        editWeb.setText(settings.webBaseUrl)
         val systemIndex = systemIds.indexOf(settings.system).takeIf { it >= 0 } ?: 0
         spinnerSystem.setSelection(systemIndex)
         renderInputsForm(systemIndex, settings.inputsJson)
@@ -509,9 +512,13 @@ class SettingsActivity : Activity() {
                 inputsJson = inputsFromForm(position),
                 wsBaseUrl = if (RolaiSettings.isValidWsBaseUrl(server)) server
                 else RolaiSettings.DEFAULT_WS_BASE_URL,
-                // Sem campo proprio na tela por ora: mantem o que ja estava
-                // salvo (default vem do buildType — ver build.gradle.kts).
-                webBaseUrl = RolaiSettings.load(this).webBaseUrl,
+                // Endereco do app (botao "Abrir o rolai.app"). Numa build de
+                // DEBUG o default aponta pro Vite da maquina
+                // (localhost:5273), entao sem campo na tela o botao ficava
+                // quebrado sem conserto possivel. Vazio volta pro default do
+                // buildType. O palco 3D nao passa por aqui — vem do APK.
+                webBaseUrl = editWeb.text.toString().trim()
+                    .ifEmpty { RolaiSettings.DEFAULT_WEB_BASE_URL },
                 dicePreset = RolaiSettings.DICE_PRESET_IDS[
                     spinnerDice.selectedItemPosition
                         .coerceIn(0, RolaiSettings.DICE_PRESET_IDS.size - 1)

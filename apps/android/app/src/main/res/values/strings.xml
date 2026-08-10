@@ -25,6 +25,7 @@
     <string name="system_none">Notação livre (sem sistema)</string>
     <string name="inputs_label">Parâmetros do sistema (JSON)</string>
     <string name="server_label">Servidor (avançado)</string>
+    <string name="web_label">Endereço do app (avançado)</string>
 
     <string name="notification_channel_name">Botão flutuante</string>
     <string name="notification_text">Botão flutuante ativo — toque para abrir as configurações</string>
