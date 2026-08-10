@@ -16,6 +16,14 @@ import type { DiceStyle } from "../settings";
 import type { RenderedDie, RollRenderer } from "./types";
 import { diceFromResult } from "./types";
 
+declare global {
+  interface Window {
+    // Injetado pelo host nativo (addJavascriptInterface, ver
+    // DiceStageWindow.kt). Ausente no navegador e no OBS.
+    RolaiBridge?: { onDiceImpact?: (strength: number) => void };
+  }
+}
+
 export interface DiceBoxOptions {
   shadows: boolean;
   lightIntensity: number;
@@ -23,6 +31,11 @@ export interface DiceBoxOptions {
   style: DiceStyle;
   // Tamanho do dado (1 = padrao do motor). Preferencias -> Tamanho.
   scale: number;
+  // Som de impacto da lib. Desligado no overlay do Android: audio de WebView
+  // pede FOCO DE AUDIO ao sistema, e o Android abaixa a musica/podcast de
+  // quem estiver ouvindo enquanto o dado rola. La o som toca nativo, sem
+  // pedir foco (DiceSounds.kt). Desligar tambem poupa carregar 45 mp3.
+  sounds: boolean;
 }
 
 // Material de dado do three.js — so o que precisamos tocar.
@@ -79,6 +92,27 @@ const IMPACT_FLASH_MS = 380;
 
 // Teto de brilhos simultaneos: 20d6 caindo juntos nao vira estrobo.
 const MAX_CONCURRENT_HITS = 4;
+
+// --- Impacto reportado ao host nativo (som do overlay Android) -------------
+//
+// O palco vai MUDO no APK (`&sound=0`): audio de WebView pede foco de audio e
+// abaixa a musica de quem estiver ouvindo. So que tocar um clique seco no
+// Kotlin, no comeco da rolagem, soa pobre perto do original — o barulho de
+// dado rolando vem de UMA COLISAO POR VEZ. Como a fisica esta aqui, e daqui
+// que os impactos sao reportados; quem toca e o nativo, sem pedir foco.
+
+// Colisao mais lenta que isto nao vira som: dado assentando encosta o tempo
+// todo. (A propria lib usa 250 pro som dela.)
+const SOUND_MIN_SPEED = 250;
+
+// Velocidade que ja conta como impacto forte (volume cheio).
+const SOUND_MAX_SPEED = 2200;
+
+// Duas colisoes no mesmo instante viram um som so.
+const SOUND_THROTTLE_MS = 28;
+
+// Teto por rolagem: 20 dados nao viram metralhadora.
+const SOUND_MAX_PER_ROLL = 14;
 
 // Corpo da fisica (cannon) — so o que a deteccao de impacto le.
 export interface PhysicsBody {
@@ -343,12 +377,36 @@ export function impactAt(
   return { edge, pos };
 }
 
+/**
+ * Forca (0..1) de uma colisao, pra virar volume no host nativo. `null` quando
+ * a colisao nao deve soar: lenta demais (dado so encostando), cedo demais
+ * depois da anterior, ou passada headless `simulate` — nesta a fisica inteira
+ * roda ANTES de aparecer dado na tela, e sairia um chocalho do nada.
+ */
+export function impactStrength(
+  event: CollideEvent,
+  ctx: { animstate?: string; sinceLast: number; playedThisRoll: number },
+): number | null {
+  if (ctx.animstate === "simulate") return null;
+  const die = event.target;
+  if (!die) return null;
+  if (ctx.playedThisRoll >= SOUND_MAX_PER_ROLL) return null;
+  const speed = die.velocity.length();
+  if (speed < SOUND_MIN_SPEED) return null;
+  if (ctx.sinceLast < SOUND_THROTTLE_MS) return null;
+  const faixa = SOUND_MAX_SPEED - SOUND_MIN_SPEED;
+  return Math.min(1, Math.max(0, (speed - SOUND_MIN_SPEED) / faixa));
+}
+
 export class DiceBoxRenderer implements RollRenderer {
   private box: DiceBoxInstance | null = null;
   private container: HTMLElement | null = null;
   // Uma faixa de brilho por borda; cada impacto vira um filho efemero.
   private barriers: Partial<Record<BarrierEdge, HTMLElement>> = {};
   private lastImpact: Partial<Record<BarrierEdge, number>> = {};
+  // Som: contagem e relogio proprios (todas as colisoes, nao so as paredes).
+  private lastSound = 0;
+  private soundsThisRoll = 0;
   // Aparencia atualmente carregada no motor (troca por rolagem de outro
   // jogador; evita recarregar o tema quando nao mudou).
   private currentStyle: DiceStyle | null = null;
@@ -395,15 +453,21 @@ export class DiceBoxRenderer implements RollRenderer {
     //
     // Por isso a corrida com relogio em vez de try/catch: `catch` nao pega
     // promise pendente. Estourou o tempo, remonta sem audio.
-    let box = build(true);
-    const withSound = await Promise.race([
-      box.initialize().then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), SOUND_INIT_TIMEOUT_MS)),
-    ]).catch(() => false);
-    if (!withSound) {
-      console.warn("[rolai] audio nao carregou a tempo, seguindo sem som");
-      container.replaceChildren();
-      box = build(false);
+    let box = build(this.options.sounds);
+    if (this.options.sounds) {
+      const withSound = await Promise.race([
+        box.initialize().then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), SOUND_INIT_TIMEOUT_MS)),
+      ]).catch(() => false);
+      if (!withSound) {
+        console.warn("[rolai] audio nao carregou a tempo, seguindo sem som");
+        container.replaceChildren();
+        box = build(false);
+        await box.initialize();
+      }
+    } else {
+      // Sem som nao ha promise de audio pra travar — e o palco sobe antes,
+      // por nao carregar os 45 mp3.
       await box.initialize();
     }
     // A lib cria TODO material de dado com `transparent: true` e
@@ -454,8 +518,9 @@ export class DiceBoxRenderer implements RollRenderer {
       // O erro nosso nao pode subir: isto roda dentro do passo da fisica.
       try {
         this.onImpact(event);
+        this.reportImpact(event);
       } catch (err: unknown) {
-        console.warn("[rolai] brilho da barreira falhou:", err);
+        console.warn("[rolai] impacto falhou:", err);
       }
     };
   }
@@ -484,6 +549,26 @@ export class DiceBoxRenderer implements RollRenderer {
     if (impact === null) return;
     this.lastImpact[impact.edge] = now;
     this.flash(impact);
+  }
+
+  /**
+   * Reporta a colisao ao host nativo, se houver (o overlay Android injeta
+   * `RolaiBridge` — ver HeadlessRoller.kt/DiceStageWindow.kt). Sem host, nada
+   * acontece: no navegador e no OBS quem toca e a propria lib.
+   */
+  private reportImpact(event: CollideEvent): void {
+    const bridge = window.RolaiBridge;
+    if (!bridge || typeof bridge.onDiceImpact !== "function") return;
+    const now = Date.now();
+    const forca = impactStrength(event, {
+      animstate: this.box?.animstate,
+      sinceLast: now - this.lastSound,
+      playedThisRoll: this.soundsThisRoll,
+    });
+    if (forca === null) return;
+    this.lastSound = now;
+    this.soundsThisRoll += 1;
+    bridge.onDiceImpact(forca);
   }
 
   private flash({ edge, pos }: Impact): void {
@@ -542,6 +627,8 @@ export class DiceBoxRenderer implements RollRenderer {
         console.warn("[rolai] troca de estilo nao completou; rolando com a cor atual");
       }
     }
+    // Teto de sons e por ROLAGEM: zera aqui.
+    this.soundsThisRoll = 0;
     await this.box.roll(buildBoxNotation(dice));
   }
 

@@ -92,7 +92,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       ? options.quality
       : loadQualityTier(window.localStorage);
     const scale = options.scale > 0 ? options.scale : loadDiceScale(window.localStorage);
-    const renderer = createRenderer(tier, style, scale);
+    const renderer = createRenderer(tier, style, scale, options.sound);
     renderer.init(stage).catch((err: unknown) => {
       console.warn("[rolai] renderer falhou, caindo pra texto puro:", err);
       if (disposed) return;
@@ -106,7 +106,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       renderer.dispose();
       if (rendererRef.current === renderer) rendererRef.current = null;
     };
-  }, [options.styleId, options.quality, options.scale, options.style]);
+  }, [options.styleId, options.quality, options.scale, options.style, options.sound]);
 
   // Agenda a limpeza automatica: resultado e dados nao ficam permanentes.
   const scheduleClear = useCallback(() => {

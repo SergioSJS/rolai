@@ -35,6 +35,7 @@ describe("parseStreamParams", () => {
       scrim: 0,
       scale: 0,
       quality: "",
+      sound: true,
       style: null,
     });
   });
@@ -64,6 +65,7 @@ describe("parseStreamParams", () => {
       scrim: 0,
       scale: 0,
       quality: "",
+      sound: true,
       style: null,
     });
   });
@@ -123,6 +125,7 @@ describe("resultado no modo stream", () => {
       scrim: 0.5,
       scale: 0,
       quality: "",
+      sound: true,
       style: null,
     };
     const { container } = render(<StreamApp options={options} />);
@@ -199,5 +202,24 @@ describe("aparencia explicita na URL", () => {
   it("ignora valor invalido e devolve null quando nao veio nada", () => {
     expect(parseStreamParams("?stream=1&body=javascript&texture=lava")?.style).toBeNull();
     expect(parseStreamParams("?stream=1")?.style).toBeNull();
+  });
+});
+
+// Som: no overlay do Android o palco fica MUDO e quem toca e o nativo
+// (DiceSounds.kt). Audio de WebView pede foco de audio ao sistema, e o
+// Android abaixa a musica de quem estiver ouvindo enquanto o dado rola.
+describe("som do dado", () => {
+  it("ligado por padrao (navegador, OBS)", () => {
+    expect(parseStreamParams("?stream=1")?.sound).toBe(true);
+  });
+
+  it("sound=0 desliga — e o que o overlay Android manda", () => {
+    expect(parseStreamParams("?stream=1&sound=0")?.sound).toBe(false);
+  });
+
+  // Qualquer outro valor mantem o som: so o "0" explicito desliga.
+  it("valor estranho nao desliga o som por acidente", () => {
+    expect(parseStreamParams("?stream=1&sound=talvez")?.sound).toBe(true);
+    expect(parseStreamParams("?stream=1&sound=1")?.sound).toBe(true);
   });
 });

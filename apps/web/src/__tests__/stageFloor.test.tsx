@@ -10,7 +10,7 @@ import {
   measureFloor,
   useStageFloor,
 } from "../stage/floor";
-import { impactAt, scaleCompensation, WORLD_TO_PX } from "../renderers/diceBox";
+import { impactAt, impactStrength, scaleCompensation, WORLD_TO_PX } from "../renderers/diceBox";
 import type { BarrierEdge, PhysicsBody } from "../renderers/diceBox";
 
 // Placa falsa: o jsdom nao faz layout, entao a altura vem carimbada.
@@ -200,5 +200,49 @@ describe("brilho das barreiras", () => {
   it("sem parede no mundo atual, nao acende", () => {
     const vazio = { ...ctx, walls: {} };
     expect(impactAt({ body: walls.bottom, target: die(0, 0, 400) }, vazio)).toBeNull();
+  });
+});
+
+// Som do overlay Android: a fisica vive aqui, o som toca la (nativo, sem
+// pedir foco de audio). Cada colisao vira um impacto reportado — e o que
+// separa "dado rolando" de um clique seco.
+describe("impacto reportado ao host nativo", () => {
+  const die = (speed: number): PhysicsBody => ({
+    mass: 1,
+    position: { x: 0, y: 0, z: 0 },
+    velocity: { length: () => speed },
+  });
+  const ctx = { sinceLast: 999, playedThisRoll: 0 };
+
+  it("colisao forte vale mais que colisao fraca", () => {
+    const forte = impactStrength({ target: die(2000) }, ctx)!;
+    const fraca = impactStrength({ target: die(400) }, ctx)!;
+    expect(forte).toBeGreaterThan(fraca);
+    expect(forte).toBeLessThanOrEqual(1);
+    expect(fraca).toBeGreaterThanOrEqual(0);
+  });
+
+  it("acima do teto de velocidade satura em 1", () => {
+    expect(impactStrength({ target: die(99999) }, ctx)).toBe(1);
+  });
+
+  // Dado assentando encosta na mesa o tempo todo.
+  it("toque lento nao soa", () => {
+    expect(impactStrength({ target: die(10) }, ctx)).toBeNull();
+  });
+
+  // A passada headless roda a fisica ANTES de aparecer dado: sairia um
+  // chocalho do nada.
+  it("simulate nao soa", () => {
+    expect(impactStrength({ target: die(2000) }, { ...ctx, animstate: "simulate" })).toBeNull();
+  });
+
+  it("colisoes no mesmo instante viram um som so", () => {
+    expect(impactStrength({ target: die(2000) }, { ...ctx, sinceLast: 3 })).toBeNull();
+  });
+
+  // 20 dados nao viram metralhadora.
+  it("teto por rolagem para de soar", () => {
+    expect(impactStrength({ target: die(2000) }, { ...ctx, playedThisRoll: 14 })).toBeNull();
   });
 });

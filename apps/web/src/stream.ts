@@ -57,6 +57,10 @@ export interface StreamOptions {
   // WebView com fundo transparente). Com o veu, quem compoe o dado e o
   // proprio Chromium — o sistema so recebe o veu. 0 = sem veu (OBS).
   scrim: number;
+  // Som do dado. `sound=0` desliga — e o que o overlay do Android usa: la o
+  // som toca NATIVO, porque audio de WebView pede foco de audio ao sistema e
+  // isso abaixa a musica/podcast de quem estiver ouvindo. Ver DiceSounds.kt.
+  sound: boolean;
   // Codigo da sala (pode vir vazio — a StreamApp mostra mensagem minima).
   room: string;
   // Cor de chroma key em #rrggbb, ou null pra fundo transparente (alpha).
@@ -83,6 +87,8 @@ export function parseStreamParams(search: string): StreamOptions | null {
     scrim,
     scale: scaleRaw === null ? 0 : clampDiceScale(scaleRaw),
     quality: params.get("quality") ?? "",
+    // Ligado por padrao: quem abre a pagina (OBS, navegador) quer o som.
+    sound: params.get("sound") !== "0",
     style: parseStyleOverride(params),
   };
 }

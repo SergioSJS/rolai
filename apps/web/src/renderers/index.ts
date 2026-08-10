@@ -20,12 +20,14 @@ export function diceBoxOptions(
   tier: "3d-full" | "3d-light",
   style: DiceStyle,
   scale: number = DEFAULT_DICE_SCALE,
+  sounds: boolean = true,
 ): DiceBoxOptions {
   return {
     shadows: tier === "3d-full",
     lightIntensity: LIGHT_INTENSITY,
     style,
     scale: clampDiceScale(scale),
+    sounds,
   };
 }
 
@@ -33,11 +35,14 @@ export function createRenderer(
   tier: QualityTier,
   style: DiceStyle = DEFAULT_DICE_STYLE,
   scale: number = DEFAULT_DICE_SCALE,
+  // Desligado pelo overlay do Android, que toca o som nativo (DiceSounds.kt)
+  // pra nao pedir foco de audio e abaixar o som de quem estiver ouvindo.
+  sounds: boolean = true,
 ): RollRenderer {
   switch (tier) {
     case "3d-full":
     case "3d-light":
-      return new DiceBoxRenderer(diceBoxOptions(tier, style, scale));
+      return new DiceBoxRenderer(diceBoxOptions(tier, style, scale, sounds));
     case "2d":
       return new Css2DRenderer();
     case "text":

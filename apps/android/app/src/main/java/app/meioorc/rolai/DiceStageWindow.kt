@@ -42,6 +42,15 @@ import android.widget.FrameLayout
  */
 class DiceStageWindow(private val context: Context) {
 
+    /**
+     * Colisao de dado reportada pela fisica do palco (0..1 de forca). Existe
+     * porque o som do overlay toca NATIVO — a WebView vai muda pra nao pedir
+     * foco de audio e abaixar a musica de quem estiver ouvindo. A fisica esta
+     * na WebView, entao ela avisa e o Kotlin toca.
+     */
+    var onDiceImpact: ((Float) -> Unit)? = null
+
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var container: FrameLayout? = null
     private var webView: WebView? = null
     private var windowManager: WindowManager? = null
@@ -86,6 +95,10 @@ class DiceStageWindow(private val context: Context) {
         stageUrl = url
         stageLoadFailed = false
         val view = WebView(context).apply {
+            // Mesmo nome do bridge do headless (RolaiBridge): sao WebViews
+            // diferentes, cada uma com o seu, e o web so chama o metodo que
+            // existir (ver renderers/diceBox.ts).
+            addJavascriptInterface(StageBridge(), "RolaiBridge")
             setBackgroundColor(Color.TRANSPARENT)
             settings.javaScriptEnabled = true
             // localStorage: e de onde a pagina le a qualidade de render.
@@ -270,6 +283,16 @@ class DiceStageWindow(private val context: Context) {
         }
     }
 
+    /** Injetado no JS como window.RolaiBridge (ver renderers/diceBox.ts). */
+    private inner class StageBridge {
+        // Roda numa thread binder do WebKit; o som e disparado na main.
+        @android.webkit.JavascriptInterface
+        fun onDiceImpact(strength: Float) {
+            val cb = onDiceImpact ?: return
+            mainHandler.post { cb(strength) }
+        }
+    }
+
     companion object {
         /**
          * `<base>/?stream=1[&room=][&style=][&scale=][&quality=][&body=...]`
@@ -349,7 +372,11 @@ class DiceStageWindow(private val context: Context) {
             }
             // Base local ja e um arquivo (index.html); base remota e um host.
             val prefixo = if (base.endsWith(".html")) base else "$base/"
-            return "$prefixo?stream=1$room$preset$scale$tier$appearance"
+            // Palco MUDO: o som do dado toca nativo (DiceSounds.kt). Audio de
+            // WebView pede foco de audio e o Android abaixa a musica de quem
+            // estiver ouvindo — som nativo sem pedir foco toca por cima, sem
+            // mexer no resto. Some tambem o carregamento dos 45 mp3.
+            return "$prefixo?stream=1$room$preset$scale$tier$appearance&sound=0"
         }
     }
 }

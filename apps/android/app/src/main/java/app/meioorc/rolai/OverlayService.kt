@@ -40,6 +40,10 @@ class OverlayService : Service() {
     private lateinit var overlayParams: WindowManager.LayoutParams
     private lateinit var headlessRoller: HeadlessRoller
     private val diceStage = DiceStageWindow(this)
+    private var diceSounds: DiceSounds? = null
+    // Impactos reportados desde a ultima rolagem — se nenhum chegar, o som
+    // sai pelo caminho de seguranca (ver playDiceSound).
+    private var impactsThisRoll = 0
     private val stageHandler = Handler(Looper.getMainLooper())
     private val stageHideRunnable = Runnable { diceStage.setInteractive(false) }
     private var roomClient: RoomClient? = null
@@ -113,6 +117,14 @@ class OverlayService : Service() {
             settings,
         )
         diceStage.onStageTapped = ::dismissDice
+        diceSounds = DiceSounds(this)
+        // Cada colisao da fisica do palco vira um som nativo. E o que separa
+        // "dado rolando" de "um clique seco": a WebView sabe a hora das
+        // batidas, o nativo toca sem pedir foco de audio.
+        diceStage.onDiceImpact = { forca ->
+            impactsThisRoll += 1
+            diceSounds?.impact(forca)
+        }
         headlessRoller = HeadlessRoller(
             this,
             onResult = ::onRollCalculated,
@@ -216,6 +228,8 @@ class OverlayService : Service() {
         roomClient?.disconnect()
         roomClient = null
         if (::headlessRoller.isInitialized) headlessRoller.destroy()
+        diceSounds?.release()
+        diceSounds = null
         diceStage.detach()
         if (viewAttached) {
             windowManager.removeView(overlay.root)
@@ -429,6 +443,7 @@ class OverlayService : Service() {
             // rolagem (este servico) manda direto: uma conexao a menos por
             // aparelho e nada de animacao dependendo de rede extra.
             diceStage.play(resultJson, styleJson)
+            playDiceSound(resultJson)
             stageShow()
         }
 
@@ -537,6 +552,23 @@ class OverlayService : Service() {
         headlessRoller.rollWithProfile(settings.system, settings.inputsJson)
     }
 
+    /**
+     * Som da queda, tocado junto da animacao. Vale pras DUAS entradas do
+     * palco: rolagem propria e eco da sala — quem ve o dado cair ouve o dado
+     * cair, venha de onde vier.
+     */
+    private fun playDiceSound(resultJson: String) {
+        impactsThisRoll = 0
+        val dados = diceCountOf(resultJson)
+        // "Existe" nao e "funcionou": o palco pode nao estar animando (WebGL
+        // fora, tier de texto, palco ainda subindo). Se nenhuma colisao
+        // chegar a tempo, toca a queda generica — melhor um som simples do
+        // que silencio sem explicacao.
+        stageHandler.postDelayed({
+            if (impactsThisRoll == 0) diceSounds?.playFallback(dados)
+        }, SOUND_FALLBACK_MS)
+    }
+
     /** Rola com o que foi preenchido no painel e guarda como novo padrao. */
     private fun rollWithInputs(inputsJson: String) {
         val settings = RolaiSettings.load(this)
@@ -586,6 +618,7 @@ class OverlayService : Service() {
             roomClient?.sendRoll(resultJson) == true
         if (!entregue) {
             diceStage.play(resultJson)
+            playDiceSound(resultJson)
             stageShow()
             // Sem eco do servidor, a nossa rolagem entra no historico aqui.
             overlay.addActivityLine("você: ${formatResult(resultJson)}")
@@ -593,6 +626,9 @@ class OverlayService : Service() {
     }
 
     companion object {
+        /** Espera por colisoes antes de cair no som generico. */
+        private const val SOUND_FALLBACK_MS = 600L
+
         /**
          * Espera antes de aplicar config nova. A tela salva a cada toque;
          * sem isto, arrastar o slider de tamanho vira uma rajada de
@@ -681,6 +717,19 @@ class OverlayService : Service() {
          * parseia, ou rolagem livre (sem profile, logo sem outcome), vale
          * neutro — nao ha o que afirmar.
          */
+        /**
+         * Quantos dados cairam, so pra dosar o som (DiceSounds.impactDelays).
+         * JSON quebrado vira 1: melhor um clique do que silencio.
+         */
+        fun diceCountOf(resultJson: String): Int = runCatching {
+            val groups = JSONObject(resultJson).optJSONObject("groups") ?: return@runCatching 1
+            var total = 0
+            for (key in groups.keys()) {
+                total += groups.optJSONObject(key)?.optJSONArray("rolls")?.length() ?: 0
+            }
+            total.coerceAtLeast(1)
+        }.getOrDefault(1)
+
         fun toneOf(resultJson: String): OutcomeTone {
             val outcome = runCatching {
                 JSONObject(resultJson).optString("outcome", "")
