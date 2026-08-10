@@ -295,6 +295,7 @@ class SettingsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         statusHandler.post(statusTicker)
+        checkForUpdate()
         if (pendingOverlayEnable && Settings.canDrawOverlays(this)) {
             pendingOverlayEnable = false
             enableOverlay()
@@ -319,15 +320,28 @@ class SettingsActivity : Activity() {
     // ---------- overlay ----------
 
     /**
-     * Versao instalada na tela e, se houver, aviso de uma mais nova.
-     *
-     * Esta Activity e o launcher do app, entao o aviso aparece pra quem abre
-     * o Rolaí — nao e uma tela escondida. Sem rede nada muda: o
-     * `UpdateCheck` falha em silencio e o bloco continua GONE.
+     * Versao instalada na tela. Nao muda enquanto o app estiver aberto, entao
+     * basta uma vez, no onCreate.
      */
     private fun showVersion() {
         findViewById<TextView>(R.id.txt_version).text =
             getString(R.string.version_installed, BuildConfig.VERSION_NAME)
+    }
+
+    /**
+     * Consulta se ha versao nova, a CADA vez que esta tela aparece.
+     *
+     * Ficava so no onCreate, e voltar pra tela com a Activity ainda viva nao
+     * reconsultava nada: era preciso fechar o app e abrir de novo pra
+     * descobrir que tinha versao nova. Esta tela e o launcher — e aqui que a
+     * pessoa passa, entao e aqui que se pergunta.
+     *
+     * O UpdateCheck entrega o resultado em cache na hora e so vai a rede
+     * respeitando o proprio intervalo minimo (a API publica do GitHub limita
+     * por IP, e IP de celular costuma ser compartilhado com muita gente pela
+     * operadora — insistir nao ajudaria ninguem).
+     */
+    private fun checkForUpdate() {
         val aviso = findViewById<TextView>(R.id.txt_update)
         UpdateCheck.check { release ->
             if (isFinishing || isDestroyed) return@check

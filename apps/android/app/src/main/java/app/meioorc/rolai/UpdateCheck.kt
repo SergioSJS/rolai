@@ -36,8 +36,19 @@ object UpdateCheck {
 
     const val RELEASES_API = "https://api.github.com/repos/SergioSJS/rolai/releases/latest"
 
-    /** Intervalo minimo entre consultas — abrir a tela dez vezes nao vira dez GETs. */
-    const val MIN_INTERVAL_MS = 6 * 60 * 60 * 1000L
+    /**
+     * Intervalo minimo entre IDAS A REDE. O resultado em cache e entregue na
+     * hora, sempre — quem abre a tela ve o aviso mesmo dentro da janela.
+     *
+     * Era 6h, o que combinava com consultar so na abertura do app. Agora a
+     * tela pergunta a cada vez que aparece (SettingsActivity.onResume), e 6h
+     * significaria "publiquei uma versao e o app so descobre amanha". Um
+     * minuto deixa a tela viva sem virar rajada: a API publica do GitHub
+     * limita por IP, e IP de celular costuma ser compartilhado com muita
+     * gente pela operadora — insistir gastaria a cota de terceiros, e o
+     * estouro e silencioso (fica sem aviso, sem erro).
+     */
+    const val MIN_INTERVAL_MS = 60 * 1000L
 
     data class Release(val version: String, val pageUrl: String)
 
