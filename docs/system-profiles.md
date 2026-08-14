@@ -57,6 +57,29 @@ nesse caso (não conta como erro), em vez de travar por input ausente. É o
 que faz o roll under genérico "só rolar, sem outcome" quando o jogador não
 informa o valor testado.
 
+## Input derivado (combina dois inputs num valor que só o motor usa)
+
+`field.dice`/`field.modifier` fazem só substituição LITERAL de `{input.id}`
+— sem aritmética. Se a quantidade de dados depende de combinar dois inputs
+visíveis (ex.: Fractal — `dice_total` = `fatos_aplicaveis` capado em 3, +1
+se `vantagem` e havia pelo menos 1 Fato), esse cálculo não cabe no YAML.
+
+Solução usada (`profiles/fractal.yaml` + `apps/web/src/profileInputQuirks.ts`):
+o profile declara só os inputs que o jogador vê (`fatos_aplicaveis`,
+`vantagem`) e referencia `{input.dice_total}` no field mesmo esse id **não**
+estando em `inputs:` — `validateProfileInputs` só confere os inputs
+declarados, e `interpolate()` aceita qualquer chave presente no objeto de
+inputs em tempo de rolagem. Quem preenche essa chave extra é
+`applyInputQuirks(profile, inputs)`, chamada num ÚNICO lugar
+(`profileInputQuirks.ts`) e usada tanto por `roll.ts` (web) quanto por
+`headless.ts` (bridge do Android) — duplicar a fórmula nos dois seria o
+mesmo erro de sempre (um fica pra trás).
+
+Isso NÃO é um recurso genérico do schema — é solução pontual por sistema.
+Se aparecer um terceiro caso, considerar formalizar "input derivado" no
+schema em vez de acumular `if (profile.system === "x")` em
+`profileInputQuirks.ts`.
+
 ## Exemplo — Genérico Roll Under (`overlay`: sem dado próprio)
 
 ```yaml

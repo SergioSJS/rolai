@@ -63,11 +63,19 @@ private val SUCCESS = setOf(
     "messy_critical",
     // Infaernum — oraculo sim ou não.
     "sim",
+    // fractal: impulso e sucesso "mais forte", mesma cor do sucesso normal —
+    // igual critical_success do d20, a distincao e so no texto do label.
+    "sucesso_impulso_x2",
+    "sucesso_impulso_x3",
+    "sucesso_impulso_x4",
 )
 
 /**
  * Tom de um id de outcome. `match` (Ironsworn: dados de desafio iguais) e
- * evento, pode vir junto de acerto OU de falha — fica neutro de proposito.
+ * `ruptura_x1`..`x4` (fractal: Fato quebrado) sao eventos que podem vir
+ * junto de acerto OU de falha — ficam neutros de proposito, caindo no
+ * `else` abaixo (nao precisam de set proprio, ja que nao concorrem com
+ * FAILURE/PARTIAL/SUCCESS).
  */
 fun outcomeTone(outcome: String): OutcomeTone = when (outcome) {
     in FAILURE -> OutcomeTone.FAILURE

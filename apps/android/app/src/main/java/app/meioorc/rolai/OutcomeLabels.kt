@@ -53,6 +53,16 @@ private val OUTCOME_LABELS: Map<String, String> = mapOf(
     // pool_d6 (Shadowrun-style)
     "glitch" to "pane",
     "critical_glitch" to "pane crítica",
+    // fractal — pool de d6, maior dado decide. success/fail reusam fate/pool_d6
+    // (ja mapeados acima). Impulso conta os seis alem do primeiro; ruptura
+    // conta os dados em 1 (evento paralelo, nunca outcome primario).
+    "sucesso_impulso_x2" to "sucesso com 1 impulso extra",
+    "sucesso_impulso_x3" to "sucesso com 2 impulsos extras",
+    "sucesso_impulso_x4" to "sucesso com 3 impulsos extras",
+    "ruptura_x1" to "ruptura: 1 fato quebrado",
+    "ruptura_x2" to "ruptura: 2 fatos quebrados",
+    "ruptura_x3" to "ruptura: 3 fatos quebrados",
+    "ruptura_x4" to "ruptura: 4 fatos quebrados",
 )
 
 fun outcomeLabel(outcome: String): String = OUTCOME_LABELS[outcome] ?: outcome

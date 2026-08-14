@@ -65,6 +65,16 @@ class OutcomeToneTest {
         assertEquals(OutcomeTone.FAILURE, outcomeTone("critical_glitch"))
     }
 
+    /** fractal: impulso e sucesso mais forte (mesma cor); ruptura e evento
+     * paralelo (Fato quebrado), pode vir com sucesso ou falha. */
+    @Test
+    fun `fractal`() {
+        assertEquals(OutcomeTone.SUCCESS, outcomeTone("sucesso_impulso_x2"))
+        assertEquals(OutcomeTone.SUCCESS, outcomeTone("sucesso_impulso_x4"))
+        assertEquals(OutcomeTone.NEUTRAL, outcomeTone("ruptura_x1"))
+        assertEquals(OutcomeTone.NEUTRAL, outcomeTone("ruptura_x4"))
+    }
+
     /** Infaernum — oraculo sim ou não. */
     @Test
     fun `sim ou nao`() {

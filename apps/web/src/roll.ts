@@ -8,6 +8,7 @@ import type {
   RollResult,
   SystemProfile,
 } from "@rolai/rules-engine";
+import { applyInputQuirks } from "./profileInputQuirks.js";
 
 // Converte os valores do formulario (sempre strings) pro ProfileInputs do
 // engine. Inputs "number" viram Number; "select" ficam string. Valor
@@ -46,7 +47,7 @@ export async function rollFromProfile(
   profile: SystemProfile,
   rawInputs: Record<string, string>,
 ): Promise<RollResult> {
-  return rollWithProfile(profile, coerceInputs(profile, rawInputs));
+  return rollWithProfile(profile, applyInputQuirks(profile, coerceInputs(profile, rawInputs)));
 }
 
 export function rollFromNotation(notation: string): RollResult {

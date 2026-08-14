@@ -18,6 +18,7 @@ import wod5Yaml from "@rolai/rules-engine/profiles/wod5.yaml?raw";
 import infaernumYaml from "@rolai/rules-engine/profiles/infaernum.yaml?raw";
 import infaernumSimOuNaoYaml from "@rolai/rules-engine/profiles/infaernum_sim_ou_nao.yaml?raw";
 import infaernumIdeiasYaml from "@rolai/rules-engine/profiles/infaernum_ideias.yaml?raw";
+import fractalYaml from "@rolai/rules-engine/profiles/fractal.yaml?raw";
 
 // A ordem aqui e a ordem do seletor de sistema na UI: do mais comum na
 // mesa pro mais especifico.
@@ -35,6 +36,7 @@ const PROFILE_YAMLS: Record<string, string> = {
   infaernum: infaernumYaml,
   infaernum_sim_ou_nao: infaernumSimOuNaoYaml,
   infaernum_ideias: infaernumIdeiasYaml,
+  fractal: fractalYaml,
 };
 
 let cache: Map<string, SystemProfile> | null = null;

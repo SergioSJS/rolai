@@ -53,6 +53,16 @@ const OUTCOME_LABELS: Record<string, string> = {
   // pool_d6 (Shadowrun-style)
   glitch: "pane",
   critical_glitch: "pane crítica",
+  // fractal — pool de d6, maior dado decide. success/fail reusam fate/pool_d6
+  // (ja mapeados acima). Impulso conta os seis ALEM do primeiro; ruptura
+  // conta os dados em 1 (evento paralelo, nunca outcome primario).
+  sucesso_impulso_x2: "sucesso com 1 impulso extra",
+  sucesso_impulso_x3: "sucesso com 2 impulsos extras",
+  sucesso_impulso_x4: "sucesso com 3 impulsos extras",
+  ruptura_x1: "ruptura: 1 fato quebrado",
+  ruptura_x2: "ruptura: 2 fatos quebrados",
+  ruptura_x3: "ruptura: 3 fatos quebrados",
+  ruptura_x4: "ruptura: 4 fatos quebrados",
 };
 
 export function outcomeLabel(outcome: string): string {
@@ -122,9 +132,20 @@ const OUTCOME_TONES: Record<string, OutcomeTone> = {
   messy_critical: "success",
   // Infaernum — oraculo sim ou não.
   sim: "success",
+  // fractal: impulso e sucesso "mais forte", mesma cor do sucesso normal —
+  // igual critical_success do d20, a distincao e so no texto do label.
+  sucesso_impulso_x2: "success",
+  sucesso_impulso_x3: "success",
+  sucesso_impulso_x4: "success",
   // Ironsworn: "match" e os dois dados de desafio iguais — um EVENTO que
   // pode acontecer junto de acerto ou de falha, entao nao tem tom proprio.
   match: "neutral",
+  // fractal: ruptura e complicacao PARALELA (Fato quebrado) — pode vir
+  // junto de sucesso ou falha, entao tambem nao tem tom proprio.
+  ruptura_x1: "neutral",
+  ruptura_x2: "neutral",
+  ruptura_x3: "neutral",
+  ruptura_x4: "neutral",
 };
 
 export function outcomeTone(outcome: string): OutcomeTone {

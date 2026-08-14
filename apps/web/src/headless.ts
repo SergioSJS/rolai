@@ -12,6 +12,7 @@
 import { roll, rollOverlay, rollWithProfile } from "@rolai/rules-engine";
 import type { RollOptions, RollResult } from "@rolai/rules-engine";
 import { availableProfiles, getProfile } from "./profiles.js";
+import { applyInputQuirks } from "./profileInputQuirks.js";
 
 // Bridge injetado pelo Kotlin via addJavascriptInterface("RolaiBridge").
 // Em ambiente de teste (node/jsdom) pode nao existir — nesse caso o
@@ -136,7 +137,11 @@ const api: RolaiHeadlessApi = {
       const inputs = inputsJson
         ? (JSON.parse(inputsJson) as Record<string, number | string>)
         : {};
-      const result = await rollWithProfile(profile, inputs, parseOptions(optionsJson));
+      const result = await rollWithProfile(
+        profile,
+        applyInputQuirks(profile, inputs),
+        parseOptions(optionsJson),
+      );
       deliver(callbackId, { ok: true, result });
     } catch (e) {
       deliver(callbackId, toError(e));

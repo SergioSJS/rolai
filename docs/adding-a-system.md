@@ -66,6 +66,17 @@ em `ProfileField`/`ProfileInput`, tipo `success_rule` foi) — e isso NÃO é
 Só DEPOIS de ampliar isso tudo (ou confirmar que não precisa) é que faz
 sentido seguir pro checklist normal abaixo.
 
+Existe uma terceira categoria, mais sutil que "precisa de `roll_type`
+novo": a mecânica cabe num `roll_type` existente, mas um dos seus números
+não é NENHUM input isolado — é dois inputs visíveis combinados (ex.:
+Fractal — tamanho da pool = Fatos aplicáveis capado em 3, +1 se teve
+Vantagem). `field.dice`/`field.modifier` só substituem `{input.id}`
+literalmente, sem aritmética — isso não cabe no YAML sozinho. Ver
+`docs/system-profiles.md#input-derivado-combina-dois-inputs-num-valor-que-só-o-motor-usa`
+pra a solução (input "fantasma" preenchido por uma função só, chamada por
+`roll.ts` E `headless.ts`) antes de tentar inventar uma sintaxe nova pro
+YAML.
+
 ## Checklist, nesta ordem
 
 1. **Motor** (`packages/rules-engine/profiles/*.yaml`) — o profile, com

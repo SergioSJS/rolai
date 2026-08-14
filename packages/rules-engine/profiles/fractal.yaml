@@ -1,0 +1,60 @@
+system: fractal
+label: "Fractal — Rolagem de Risco"
+roll_type: simple
+# `dice_total` NAO e um input de verdade — o jogador so ve
+# "fatos_aplicaveis" e "vantagem" na UI. O motor so faz substituicao
+# literal na notacao do field (sem aritmetica), entao quem combina os dois
+# num tamanho de pool (min 0, cap 3, +1 se vantagem e fatos>=1) e a camada
+# de chamada (apps/web/src/profileInputQuirks.ts), ANTES de rollWithProfile
+# — ver docs/system-profiles.md#inputs-derivados.
+inputs:
+  - id: fatos_aplicaveis
+    label: "Número de Fatos"
+    type: number
+    default: "0"
+  - id: vantagem
+    label: "Vantagem?"
+    type: select
+    required: false
+    default: "nao"
+    # "nao" primeiro: a UI (RollPanel.tsx/defaultInputs) usa SEMPRE o
+    # PRIMEIRO option como valor inicial do select — o campo "default"
+    # acima nao se aplica a select, so a number. Vantagem comeca desligada
+    # de proposito (e a excecao, nao a regra da rolagem).
+    options:
+      - { value: "nao", label: "Não" }
+      - { value: "sim", label: "Sim, +1d6" }
+fields:
+  - id: pool
+    dice: "{input.dice_total}d6"
+    compare_individually: true
+    zero_dice_fallback: "1d6"
+# Nao soma: o resultado e o MAIOR dado da pool. Threshold de sucesso muda
+# de patamar conforme fatos_aplicaveis (5-6 com Fato aplicavel, so 6 sem
+# nenhum) — por isso as duas metades (>=1 / ==0) sao ramos separados, e nao
+# uma condicao so. Ruptura (qualquer dado =1) e evento PARALELO, avaliado
+# DEPOIS dos ramos de resultado base pra nunca virar o "outcome" primario
+# (mesmo padrao do "match" do Ironsworn).
+outcome_rules:
+  - condition: "{input.fatos_aplicaveis} >= 1 and count(pool, '==6') == 4"
+    result: sucesso_impulso_x4
+  - condition: "{input.fatos_aplicaveis} >= 1 and count(pool, '==6') == 3"
+    result: sucesso_impulso_x3
+  - condition: "{input.fatos_aplicaveis} >= 1 and count(pool, '==6') == 2"
+    result: sucesso_impulso_x2
+  - condition: "{input.fatos_aplicaveis} >= 1 and max(pool) >= 5 and count(pool, '==6') < 2"
+    result: sucesso
+  - condition: "{input.fatos_aplicaveis} >= 1 and max(pool) <= 4"
+    result: falha
+  - condition: "{input.fatos_aplicaveis} == 0 and max(pool) == 6"
+    result: sucesso
+  - condition: "{input.fatos_aplicaveis} == 0 and max(pool) <= 5"
+    result: falha
+  - condition: "count(pool, '==1') == 4"
+    result: ruptura_x4
+  - condition: "count(pool, '==1') == 3"
+    result: ruptura_x3
+  - condition: "count(pool, '==1') == 2"
+    result: ruptura_x2
+  - condition: "count(pool, '==1') == 1"
+    result: ruptura_x1
