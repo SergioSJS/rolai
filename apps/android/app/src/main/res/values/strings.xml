@@ -61,6 +61,7 @@
     <string name="section_quickroll">Padrão de rolagem</string>
     <string name="section_appearance">Aparência do dado</string>
     <string name="section_about">Versão</string>
+    <string name="about_contact">Sérgio Sousa · @sergiosjs · meioorc.com · sergiosjs@pm.me</string>
     <string name="section_advanced">Avançado</string>
     <!-- %1$s = versão instalada (BuildConfig.VERSION_NAME). -->
     <string name="version_installed">Rolaí %1$s</string>

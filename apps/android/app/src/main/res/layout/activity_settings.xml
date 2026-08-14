@@ -472,6 +472,19 @@
                 android:layout_marginTop="8dp"
                 android:textColor="#9AA6B2"
                 android:textSize="14sp" />
+
+            <!-- autoLink sublinha e-mail/site sozinho (sem Intent escrito a
+                 mao pra cada um) — @sergiosjs fica so texto, nao e um link
+                 reconhecivel por padrao. -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:autoLink="web|email"
+                android:text="@string/about_contact"
+                android:textColor="#9AA6B2"
+                android:textColorLink="#25C48F"
+                android:textSize="13sp" />
         </LinearLayout>
 
         <!-- ===== Avancado (por ultimo de proposito) =====

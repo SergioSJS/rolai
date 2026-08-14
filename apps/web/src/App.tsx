@@ -525,6 +525,25 @@ export function App() {
               sala compartilhada por link e histórico exportável.
             </p>
 
+            <h3>Contato</h3>
+            <div className="about-contact">
+              <span className="about-contact-name">Sérgio Sousa</span>
+              <div className="about-contact-links">
+                <span className="about-contact-chip is-static">@sergiosjs</span>
+                <a
+                  className="about-contact-chip"
+                  href="https://meioorc.com"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  meioorc.com
+                </a>
+                <a className="about-contact-chip" href="mailto:sergiosjs@pm.me">
+                  sergiosjs@pm.me
+                </a>
+              </div>
+            </div>
+
             <h3>Como funciona</h3>
             <p>
               As rolagens são calculadas no seu aparelho (Ironsworn, PbtA,

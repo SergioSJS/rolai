@@ -2008,6 +2008,47 @@ input[type="range"]:focus {
   color: var(--text);
 }
 
+/* Contato, no fim do "Sobre": nome + pilulas (o mesmo tratamento visual do
+   PlayerTag na sala), em vez de uma linha de texto corrido com "·". */
+.about-contact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.about-contact-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.about-contact-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.about-contact-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.32rem 0.75rem;
+  border-radius: 999px;
+  background: var(--accent-glow);
+  border: 1px solid transparent;
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.about-contact-chip.is-static {
+  color: var(--muted);
+}
+
+a.about-contact-chip:hover {
+  border-color: var(--accent);
+}
+
 /* Dado descartado pelo keep/drop: aparece, mas nao compete com o que conta. */
 .die-chip.is-dropped {
   opacity: 0.38;
