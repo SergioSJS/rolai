@@ -8,7 +8,13 @@
 import { useState } from "react";
 import type { RoomState } from "../room/reducer";
 import { exportUrl } from "../config";
-import { MAX_PLAYER_NAME } from "../settings";
+import {
+  MAX_PLAYER_NAME,
+  MIN_DICE_SCALE,
+  MAX_DICE_SCALE,
+  DEFAULT_DICE_SCALE,
+  clampDiceScale,
+} from "../settings";
 import { customCodeIssue } from "../room/code";
 import { PlayerTag } from "./PlayerTag";
 
@@ -44,6 +50,10 @@ export function RoomPanel({
   // Motivo da recusa do codigo escolhido, mostrado so depois de tentar —
   // reclamar enquanto a pessoa digita e ruido.
   const [codeIssue, setCodeIssue] = useState<string | null>(null);
+  // Tamanho do dado no link do OBS. Independente das Preferencias gerais —
+  // a Browser Source do OBS abre com localStorage proprio (vazio), entao sem
+  // isso o `scale` que a pessoa configurou aqui no navegador nunca chega la.
+  const [streamScale, setStreamScale] = useState(DEFAULT_DICE_SCALE);
 
   // Criar: campo vazio = codigo aleatorio do backend (sala privada). Campo
   // preenchido = a sala QUE VOCE ESCOLHEU. Entrar num codigo inexistente ja
@@ -114,6 +124,7 @@ export function RoomPanel({
   }
 
   const shareLink = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(room.code)}`;
+  const streamLink = `${shareLink}&stream=1&scale=${streamScale}`;
   const renamed = name.trim() !== "" && name.trim() !== playerName;
 
   return (
@@ -161,7 +172,7 @@ export function RoomPanel({
         <button
           type="button"
           className="button-secondary"
-          onClick={() => void navigator.clipboard?.writeText(`${shareLink}&stream=1`)}
+          onClick={() => void navigator.clipboard?.writeText(streamLink)}
         >
           Copiar link pro OBS
         </button>
@@ -169,6 +180,22 @@ export function RoomPanel({
           Sair da sala
         </button>
       </div>
+      <label className="field">
+        Tamanho do dado no OBS ({Math.round(streamScale * 100)}%)
+        <input
+          type="range"
+          min={Math.round(MIN_DICE_SCALE * 100)}
+          max={Math.round(MAX_DICE_SCALE * 100)}
+          step={5}
+          value={Math.round(streamScale * 100)}
+          onChange={(e) =>
+            setStreamScale(clampDiceScale(Number(e.target.value) / 100))
+          }
+        />
+      </label>
+      <p className="field-hint">
+        Ajuste antes de copiar — o link leva esse tamanho embutido (&amp;scale=).
+      </p>
       <h3>Na sala ({room.roster.length})</h3>
       <ul className="roster">
         {room.roster.map((member) => (

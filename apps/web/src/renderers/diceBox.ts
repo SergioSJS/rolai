@@ -410,6 +410,15 @@ export class DiceBoxRenderer implements RollRenderer {
   // Aparencia atualmente carregada no motor (troca por rolagem de outro
   // jogador; evita recarregar o tema quando nao mudou).
   private currentStyle: DiceStyle | null = null;
+  // dispose() chamado enquanto init() ainda esta em algum await (StrictMode
+  // do dev monta -> desmonta -> monta de novo antes do primeiro init()
+  // terminar): sem isto, o init() velho retoma DEPOIS do dispose(), pisa no
+  // container que o renderer NOVO ja esta usando e monta um segundo canvas
+  // WebGL por cima do certo — o dado do renderer novo continua rolando por
+  // baixo, so que ninguem ve. So acontece em dev (o efeito que chama init()
+  // roda uma unica vez por carregamento real de pagina), mas o guard e
+  // barato e evita a fonte mais provavel de "conectou mas o dado nao aparece".
+  private disposed = false;
 
   constructor(private readonly options: DiceBoxOptions) {}
 
@@ -419,6 +428,7 @@ export class DiceBoxRenderer implements RollRenderer {
     // Import dinamico: o bundle 3D (three.js + fisica) so carrega quando
     // um tier 3D e de fato usado, e falhas de WebGL nao quebram o app.
     const { default: DiceBox } = await import("@3d-dice/dice-box-threejs");
+    if (this.disposed) return;
     // As imagens de textura sao pedidas como
     // `${assetPath}textures/<nome>.webp` — os arquivos vivem em
     // public/textures (copiados do pacote da lib).
@@ -470,6 +480,7 @@ export class DiceBoxRenderer implements RollRenderer {
       // por nao carregar os 45 mp3.
       await box.initialize();
     }
+    if (this.disposed) return;
     // A lib cria TODO material de dado com `transparent: true` e
     // `depthTest: false`. Num canvas com alpha (que e o nosso caso: modo
     // stream, overlay do Android e Browser Source do OBS) isso faz o fundo
@@ -652,6 +663,7 @@ export class DiceBoxRenderer implements RollRenderer {
 
   dispose(): void {
     // A lib nao expoe destroy; remover o canvas basta pra esta etapa.
+    this.disposed = true;
     this.box = null;
     this.barriers = {};
     this.container?.replaceChildren();

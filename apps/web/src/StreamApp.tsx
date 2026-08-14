@@ -49,6 +49,11 @@ declare global {
 // clear, entao o no tambem nunca desmonta pra se recuperar sozinho).
 interface Shown {
   result: RollResult;
+  // Quem rolou (vazio = rolagem local via window.rolaiStream, sem "dono"
+  // pra mostrar) e a cor do dado dela, pro card de resultado combinar com
+  // o dado que caiu — mesma logica do app principal (App.tsx).
+  player: string;
+  style: DiceStyle | null;
   seq: number;
 }
 
@@ -119,12 +124,17 @@ export function StreamApp({ options }: { options: StreamOptions }) {
   }, []);
 
   const animate = useCallback(
-    (result: RollResult, style?: DiceStyle | null) => {
+    (result: RollResult, style?: DiceStyle | null, player?: string) => {
       // Dados da rolagem anterior saem antes da nova entrar: sem ninguem
       // clicando pra dispensar, eles se acumulariam na mesa.
       rendererRef.current?.clear();
       // seq+1 troca a `key` do overlay: no novo, animacao do zero.
-      setShown((prev) => ({ result, seq: (prev?.seq ?? 0) + 1 }));
+      setShown((prev) => ({
+        result,
+        player: player ?? "",
+        style: style ?? null,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
       if (!exceedsAnimationCap(result)) {
         // Depois do commit: a placa precisa estar na tela pra ser medida.
         queueRoll(() => {
@@ -146,7 +156,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
     if (options.room === "") return;
     const onEvent = (event: RoomEvent) => {
       if (event.type === "roll") {
-        animate(event.result, event.style);
+        animate(event.result, event.style, event.player);
       } else if (event.type === "snapshot") {
         setStatus(null);
       } else if (event.type === "serverError") {
@@ -155,7 +165,9 @@ export function StreamApp({ options }: { options: StreamOptions }) {
         setStatus((prev) => prev ?? "desconectado da sala");
       }
     };
-    const client = new RoomClient(options.room, "stream", onEvent, undefined, true);
+    // Sem limite de tentativas: ninguem esta olhando a Browser Source do OBS
+    // pra recarregar a pagina se a reconexao desistir (ver client.ts).
+    const client = new RoomClient(options.room, "stream", onEvent, undefined, true, Infinity);
     clientRef.current = client;
     client.connect();
     return () => {
@@ -203,7 +215,12 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       <div className="stage-overlay" ref={overlayRef}>
         {shown !== null && (
           <div key={shown.seq} className="stream-result">
-            <ResultDisplay result={shown.result} showDismissHint={false} />
+            <ResultDisplay
+              result={shown.result}
+              player={shown.player}
+              playerStyle={shown.style}
+              showDismissHint={false}
+            />
           </div>
         )}
         {status !== null && <p className="stream-status">{status}</p>}

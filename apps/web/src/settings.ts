@@ -367,3 +367,21 @@ export function loadPlayerName(storage: StorageLike): string {
 export function savePlayerName(storage: StorageLike, name: string): void {
   storage.setItem(PLAYER_NAME_KEY, name.trim().slice(0, MAX_PLAYER_NAME));
 }
+
+// Ultima sala em que a pessoa esteve. So pra reentrar sozinho ao reabrir o
+// app sem link (?room= na URL ja cobre o caso de link direto) — sair da sala
+// de proposito apaga isto (App.tsx), senao reabrir o app sempre puxaria de
+// volta uma sala que a pessoa deixou por querer.
+const ROOM_CODE_KEY = "rolai.room-code";
+
+export function loadRoomCode(storage: StorageLike): string {
+  return storage.getItem(ROOM_CODE_KEY) ?? "";
+}
+
+export function saveRoomCode(storage: StorageLike, code: string): void {
+  storage.setItem(ROOM_CODE_KEY, code);
+}
+
+export function clearRoomCode(storage: StorageLike): void {
+  storage.setItem(ROOM_CODE_KEY, "");
+}

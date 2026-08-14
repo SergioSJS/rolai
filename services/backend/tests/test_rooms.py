@@ -12,6 +12,7 @@ from fakeredis.aioredis import FakeRedis
 from starlette.testclient import TestClient, WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
+from app import rooms
 from tests.conftest import assert_ws_rejected, make_roll_message
 
 ROOM_CODE_ALPHABET = re.compile(r"^[A-Za-z0-9_-]{8}$")  # token_urlsafe(6) -> 8 chars
@@ -81,6 +82,37 @@ def test_roll_broadcast_reaches_all_clients_including_sender(client: TestClient)
             assert event["type"] == "roll"
             assert event["player"] == expected_player
             assert event["result"]["notation"] == "1d20"
+
+
+class _DeadConn:
+    """Simula uma conexao cujo socket ja caiu mas cujo `finally` (que a
+    tiraria do dict) ainda nao rodou — a task dela so nota o disconnect no
+    proximo receive_text(), que pode ficar horas pendurado num heartbeat
+    longo. E exatamente o estado que _broadcast precisa atravessar sem
+    quebrar pros demais."""
+
+    async def send_json(self, event: dict[str, object]) -> None:
+        raise RuntimeError("conexao morta (simulada)")
+
+
+class _RecordingConn:
+    def __init__(self) -> None:
+        self.received: list[dict[str, object]] = []
+
+    async def send_json(self, event: dict[str, object]) -> None:
+        self.received.append(event)
+
+
+@pytest.mark.asyncio
+async def test_broadcast_survives_a_dead_connection_ahead_in_the_dict() -> None:
+    # Reproduz o bug ao vivo (rolagem sumia da Browser Source do OBS sem
+    # erro nenhum): uma conexao morta na frente do dict derrubava o
+    # _broadcast inteiro, e quem viesse DEPOIS dela na ordem de insercao
+    # nunca recebia rolagem nenhuma ate o `finally` da morta rodar sozinho.
+    alive = _RecordingConn()
+    connections: dict[str, object] = {"morta": _DeadConn(), "viva": alive}
+    await rooms._broadcast(connections, {"type": "roll", "player": "ana"})  # type: ignore[arg-type]
+    assert alive.received == [{"type": "roll", "player": "ana"}]
 
 
 def test_malformed_payload_rejected_without_dropping_connection(client: TestClient) -> None:

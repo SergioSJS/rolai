@@ -94,6 +94,40 @@ def test_spectator_receives_roll_broadcasts(client: TestClient) -> None:
         assert event["result"]["notation"] == "1d20"
 
 
+def test_player_keeps_broadcasting_after_spectator_dict_gets_recycled(
+    client: TestClient,
+) -> None:
+    # Bug ao vivo (Browser Source do OBS parava de receber depois de um F5):
+    # o jogador guarda o dict de espectadores da sala UMA VEZ, no momento em
+    # que entra, e fica preso no loop de mensagens a sessao inteira. Se os
+    # espectadores zerarem em algum momento (o primeiro sai), o dict e
+    # apagado de app.state; o PROXIMO espectador a entrar ganha um dict
+    # NOVO. O jogador (que nunca reconectou) nao tem como saber e continua
+    # fazendo broadcast pro dict orfao de sempre — o espectador novo nunca
+    # recebe rolagem nenhuma, sem erro em lugar nenhum.
+    code = client.post("/rooms").json()["code"]
+    with client.websocket_connect(f"/rooms/{code}?name=Ana") as ws_a:
+        next_event(ws_a)  # snapshot
+
+        # Primeiro espectador entra e sai — zera o dict, que sai de
+        # app.state (rooms.py: `if not spectators: ...pop(code, None)`).
+        with client.websocket_connect(f"/rooms/{code}?spectator=1") as ws_s1:
+            next_event(ws_s1)
+
+        # Segundo espectador entra DEPOIS que o primeiro ja saiu: ganha um
+        # dict novo em app.state.
+        with client.websocket_connect(f"/rooms/{code}?spectator=1") as ws_s2:
+            next_event(ws_s2)
+
+            # Ana nunca reconectou — ainda assim a rolagem dela tem que
+            # chegar no espectador novo.
+            ws_a.send_json(make_roll_message(notation="1d20", total=9))
+            next_event(ws_a)  # echo
+            event = next_event(ws_s2)
+            assert event["type"] == "roll"
+            assert event["result"]["notation"] == "1d20"
+
+
 def test_spectator_snapshot_has_no_history(client: TestClient) -> None:
     code = client.post("/rooms").json()["code"]
     with client.websocket_connect(f"/rooms/{code}?name=Ana") as ws_a:

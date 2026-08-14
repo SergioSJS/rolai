@@ -316,9 +316,41 @@ def _parse_style(raw: str | None) -> DiceStyle | None:
         return None
 
 
+def _room_dict(
+    store: dict[str, dict[str, WebSocket]], code: str
+) -> dict[str, WebSocket]:
+    """O dict de conexoes da sala AGORA — nunca uma referencia presa de
+    quando ESTA conexao entrou.
+
+    Bug real que isto conserta: o jogador fica preso no `while True` a
+    sessao inteira (horas), com `spectators` fixado no que existia no
+    momento em que ele entrou. Se os espectadores zerarem em algum momento
+    (a Browser Source do OBS atualizando, por exemplo) o dict e removido de
+    `app.state` pelo `finally` de quem saiu, e o PROXIMO espectador a
+    entrar ganha um dict NOVO. O jogador nunca fica sabendo — continua
+    fazendo broadcast pro dict orfao de sempre, e a rolagem dele para de
+    chegar em qualquer espectador ate ele mesmo reconectar (o que forca
+    reler isto do zero). setdefault e barato: reler a cada vez, em vez de
+    guardar uma vez, custa nada e fecha a janela de vez.
+    """
+    return store.setdefault(code, {})
+
+
 async def _broadcast(connections: dict[str, WebSocket], event: dict[str, object]) -> None:
-    for conn in list(connections.values()):
-        await conn.send_json(event)
+    # Uma conexao morta (socket ja caiu, mas o `finally` dela ainda nao
+    # rodou — lag normal entre o disconnect acontecer e a task dela notar)
+    # nao pode derrubar o broadcast pra quem continua vivo. Sem o
+    # try/except, UM send falho aqui abortava o loop pro resto da lista
+    # (dict preserva ordem de insercao) — quem entrou DEPOIS do morto na
+    # sala simplesmente parava de receber rolagem nenhuma, sem erro visivel
+    # em lugar nenhum, ate o `finally` dele mesmo limpar o dict.
+    for member_id, conn in list(connections.items()):
+        try:
+            await conn.send_json(event)
+        except Exception:  # noqa: BLE001 — send numa conexao morta pode vir
+            # em qualquer tipo (ConnectionClosed, RuntimeError, etc.); o que
+            # importa e nao deixar isso derrubar quem ainda esta vivo.
+            log.warning("event=broadcast_send_failed member_id=%s", member_id)
 
 
 # Alfabeto e tamanho aceitos numa URL de sala. Sem esse filtro, qualquer
@@ -495,7 +527,7 @@ async def room_ws(
         # Espectador nao entra no roster, entao nao gera aviso.
         if not spectator:
             await _broadcast(
-                connections,
+                _room_dict(websocket.app.state.room_connections, code),
                 {"type": "roster", "roster": roster_payload(await store.roster(code))},
             )
         heartbeat = settings.ws_heartbeat_seconds
@@ -544,26 +576,31 @@ async def room_ws(
             }
             await store.append_roll(code, entry)
             # Espectadores recebem o broadcast tambem — e o que alimenta a
-            # animacao da Browser Source do OBS.
-            await _broadcast(connections, event)
-            await _broadcast(spectators, event)
+            # animacao da Browser Source do OBS. `_room_dict` de novo aqui
+            # (nao os `connections`/`spectators` capturados la em cima): esta
+            # conexao pode estar neste loop ha horas, e o dict certo e o de
+            # AGORA, nao o de quando ela entrou (ver docstring de _room_dict).
+            await _broadcast(_room_dict(websocket.app.state.room_connections, code), event)
+            await _broadcast(_room_dict(websocket.app.state.room_spectators, code), event)
             _stats_of(websocket).rolls_relayed += 1
     except WebSocketDisconnect:
         pass
     finally:
         log.info("event=ws_closed code=%s role=%s player=%s", code, role, name)
         if spectator:
-            spectators.pop(member_id, None)
-            if not spectators:
+            current_spectators = _room_dict(websocket.app.state.room_spectators, code)
+            current_spectators.pop(member_id, None)
+            if not current_spectators:
                 websocket.app.state.room_spectators.pop(code, None)
         else:
-            connections.pop(member_id, None)
-            if not connections:
+            current_connections = _room_dict(websocket.app.state.room_connections, code)
+            current_connections.pop(member_id, None)
+            if not current_connections:
                 websocket.app.state.room_connections.pop(code, None)
             await store.remove_member(code, member_id)
-            if connections:
+            if current_connections:
                 await _broadcast(
-                    connections,
+                    current_connections,
                     {"type": "roster", "roster": roster_payload(await store.roster(code))},
                 )
 

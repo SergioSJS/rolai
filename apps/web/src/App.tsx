@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { RollResult } from "@rolai/rules-engine";
 import { availableProfiles } from "./profiles";
+import { familyFor } from "./profileFamilies";
 import { APK_LATEST_URL } from "./config";
 import type {
   DiceStyle,
@@ -19,16 +20,19 @@ import type {
   ThemeName,
 } from "./settings";
 import {
+  clearRoomCode,
   loadDiceScale,
   loadDiceStyle,
   loadPlayerName,
   loadQualityTier,
+  loadRoomCode,
   loadSystem,
   loadTheme,
   saveDiceScale,
   saveDiceStyle,
   savePlayerName,
   saveQualityTier,
+  saveRoomCode,
   saveSystem,
   saveTheme,
 } from "./settings";
@@ -56,6 +60,22 @@ import { useOnline } from "./useOnline";
 function roomParamFromUrl(): string {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get("room") ?? "";
+}
+
+// Mantem `?room=` na barra de enderecos em sincronia com a sala atual.
+// Sem isto a URL fica presa na sala com que a pagina foi carregada: criar
+// ou trocar de sala pelo modal muda o estado por dentro, mas quem olhar a
+// barra (ou copiar dali, ou so der F5) ve/volta pra sala ERRADA — inclusive
+// uma que ja nao existe mais, derrubando de novo uma sala boa por cima.
+function setRoomUrlParam(code: string | null): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (code === null) {
+    url.searchParams.delete("room");
+  } else {
+    url.searchParams.set("room", code);
+  }
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 type ModalKind = "room" | "settings" | "about" | "help" | null;
@@ -203,6 +223,12 @@ export function App() {
         if (!pendingRef.current.consumeEcho(event.player, event.result)) {
           animate(event.result, event.style, event.player);
         }
+      } else if (event.type === "rejected") {
+        // Codigo recusado (sala nao encontrada/cheia/origem barrada): nao
+        // adianta guardar pra reentrar sozinho no proximo carregamento, nem
+        // deixar a URL apontando pra ele.
+        clearRoomCode(window.localStorage);
+        setRoomUrlParam(null);
       }
     },
     [animate],
@@ -214,6 +240,8 @@ export function App() {
       selfNameRef.current = name;
       setPlayerName(name);
       savePlayerName(window.localStorage, name);
+      saveRoomCode(window.localStorage, code);
+      setRoomUrlParam(code);
       pendingRef.current = new PendingRolls();
       dispatch({ type: "joining", code });
       // O estilo do dado vai no join: a sala inteira anima a rolagem de
@@ -226,11 +254,15 @@ export function App() {
   );
 
   // Link de convite (?room=CODIGO) entra direto, sem passar pelo modal — com
-  // o apelido salvo (ou "anonymous"), que da pra trocar depois em Sala.
+  // o apelido salvo (ou "anonymous"), que da pra trocar depois em Sala. Sem
+  // link, cai pra ultima sala em que a pessoa esteve (localStorage): reabrir
+  // o app nao devia pedir pra digitar o codigo de novo — "sair da sala" e
+  // que apaga isso (handleLeave), senao reentraria numa sala que a pessoa
+  // deixou por querer.
   const autoJoinedRef = useRef(false);
   useEffect(() => {
     if (autoJoinedRef.current) return;
-    const code = roomParamFromUrl();
+    const code = roomParamFromUrl() || loadRoomCode(window.localStorage);
     if (code === "") return;
     autoJoinedRef.current = true;
     joinRoom(code, playerName);
@@ -302,6 +334,8 @@ export function App() {
     clientRef.current?.leave();
     clientRef.current = null;
     setLocalHistory([]);
+    clearRoomCode(window.localStorage);
+    setRoomUrlParam(null);
   }, []);
 
   const handleRoll = useCallback(
@@ -331,9 +365,16 @@ export function App() {
         client.send(result);
       } else {
         setLocalHistory((prev) => [...prev, { player: "você", result }]);
+        if (room.code !== null) {
+          // Dentro de uma sala mas sem conexao agora (reconectando/caida):
+          // sem isto a rolagem anima igual e some no vazio, sem ninguem mais
+          // ver — e a pessoa so descobre muito depois, quando reparar que a
+          // mesa nao tem a rolagem dela.
+          setNotice("Sem conexão com a sala agora — essa rolagem ficou só com você.");
+        }
       }
     },
-    [animate, room.status, room.roster.length],
+    [animate, room.status, room.code, room.roster.length],
   );
 
   const handleTierChange = useCallback((next: QualityTier) => {
@@ -414,6 +455,8 @@ export function App() {
           <RollPanel
             key={system}
             profile={profiles.find((p) => p.system === system)}
+            family={familyFor(system)}
+            onSelectFamilyMember={handleSystemChange}
             onRoll={handleRoll}
           />
           <RosterCard room={room} />

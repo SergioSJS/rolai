@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   clampDiceScale,
+  clearRoomCode,
   DEFAULT_DICE_STYLE,
   DEFAULT_QUALITY_TIER,
   DICE_MATERIALS,
@@ -11,10 +12,12 @@ import {
   loadDiceScale,
   loadDiceStyle,
   loadQualityTier,
+  loadRoomCode,
   loadTheme,
   saveDiceScale,
   saveDiceStyle,
   saveQualityTier,
+  saveRoomCode,
   saveTheme,
 } from "../settings";
 
@@ -188,5 +191,24 @@ describe("tamanho do dado", () => {
     saveDiceScale(storage, 99);
     expect(loadDiceScale(storage)).toBe(1.6);
     expect(clampDiceScale("lixo")).toBe(1);
+  });
+});
+
+describe("ultima sala (reentrar sozinho ao reabrir o app)", () => {
+  it("vazio quando nunca esteve em sala", () => {
+    expect(loadRoomCode(makeStorage())).toBe("");
+  });
+
+  it("persiste e recupera o codigo", () => {
+    const storage = makeStorage();
+    saveRoomCode(storage, "mesa-fixa-do-sergio-2026");
+    expect(loadRoomCode(storage)).toBe("mesa-fixa-do-sergio-2026");
+  });
+
+  it("sair da sala apaga o codigo guardado", () => {
+    const storage = makeStorage();
+    saveRoomCode(storage, "mesa-fixa-do-sergio-2026");
+    clearRoomCode(storage);
+    expect(loadRoomCode(storage)).toBe("");
   });
 });

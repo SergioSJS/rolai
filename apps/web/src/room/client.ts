@@ -8,6 +8,7 @@ import type { HistoryEntry, RoomEvent, RosterMember } from "./reducer";
 
 const MAX_RECONNECT_ATTEMPTS = 5;
 const BASE_BACKOFF_MS = 500;
+const MAX_BACKOFF_MS = 30_000;
 
 // Cria sala no backend e devolve o codigo.
 export async function createRoom(): Promise<string> {
@@ -124,6 +125,13 @@ export class RoomClient {
     // Modo stream/OBS: entra como espectador — recebe e anima as rolagens
     // dos outros, nunca rola (o backend tambem rejeita roll de espectador).
     private readonly spectator = false,
+    // Quantas vezes reconectar antes de desistir de vez. Padrao 5 (~15s de
+    // backoff) serve pra UI com gente na frente pra notar e agir. A Browser
+    // Source do OBS passa Infinity: ninguem esta olhando pra recarregar a
+    // pagina, e o backend recria sozinho sala de codigo durável no reconnect
+    // (rooms.py) — desistir so trocaria "reconecta sozinho" por "trava até
+    // alguem notar", que e o proprio bug reportado.
+    private readonly maxReconnectAttempts: number = MAX_RECONNECT_ATTEMPTS,
   ) {}
 
   connect(): void {
@@ -169,11 +177,13 @@ export class RoomClient {
 
     ws.onclose = (event: CloseEvent) => {
       if (this.manualClose) return;
-      // Recusa DEFINITIVA do servidor: reconectar seria loop infinito, e
-      // ainda comeria cota do limite de conexao. O backend aceita o
-      // handshake antes de validar justamente pra estes codigos chegarem
-      // aqui — fechar antes do accept vira 1006 (erro generico) e o cliente
-      // nao consegue distinguir de queda de rede (services/backend/app/rooms.py).
+      // Recusa DEFINITIVA do servidor: pra um cliente com maxReconnectAttempts
+      // finito (a UI, com gente na frente), reconectar so comeria cota do
+      // limite de conexao sem chance real de dar certo — desistir na hora e
+      // deixar a pessoa agir. O backend aceita o handshake antes de validar
+      // justamente pra estes codigos chegarem aqui — fechar antes do accept
+      // vira 1006 (erro generico) e o cliente nao distingue de queda de rede
+      // (services/backend/app/rooms.py).
       const fatal: Record<number, string> = {
         4404: "sala não encontrada",
         4403: "origem não autorizada",
@@ -181,15 +191,19 @@ export class RoomClient {
         1008: "rate limit excedido",
       };
       const motivo = fatal[event.code];
-      if (motivo !== undefined) {
+      const semLimite = !Number.isFinite(this.maxReconnectAttempts);
+      if (motivo !== undefined && !semLimite) {
         this.onEvent({ type: "rejected", message: motivo });
         return;
       }
-      if (this.attempts >= MAX_RECONNECT_ATTEMPTS) {
+      if (!semLimite && this.attempts >= this.maxReconnectAttempts) {
         this.onEvent({ type: "disconnected", willReconnect: false });
         return;
       }
-      const delay = BASE_BACKOFF_MS * 2 ** this.attempts;
+      // Backoff capado: sem isto, um cliente sem limite (Infinity) que nunca
+      // reseta `attempts` (porque a sala sumiu de vez) chegaria a esperar
+      // horas entre tentativas.
+      const delay = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * 2 ** this.attempts);
       this.attempts += 1;
       this.onEvent({ type: "disconnected", willReconnect: true });
       this.reconnectTimer = setTimeout(() => {

@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RollResult } from "@rolai/rules-engine";
 import { initialRoomState, roomReducer } from "../room/reducer";
 import { PendingRolls } from "../room/echo";
-import { isHeartbeatPing, parseServerMessage } from "../room/client";
+import { isHeartbeatPing, parseServerMessage, RoomClient } from "../room/client";
+import type { RoomEvent } from "../room/reducer";
 import { apiBaseUrl, roomWsUrl, wsBaseUrl } from "../config";
 
 function makeResult(overrides: Partial<RollResult> = {}): RollResult {
@@ -289,5 +290,124 @@ describe("recusa no handshake", () => {
     );
     expect(depois.code).toBe("a1B2-c3D");
     expect(depois.status).toBe("connected");
+  });
+});
+
+// Fake minimo de WebSocket: so o suficiente pra RoomClient abrir/fechar sem
+// rede de verdade. `triggerClose` simula o servidor derrubando a conexao.
+class FakeWebSocket {
+  static instances: FakeWebSocket[] = [];
+  onopen: (() => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  onerror: (() => void) | null = null;
+
+  constructor(public url: string) {
+    FakeWebSocket.instances.push(this);
+  }
+
+  close(): void {
+    /* leave(): RoomClient ja marca manualClose antes, entao onclose fake
+       nao precisa disparar pra o teste ficar correto. */
+  }
+
+  send(): void {}
+
+  triggerClose(code: number): void {
+    this.onclose?.(new CloseEvent("close", { code }));
+  }
+}
+
+describe("RoomClient (reconexao)", () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    vi.useFakeTimers();
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("cliente com limite (a UI) desiste apos esgotar as tentativas", () => {
+    const events: RoomEvent[] = [];
+    const client = new RoomClient("sala1", "ana", (e) => events.push(e));
+    client.connect();
+    // Queda generica (nao fatal): cada onclose reconecta com backoff ate
+    // esgotar as tentativas, e so entao desiste de vez. Precisa de uma
+    // tentativa a mais que o teto: a checagem roda ANTES de incrementar
+    // `attempts`, entao a 5a queda ainda reconecta — so a 6a desiste.
+    for (let i = 0; i < 6; i++) {
+      const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
+      ws.triggerClose(1006);
+      vi.runOnlyPendingTimers();
+    }
+    const last = events[events.length - 1];
+    expect(last).toEqual({ type: "disconnected", willReconnect: false });
+    const countAfterGiveUp = FakeWebSocket.instances.length;
+    vi.advanceTimersByTime(60_000);
+    // Desistiu de vez: nao abre mais nenhuma conexao, mesmo esperando.
+    expect(FakeWebSocket.instances).toHaveLength(countAfterGiveUp);
+  });
+
+  it("cliente com limite desiste na hora numa recusa definitiva (sala nao encontrada)", () => {
+    const events: RoomEvent[] = [];
+    const client = new RoomClient("sala1", "ana", (e) => events.push(e));
+    client.connect();
+    FakeWebSocket.instances[0]!.triggerClose(4404);
+    expect(events).toEqual([{ type: "rejected", message: "sala não encontrada" }]);
+    vi.advanceTimersByTime(60_000);
+    expect(FakeWebSocket.instances).toHaveLength(1); // nunca tentou de novo
+  });
+
+  it("cliente sem limite (Browser Source do OBS) nunca desiste, nem numa recusa definitiva", () => {
+    const events: RoomEvent[] = [];
+    const client = new RoomClient(
+      "sala1",
+      "stream",
+      (e) => events.push(e),
+      undefined,
+      true,
+      Infinity,
+    );
+    client.connect();
+    // Mesmo uma recusa "definitiva" (sala nao encontrada) so vira mais uma
+    // rodada de backoff: ninguem esta olhando a Browser Source pra
+    // recarregar a pagina, e um codigo durável se recria sozinho no
+    // reconnect (rooms.py) — desistir travaria o palco pra sempre.
+    for (let i = 0; i < 8; i++) {
+      const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
+      ws.triggerClose(4404);
+      vi.runOnlyPendingTimers();
+    }
+    expect(events.some((e) => e.type === "rejected")).toBe(false);
+    expect(events.some((e) => e.type === "disconnected" && !e.willReconnect)).toBe(false);
+    expect(FakeWebSocket.instances.length).toBeGreaterThan(8);
+  });
+
+  it("backoff do cliente sem limite fica capado (nao espera horas)", () => {
+    const events: RoomEvent[] = [];
+    const client = new RoomClient(
+      "sala1",
+      "stream",
+      (e) => events.push(e),
+      undefined,
+      true,
+      Infinity,
+    );
+    client.connect();
+    // Bem alem do ponto em que 2**attempts (sem teto) ja passaria de 30s
+    // (por volta da 7a tentativa): o delay tem que ficar capado em 30s, nao
+    // crescer sem limite ate horas de espera.
+    for (let i = 0; i < 10; i++) {
+      const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
+      ws.triggerClose(1006);
+      vi.runOnlyPendingTimers();
+    }
+    const countBefore = FakeWebSocket.instances.length;
+    FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!.triggerClose(1006);
+    vi.advanceTimersByTime(30_000);
+    expect(FakeWebSocket.instances.length).toBe(countBefore + 1);
   });
 });

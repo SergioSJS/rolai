@@ -45,7 +45,7 @@ describe("ResultDisplay", () => {
     };
     const { container } = render(<ResultDisplay result={result} />);
     expect(container.querySelector(".result-headline")?.textContent).toBe(
-      "sucesso forte",
+      "sucesso completo",
     );
     expect(container.querySelector(".result-flag")?.textContent).toBe("match!");
   });
@@ -99,5 +99,22 @@ describe("tom do resultado", () => {
     const { container } = render(<ResultDisplay result={comOutcome("miss", ["miss", "match"])} />);
     expect(container.querySelector(".result-headline")?.className).toContain("tone-failure");
     expect(container.querySelector(".result-flag")?.className).toContain("tone-neutral");
+  });
+});
+
+describe("ResultDisplay — quem rolou", () => {
+  const result = roll("2d6", { deterministic: [3, 4] });
+
+  it("com player, mostra o nome de quem rolou", () => {
+    const { container } = render(<ResultDisplay result={result} player="ana" />);
+    expect(container.querySelector(".result-player")?.textContent).toContain("ana");
+  });
+
+  it("sem player (rolagem local, sem sala), nao mostra dono nenhum", () => {
+    // Bug real: o modo stream/OBS animava a rolagem de sala sem passar o
+    // player pro ResultDisplay — o card de resultado saia sempre anonimo,
+    // mesmo com todo mundo na sala sabendo quem rolou.
+    const { container } = render(<ResultDisplay result={result} />);
+    expect(container.querySelector(".result-player")).toBeNull();
   });
 });
