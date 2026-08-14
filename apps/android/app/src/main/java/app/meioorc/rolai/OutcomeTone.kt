@@ -15,9 +15,33 @@ package app.meioorc.rolai
  */
 enum class OutcomeTone { SUCCESS, PARTIAL, FAILURE, NEUTRAL }
 
-private val FAILURE = setOf("miss", "fail", "critical_failure", "fumble")
+private val FAILURE = setOf(
+    "miss",
+    "fail",
+    "critical_failure",
+    "fumble",
+    // wod5: fracasso com custo extra — ainda fracasso.
+    "bestial_failure",
+    // pool_d6 (Shadowrun-style): glitch e sempre reves, mesmo o nao-critico.
+    "glitch",
+    "critical_glitch",
+    // Infaernum (3d6 individual): desgraca e sempre o lado ruim, em qualquer
+    // quantidade.
+    "desgraca_x1",
+    "desgraca_x2",
+    "desgraca_x3",
+    // Infaernum — oraculo sim ou não.
+    "nao",
+)
 
-private val PARTIAL = setOf("weak_hit", "partial_success", "tie")
+private val PARTIAL = setOf(
+    "weak_hit",
+    "partial_success",
+    "tie",
+    "vislumbre_x1",
+    "vislumbre_x2",
+    "vislumbre_x3",
+)
 
 private val SUCCESS = setOf(
     "strong_hit",
@@ -29,6 +53,16 @@ private val SUCCESS = setOf(
     "extreme_success",
     "hard_success",
     "regular_success",
+    "facanha_x1",
+    "facanha_x2",
+    "facanha_x3",
+    "milagre_x1",
+    "milagre_x2",
+    "milagre_x3",
+    // wod5: critico "sujo" — ainda um sucesso, so com custo narrativo.
+    "messy_critical",
+    // Infaernum — oraculo sim ou não.
+    "sim",
 )
 
 /**

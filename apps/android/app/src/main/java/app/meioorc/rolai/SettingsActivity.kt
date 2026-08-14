@@ -55,9 +55,18 @@ class SettingsActivity : Activity() {
     private var colorOutline = RolaiSettings.DEFAULT_OUTLINE
 
     // Ids de sistema na ordem do spinner; indice 0 = notacao livre ("").
+    // Numa posicao de familia (Infaernum), o valor muda em runtime pro
+    // member escolhido no spinner "Modo" — ver renderInputsForm.
     private var systemIds = mutableListOf("")
     // Spec dos inputs de cada sistema (indice 0 = notacao livre, sem input).
     private var systemInfos = mutableListOf<SystemInfo?>(null)
+    // Todo SystemInfo do systems.json, por id — usado pra resolver qual
+    // member de uma familia esta ativo (o spinner principal so guarda o
+    // info do PRIMEIRO member; os outros vem daqui).
+    private var systemInfoById = mapOf<String, SystemInfo>()
+    // Posicao no spinner principal -> familia, so pras posicoes que sao
+    // familia (Infaernum). As demais nao entram no mapa.
+    private var familyAtPosition = mutableMapOf<Int, ProfileFamily>()
     // Views do formulario gerado, por id de input — lidas no saveFromViews.
     private val inputViews = mutableMapOf<String, View>()
 
@@ -97,6 +106,8 @@ class SettingsActivity : Activity() {
         editRoomCode = findViewById(R.id.edit_room_code)
         findViewById<Button>(R.id.button_create_room).setOnClickListener(::createRoom)
         findViewById<Button>(R.id.button_join_room).setOnClickListener { joinRoom() }
+        findViewById<Button>(R.id.button_copy_room_link).setOnClickListener { copyRoomLink(obs = false) }
+        findViewById<Button>(R.id.button_copy_obs_link).setOnClickListener { copyRoomLink(obs = true) }
         editName = findViewById(R.id.edit_name)
         editNotation = findViewById(R.id.edit_notation)
         spinnerSystem = findViewById(R.id.spinner_system)
@@ -166,6 +177,7 @@ class SettingsActivity : Activity() {
             startActivity(TwaActivity.intentFor(this))
         }
 
+        setupCollapsibleSections()
         showVersion()
 
         loadSystemsFromAssets()
@@ -445,8 +457,45 @@ class SettingsActivity : Activity() {
      * ligado nao ha o que conectar, e dizer isso e melhor que fingir que
      * conectou.
      */
+    /**
+     * Le o campo de sala e resolve link colado (o "Copiar link"/"Copiar
+     * link pro OBS" da web copia a URL inteira, nao so o codigo) pro codigo
+     * puro — reescreve o campo pra pessoa VER que simplificou, nao so
+     * aceitar por baixo dos panos.
+     */
+    private fun resolveRoomCodeInput(): String {
+        val raw = editRoomCode.text.toString()
+        val resolved = RolaiSettings.extractRoomCode(raw)
+        if (resolved != raw.trim()) editRoomCode.setText(resolved)
+        return resolved
+    }
+
+    /**
+     * Copia o link da sala (normal ou pra Browser Source do OBS) pra area
+     * de transferencia — mesmo par de botoes que a web tem em Sala
+     * (RoomPanel.tsx). Sem isto o unico jeito de levar a sala do celular
+     * pra outro aparelho era ditar o codigo em voz alta.
+     */
+    private fun copyRoomLink(obs: Boolean) {
+        val codigo = resolveRoomCodeInput()
+        if (!RolaiSettings.isValidRoomCode(codigo)) {
+            toast(getString(R.string.copy_link_needs_room))
+            return
+        }
+        val webBase = editWeb.text.toString().trim().ifEmpty { RolaiSettings.DEFAULT_WEB_BASE_URL }
+        val link = if (obs) {
+            RolaiSettings.roomObsShareUrl(webBase, codigo, seekScale.progress)
+        } else {
+            RolaiSettings.roomShareUrl(webBase, codigo)
+        }
+        val clipboard =
+            getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("rolai room link", link))
+        toast(getString(R.string.copy_link_done))
+    }
+
     private fun joinRoom() {
-        val codigo = editRoomCode.text.toString().trim()
+        val codigo = resolveRoomCodeInput()
         val problema = RolaiSettings.customCodeIssue(codigo)
         // Codigo curto pode ser sala EXISTENTE criada pelo backend (8 chars
         // do CSPRNG): so barra o que nem como codigo serve.
@@ -479,8 +528,57 @@ class SettingsActivity : Activity() {
         Toast.makeText(this, mensagem, Toast.LENGTH_LONG).show()
     }
 
+    /**
+     * Liga o clique de cada cabecalho de secao ao grupo logo abaixo dele —
+     * a tela cresceu campo a campo ao longo de varias specs e virou rolagem
+     * longa demais pra quem so quer entrar numa sala. Estado (expandido ou
+     * nao) sobrevive a reabertura da tela, guardado por chave propria.
+     *
+     * "Botao flutuante" fica de fora de proposito: e o interruptor mestre,
+     * nao tem cabecalho clicavel nem grupo (ver activity_settings.xml) —
+     * sempre visivel.
+     */
+    private fun setupCollapsibleSections() {
+        val prefs = getSharedPreferences(COLLAPSE_PREFS_NAME, MODE_PRIVATE)
+        setupCollapsible(
+            prefs, "quickroll", R.id.header_quickroll, R.id.chevron_quickroll, R.id.group_quickroll,
+        )
+        setupCollapsible(
+            prefs, "appearance", R.id.header_appearance, R.id.chevron_appearance, R.id.group_appearance,
+        )
+        setupCollapsible(prefs, "room", R.id.header_room, R.id.chevron_room, R.id.group_room)
+        setupCollapsible(prefs, "about", R.id.header_about, R.id.chevron_about, R.id.group_about)
+        setupCollapsible(
+            prefs, "advanced", R.id.header_advanced, R.id.chevron_advanced, R.id.group_advanced,
+        )
+    }
+
+    private fun setupCollapsible(
+        prefs: android.content.SharedPreferences,
+        key: String,
+        headerId: Int,
+        chevronId: Int,
+        groupId: Int,
+    ) {
+        val header = findViewById<View>(headerId)
+        val chevron = findViewById<TextView>(chevronId)
+        val group = findViewById<View>(groupId)
+        fun render(expanded: Boolean) {
+            group.visibility = if (expanded) View.VISIBLE else View.GONE
+            chevron.text = if (expanded) "▾" else "▸"
+        }
+        // Default COLAPSADO em todo mundo: a tela nasce enxuta, so os
+        // cabecalhos (mais o interruptor mestre, que nao colapsa).
+        render(prefs.getBoolean(key, false))
+        header.setOnClickListener {
+            val expandindo = group.visibility != View.VISIBLE
+            prefs.edit().putBoolean(key, expandindo).apply()
+            render(expandindo)
+        }
+    }
+
     private fun createRoom(button: android.view.View) {
-        val escolhido = editRoomCode.text.toString().trim()
+        val escolhido = resolveRoomCodeInput()
         // Campo preenchido = a sala QUE VOCE ESCOLHEU (mesmo comportamento da
         // web): o backend cria ao entrar num codigo valido inexistente, entao
         // aqui e so validar e conectar. Vazio = codigo aleatorio via REST.
@@ -572,10 +670,26 @@ class SettingsActivity : Activity() {
         val labels = mutableListOf(getString(R.string.system_none))
         try {
             val json = assets.open("headless/systems.json").bufferedReader().use { it.readText() }
-            for (info in ProfileForm.parseSystems(json)) {
+            val allInfos = ProfileForm.parseSystems(json)
+            systemInfoById = allInfos.associateBy { it.system }
+            // Sistemas soltos primeiro (na ordem do systems.json); os que
+            // sao member de uma familia (Infaernum) NAO entram aqui — so
+            // aparecem uma vez, pela familia, abaixo.
+            for (info in allInfos) {
+                if (info.system in ProfileFamilies.memberSystemIds) continue
                 systemIds.add(info.system)
                 labels.add(info.label)
                 systemInfos.add(info)
+            }
+            // Uma entrada por familia, no PRIMEIRO member por padrao — o
+            // spinner "Modo" (renderInputsForm) troca pros outros sem
+            // precisar de outra linha aqui.
+            for (family in ProfileFamilies.ALL) {
+                val first = systemInfoById[family.members.first().system] ?: continue
+                familyAtPosition[systemIds.size] = family
+                systemIds.add(first.system)
+                labels.add(family.label)
+                systemInfos.add(first)
             }
         } catch (e: Exception) {
             // systems.json ausente/corrompido: fica so a notacao livre —
@@ -721,12 +835,61 @@ class SettingsActivity : Activity() {
     private fun renderInputsForm(position: Int, inputsJson: String) {
         inputsForm.removeAllViews()
         inputViews.clear()
+        inputsForm.visibility = View.VISIBLE
+
+        val family = familyAtPosition[position]
+        if (family != null) {
+            // Infaernum: um segundo spinner escolhe o MODO (Acao/Sim ou
+            // Nao/Ideias) sem precisar de 3 linhas soltas no spinner
+            // principal. Trocar de modo muda systemIds/systemInfos NESTA
+            // posicao (mutavel) e remonta so os campos do member escolhido.
+            val currentId = systemIds.getOrNull(position)
+            val startIndex = family.members.indexOfFirst { it.system == currentId }.coerceAtLeast(0)
+            inputsForm.addView(fieldLabel("Modo"))
+            inputsForm.addView(
+                Spinner(this).apply {
+                    adapter = ArrayAdapter(
+                        this@SettingsActivity,
+                        android.R.layout.simple_spinner_dropdown_item,
+                        family.members.map { it.subLabel },
+                    )
+                    setSelection(startIndex)
+                    onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                        override fun onItemSelected(
+                            parent: AdapterView<*>?,
+                            view: View?,
+                            pos: Int,
+                            id: Long,
+                        ) {
+                            val member = family.members[pos]
+                            val memberInfo = systemInfoById[member.system] ?: return
+                            systemIds[position] = member.system
+                            systemInfos[position] = memberInfo
+                            renderMemberFields(memberInfo, RolaiSettings.load(this@SettingsActivity).inputsJson)
+                            saveFromViews()
+                        }
+
+                        override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+                    }
+                },
+            )
+            val info = systemInfos.getOrNull(position) ?: return
+            renderMemberFields(info, inputsJson)
+            return
+        }
+
         val info = systemInfos.getOrNull(position)
         if (info == null || !info.needsForm) {
             inputsForm.visibility = View.GONE
             return
         }
-        inputsForm.visibility = View.VISIBLE
+        renderMemberFields(info, inputsJson)
+    }
+
+    /** Campos (CD, modificador, vantagem...) de UM sistema — sem se
+     *  preocupar se ele veio solto ou escolhido dentro de uma familia. */
+    private fun renderMemberFields(info: SystemInfo, inputsJson: String) {
+        if (!info.needsForm) return
         val salvos = ProfileForm.fromJson(inputsJson)
         for (input in info.inputs) {
             inputsForm.addView(fieldLabel(input.label))
@@ -808,6 +971,13 @@ class SettingsActivity : Activity() {
 
     companion object {
         private const val REQUEST_NOTIFICATIONS = 1
+
+        // Estado expandido/colapsado de cada secao. Prefs PROPRIA (nao
+        // RolaiSettings.PREFS_NAME): e preferencia de INTERFACE, nao uma
+        // configuracao que afeta o comportamento do app — misturar as duas
+        // inflaria RolaiSettings (e todo teste que instancia ela) por algo
+        // que nao tem nada a ver com rolagem.
+        private const val COLLAPSE_PREFS_NAME = "rolai_settings_ui"
 
         // id -> [corpo, numero, contorno, textura, material]
         private val PRESETS = mapOf(

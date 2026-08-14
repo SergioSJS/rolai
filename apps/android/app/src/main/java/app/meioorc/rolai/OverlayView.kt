@@ -105,6 +105,13 @@ class OverlayView(context: Context) {
     var onCreateRoom: (() -> Unit)? = null
     var onLeaveRoom: (() -> Unit)? = null
 
+    /**
+     * Copiar o link da sala atual — toque unico, igual "Sair": nao precisa
+     * de teclado, entao nao precisa abrir a tela de config (ao contrario de
+     * Entrar/Criar, que digitam codigo).
+     */
+    var onCopyRoomLink: (() -> Unit)? = null
+
     /** Ultimo roster recebido — exibido no painel de sala. */
     private var roster: List<String> = emptyList()
 
@@ -118,14 +125,39 @@ class OverlayView(context: Context) {
      * uma CD.
      */
     var onRollWithInputs: ((String) -> Unit)? = null
+
+    /**
+     * Sistema "overlay" (roll_under): a notacao e o que o compositor de
+     * chips montou, e os inputs (ex. "valor testado") vao junto — o
+     * profile so avalia outcome_rules sobre o resultado, nao tem dado
+     * proprio (ver rollOverlay em rules-engine/profile.ts).
+     */
+    var onRollOverlay: ((notation: String, inputsJson: String) -> Unit)? = null
+
+    /**
+     * Botao "compor" do fan (engrenagem): abre o compositor COM os campos
+     * do sistema ativo, se houver — quem resolve qual sistema esta ativo e
+     * o OverlayService (esta view nao sabe de systems.json).
+     */
+    var onOpenComposer: (() -> Unit)? = null
     var onOpenApp: (() -> Unit)? = null
     var onOpenSettings: (() -> Unit)? = null
+
+    /** Aba de modo tocada dentro da caixa (ex.: Infaernum "Ideias") — troca
+     *  o sistema ativo sem sair pras configuracoes. Espelha as
+     *  `family-tabs` do RollPanel da web. */
+    var onSelectFamilyMember: ((String) -> Unit)? = null
+
+    /** Painel do sistema fechado sem rolar — salva os campos digitados (e a
+     *  notacao do composer, se o sistema ativo for "overlay") como novo
+     *  padrao (ver setMode). */
+    var onPersistSystemInputs: ((inputsJson: String, notation: String?) -> Unit)? = null
 
     /** PANEL aberto = a janela precisa de foco (teclado); saiu dele = repor
      *  o FLAG_NOT_FOCUSABLE. Quem troca o flag e o OverlayService. */
     var onWindowFocusMode: ((Boolean) -> Unit)? = null
 
-    private enum class Mode { COLLAPSED, FAN, PANEL, HISTORY, ROOM, SYSTEM, RESULT }
+    private enum class Mode { COLLAPSED, FAN, PANEL, HISTORY, ROOM, RESULT }
     private var mode = Mode.COLLAPSED
 
     private val bubble: ImageView
@@ -133,9 +165,25 @@ class OverlayView(context: Context) {
     private val panel: LinearLayout
     private val historyPanel: LinearLayout
     private val roomPanel: LinearLayout
-    private val systemPanel: LinearLayout
+    // Sub-secao DENTRO do panel (nao um card separado): os campos do
+    // sistema ativo (CD, modificador...) ficam visiveis JUNTO dos chips de
+    // dado normais, nao escondem um ao outro. Antes eram dois cards
+    // mutuamente exclusivos (Mode.SYSTEM vs Mode.PANEL) — trocar de sistema
+    // fazia o compositor normal desaparecer por completo.
+    private lateinit var systemSection: LinearLayout
+    // Abas de modo (Infaernum: Acao/Sim ou Nao/Ideias) — so tem conteudo
+    // quando o sistema ativo pertence a uma ProfileFamily.
+    private lateinit var familyTabsRow: LinearLayout
     private lateinit var systemTitle: TextView
     private lateinit var systemFields: LinearLayout
+    // Botao de rolar do PROFILE — so aparece pra sistema de receita fixa
+    // (rola dado proprio). Sistema "overlay" (roll_under) nao tem: quem
+    // rola e o botao do compositor mesmo, aplicando a regra do profile em
+    // cima do que os chips montarem (ver rollCurrent/onRollOverlay).
+    private lateinit var profileRollButton: TextView
+    // Sistema "overlay" ativo no momento (null = nenhum, ou sistema de
+    // receita fixa) — decide o que rollCurrent() faz com o botao ROLAR.
+    private var activeOverlayInfo: SystemInfo? = null
     // Views do formulario aberto, por id de input, com o spec ao lado — sem
     // ele nao da pra saber se um valor vazio e "Normal" (select) ou campo em
     // branco (numero).
@@ -199,12 +247,6 @@ class OverlayView(context: Context) {
         historyPanel.visibility = View.GONE
         roomPanel = buildRoomPanel(context)
         roomPanel.visibility = View.GONE
-        systemPanel = buildSystemPanel(context)
-        // Sem isto o painel de inputs nasce VISIVEL: ligar o botao flutuante
-        // mostrava um cartao vazio com o botao ROLAR em vez da bolha, toda
-        // vez. O `setMode` nunca roda na criacao — quem esconde os paineis no
-        // inicio e esta linha, uma por painel.
-        systemPanel.visibility = View.GONE
 
         // Flash de resultado da rolagem pelo atalho: compacto, some sozinho
         // (RESULT_FLASH_MS) ou ao toque. NAO abre o cartao de historico.
@@ -229,7 +271,6 @@ class OverlayView(context: Context) {
         root.addView(panel)
         root.addView(historyPanel)
         root.addView(roomPanel)
-        root.addView(systemPanel)
         root.addView(resultFlash)
     }
 
@@ -260,7 +301,7 @@ class OverlayView(context: Context) {
             )
             addView(
                 miniBubble(context, R.drawable.ic_settings, "compor rolagem") {
-                    setMode(Mode.PANEL)
+                    onOpenComposer?.invoke()
                 },
             )
         }
@@ -318,6 +359,67 @@ class OverlayView(context: Context) {
         statusView = TextView(context).apply {
             setTextColor(MUTED)
             textSize = 11f
+        }
+
+        // Campos do sistema ativo (CD, modificador, vantagem...), JUNTO do
+        // compositor abaixo — nao mais um cartao separado que escondia os
+        // chips de dado normais. Comeca escondida: so aparece quando um
+        // sistema com input esta configurado (ver openComposer).
+        systemTitle = TextView(context).apply {
+            setTextColor(MUTED)
+            textSize = 11f
+            isAllCaps = true
+            letterSpacing = 0.06f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        systemFields = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        // Mesmo estilo do botao ROLAR do compositor (nao a pilula pequena de
+        // "limpar/config"): os dois eram visualmente iguais, so este ficava
+        // com contorno fraco — o jogador tocava sempre no botao errado (o
+        // generico, que rola so o composer) e achava que o sistema "nao
+        // funcionava".
+        profileRollButton = TextView(context).apply {
+            setText(R.string.roll_button)
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            letterSpacing = 0.04f
+            isAllCaps = true
+            background = rippled(
+                GradientDrawable().apply {
+                    cornerRadius = 12.dp().toFloat()
+                    setColor(ACCENT)
+                },
+            )
+            setPadding(0, 12.dp(), 0, 12.dp())
+            setOnClickListener { onRollWithInputs?.invoke(currentInputsJson()) }
+        }
+        val systemDivider = View(context).apply {
+            setBackgroundColor(BORDER)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1,
+            ).apply { topMargin = 10.dp() }
+        }
+        familyTabsRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            visibility = View.GONE
+        }
+        systemSection = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            addView(familyTabsRow)
+            addView(systemTitle, vParams(topMargin = 2))
+            addView(systemFields, vParams(topMargin = 4))
+            addView(profileRollButton, vParams(topMargin = 8))
+            // SEM vParams aqui: addView(view, params) SUBSTITUI o
+            // layoutParams que systemDivider ja tem (altura 1px). Um
+            // View puro (nao ViewGroup) com WRAP_CONTENT e sem conteudo
+            // nao encolhe pra 0 — ecoa de volta o teto AT_MOST do pai, e
+            // "1px" virava a tela quase inteira (caixa vazia gigante,
+            // empurrando chips/notacao/botao pra fora da area visivel).
+            addView(systemDivider)
         }
 
         // Chips de dado em duas fileiras (4 + 4, com o dF do Fate): toque
@@ -429,6 +531,7 @@ class OverlayView(context: Context) {
             layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
             addView(header)
             addView(statusView, vParams(topMargin = 2))
+            addView(systemSection, vParams(topMargin = 10))
             addView(rowTop, vParams(topMargin = 12))
             addView(rowBottom, vParams(topMargin = 6))
             addView(notationInput, vParams(topMargin = 8))
@@ -536,6 +639,12 @@ class OverlayView(context: Context) {
             )
         }
 
+        // Linha propria, largura cheia: junto das outras tres (peso 1/4 num
+        // painel de 300dp) o rotulo "copiar link" quebrava/cortava.
+        val copiarLink = actionButton(context, R.string.overlay_room_copy_link) {
+            onCopyRoomLink?.invoke()
+        }
+
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = cardBackground()
@@ -546,96 +655,104 @@ class OverlayView(context: Context) {
             addView(roomStatusView, vParams(topMargin = 6))
             addView(roomRosterView, vParams(topMargin = 10))
             addView(acoes, vParams(topMargin = 12))
+            addView(copiarLink, vParams(topMargin = 6))
         }
     }
 
-    // ---------- painel de inputs do sistema ----------
+    // ---------- campos do sistema ativo (dentro do PANEL) ----------
 
     /**
-     * Painel que pergunta CD, modificador e afins ANTES de rolar.
+     * Abre o compositor (chips + notacao) com os campos do sistema ativo
+     * visiveis JUNTO, se houver — `info` null (ou sem input) esconde a
+     * sub-secao e deixa so os chips normais, como antes de ter sistema
+     * nenhum configurado.
      *
-     * Antes, esses valores so existiam na tela de configuracoes, escritos
-     * como JSON cru: mudar a CD de um teste exigia sair do jogo, abrir o app,
-     * achar "Rolagem rapida" e digitar. Aqui eles ficam a um toque, sem sair
-     * do que estiver na tela.
+     * Antes, CD/modificador so existiam na tela de configuracoes, escritos
+     * como JSON cru: mudar a CD de um teste exigia sair do jogo, abrir o
+     * app, achar "Rolagem rapida" e digitar. E antes DESTA mudanca, o
+     * formulario ocupava um cartao SEPARADO dos chips normais — trocar de
+     * sistema fazia o compositor desaparecer por completo, sem jeito de
+     * rolar um d6 solto sem sair do sistema configurado.
      */
-    private fun buildSystemPanel(context: Context): LinearLayout {
-        systemTitle = TextView(context).apply {
-            setTextColor(TEXT)
-            textSize = 15f
-            setTypeface(typeface, Typeface.BOLD)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        val header = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(systemTitle)
-            addView(collapseButton(context))
-        }
-        systemFields = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-
-        val rolar = actionButton(context, R.string.roll_button) {
-            onRollWithInputs?.invoke(currentInputsJson())
-            setMode(Mode.COLLAPSED)
-        }.apply { setTextColor(ACCENT_BRIGHT) }
-
-        return LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            background = cardBackground()
-            elevation = 12.dp().toFloat()
-            setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
-            layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
-            addView(header)
-            addView(systemFields, vParams(topMargin = 4))
-            addView(rolar, vParams(topMargin = 12))
-        }
-    }
-
-    /**
-     * Abre o painel com os campos do sistema, preenchidos com os ultimos
-     * valores usados. Chamado pelo OverlayService no lugar de rolar direto.
-     */
-    fun askInputs(info: SystemInfo, saved: Map<String, String>) {
-        systemTitle.text = info.label
-        systemFields.removeAllViews()
-        systemInputViews.clear()
-        val context = systemFields.context
-        for (input in info.inputs) {
-            systemFields.addView(
-                TextView(context).apply {
-                    text = input.label
-                    setTextColor(MUTED)
-                    textSize = 11f
-                },
-                vParams(topMargin = 8),
-            )
-            val view: View = if (input.isSelect) {
-                Spinner(context).apply {
-                    adapter = ArrayAdapter(
-                        context,
-                        android.R.layout.simple_spinner_dropdown_item,
-                        input.options.map { it.label },
-                    )
-                    setSelection(
-                        input.options.indexOfFirst { it.value == saved[input.id] }
-                            .coerceAtLeast(0),
+    fun openComposer(info: SystemInfo?, saved: Map<String, String>) {
+        activeOverlayInfo = info?.takeIf { it.isOverlay }
+        val family = info?.let { ProfileFamilies.familyFor(it.system) }
+        // Membro de familia mostra a secao mesmo sem input proprio (ex.
+        // Infaernum "Acao"/"Ideias" nao pedem nada) — e onde moram as abas
+        // de modo, senao Sim ou Nao/Ideias ficam inalcancaveis do overlay.
+        if (info == null || (!info.needsForm && family == null)) {
+            systemSection.visibility = View.GONE
+            systemInputViews.clear()
+        } else {
+            val context = systemFields.context
+            familyTabsRow.removeAllViews()
+            if (family != null) {
+                familyTabsRow.visibility = View.VISIBLE
+                for ((i, member) in family.members.withIndex()) {
+                    val isActive = member.system == info.system
+                    familyTabsRow.addView(
+                        familyTabButton(context, member.subLabel, isActive) {
+                            onSelectFamilyMember?.invoke(member.system)
+                        },
+                        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                            marginStart = if (i == 0) 0 else 4.dp()
+                        },
                     )
                 }
             } else {
-                EditText(context).apply {
-                    // numberSigned: modificador negativo e comum, e o teclado
-                    // numerico puro nao tem sinal.
-                    inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-                        android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
-                    setTextColor(TEXT)
-                    textSize = 15f
-                    setText(saved[input.id].orEmpty())
+                familyTabsRow.visibility = View.GONE
+            }
+            systemTitle.text = info.label
+            systemFields.removeAllViews()
+            systemInputViews.clear()
+            for (input in info.inputs) {
+                systemFields.addView(
+                    TextView(context).apply {
+                        text = input.label
+                        setTextColor(MUTED)
+                        textSize = 11f
+                    },
+                    vParams(topMargin = 8),
+                )
+                if (input.isSelect) {
+                    val view = Spinner(context).apply {
+                        adapter = ArrayAdapter(
+                            context,
+                            android.R.layout.simple_spinner_dropdown_item,
+                            input.options.map { it.label },
+                        )
+                        setSelection(
+                            input.options.indexOfFirst { it.value == saved[input.id] }
+                                .coerceAtLeast(0),
+                        )
+                    }
+                    systemInputViews[input.id] = input to view
+                    systemFields.addView(view, vParams(topMargin = 2))
+                } else {
+                    val editText = EditText(context).apply {
+                        // numberSigned: modificador negativo e comum, e o
+                        // teclado numerico puro nao tem sinal.
+                        inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+                        setTextColor(TEXT)
+                        textSize = 15f
+                        gravity = Gravity.CENTER
+                        // Hint de UI do profile (ex. modificador "0") so
+                        // quando nao ha valor salvo ainda — nao sobrescreve
+                        // o que o jogador digitou numa rolagem anterior.
+                        setText(saved[input.id] ?: input.default.orEmpty())
+                    }
+                    systemInputViews[input.id] = input to editText
+                    systemFields.addView(numberFieldRow(context, editText, input.required), vParams(topMargin = 2))
                 }
             }
-            systemInputViews[input.id] = input to view
-            systemFields.addView(view, vParams(topMargin = 2))
+            // Overlay (roll_under): quem rola e o botao do compositor,
+            // aplicando a regra sobre a notacao dos chips — nao ha dado
+            // proprio pra um botao separado rolar.
+            profileRollButton.visibility = if (info.isOverlay) View.GONE else View.VISIBLE
+            systemSection.visibility = View.VISIBLE
         }
-        setMode(Mode.SYSTEM)
+        setMode(Mode.PANEL)
     }
 
     private fun currentInputsJson(): String {
@@ -744,12 +861,103 @@ class OverlayView(context: Context) {
         )
 
     /**
+     * Campo numerico de sistema com +/- (espelha StepperInput da web) e,
+     * quando o input e OPCIONAL, um botao "limpar" depois do "+" (roll_under
+     * "valor testado", fate "dificuldade"...) — sem isto o unico jeito de
+     * esvaziar era apagar dígito por dígito, e no apk nao existia NEM o
+     * +/- nem o limpar: so um EditText cru, diferente da web.
+     */
+    private fun numberFieldRow(context: Context, editText: EditText, required: Boolean): LinearLayout {
+        fun step(delta: Int) {
+            val current = editText.text.toString().toIntOrNull() ?: 0
+            editText.setText((current + delta).toString())
+        }
+        val minus = stepperGlyphButton(context, "−", "diminuir") { step(-1) }
+        val plus = stepperGlyphButton(context, "+", "aumentar") { step(1) }
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(minus, LinearLayout.LayoutParams(34.dp(), 34.dp()))
+            addView(
+                editText,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginStart = 6.dp()
+                    marginEnd = 6.dp()
+                },
+            )
+            addView(plus, LinearLayout.LayoutParams(34.dp(), 34.dp()))
+        }
+        if (!required) {
+            val clear = stepperGlyphButton(context, "×", "limpar") { editText.setText("") }
+            fun refreshClearState() {
+                clear.isEnabled = editText.text.isNotEmpty()
+                clear.alpha = if (clear.isEnabled) 1f else 0.4f
+            }
+            editText.addTextChangedListener(
+                object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                    override fun afterTextChanged(s: Editable?) = refreshClearState()
+                },
+            )
+            refreshClearState()
+            row.addView(
+                clear,
+                LinearLayout.LayoutParams(34.dp(), 34.dp()).apply { marginStart = 6.dp() },
+            )
+        }
+        return row
+    }
+
+    private fun stepperGlyphButton(context: Context, glyph: String, label: String, onClick: () -> Unit): TextView =
+        TextView(context).apply {
+            text = glyph
+            contentDescription = label
+            setTextColor(TEXT)
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            background = rippled(
+                GradientDrawable().apply {
+                    cornerRadius = 8.dp().toFloat()
+                    setColor(CHIP)
+                    setStroke(1.dp(), BORDER)
+                },
+            )
+            isClickable = true
+            setOnClickListener { onClick() }
+        }
+
+    /**
      * Ripple COM mascara. Sem o terceiro argumento o efeito e ilimitado e,
      * sobre fundo transparente, some — os botoes "limpar/config/abrir app"
      * pareciam texto morto: o toque nao dava sinal nenhum.
      */
     private fun rippled(content: GradientDrawable, mask: GradientDrawable? = null): RippleDrawable =
         RippleDrawable(ColorStateList.valueOf(RIPPLE), content, mask ?: content)
+
+    /** Aba de modo dentro da caixa (espelha `.family-tab`/`.is-active` da
+     *  web) — ativa vem preenchida de ACCENT, inativa so com contorno. */
+    private fun familyTabButton(context: Context, label: String, active: Boolean, onClick: () -> Unit): TextView =
+        TextView(context).apply {
+            text = label
+            setTextColor(if (active) Color.WHITE else MUTED)
+            textSize = 10f
+            isAllCaps = true
+            letterSpacing = 0.03f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            background = rippled(
+                GradientDrawable().apply {
+                    cornerRadius = 8.dp().toFloat()
+                    setColor(if (active) ACCENT else Color.TRANSPARENT)
+                    setStroke(1.dp(), if (active) ACCENT else BORDER)
+                },
+            )
+            setPadding(4.dp(), 8.dp(), 4.dp(), 8.dp())
+            isClickable = true
+            setOnClickListener { onClick() }
+        }
 
     private fun actionButton(context: Context, resId: Int, onClick: () -> Unit): TextView =
         TextView(context).apply {
@@ -811,10 +1019,22 @@ class OverlayView(context: Context) {
         }
     }
 
-    /** Rola o que esta no campo; vazio = rolagem rapida das configuracoes. */
+    /**
+     * Rola o que esta no campo; vazio = rolagem rapida das configuracoes.
+     *
+     * Sistema "overlay" ativo (roll_under): nao ha rolagem rapida
+     * alternativa — sem notacao no campo nao ha o que aplicar a regra
+     * "<= valor testado" em cima, entao so ignora o toque (mesma guarda do
+     * botao desabilitado no apps/web, RollPanel.tsx).
+     */
     private fun rollCurrent() {
         hideKeyboard()
         val notation = notationInput.text.toString().trim()
+        val overlay = activeOverlayInfo
+        if (overlay != null) {
+            if (notation.isNotEmpty()) onRollOverlay?.invoke(notation, currentInputsJson())
+            return
+        }
         if (notation.isEmpty()) onRollClicked?.invoke() else onRollNotation?.invoke(notation)
     }
 
@@ -841,18 +1061,34 @@ class OverlayView(context: Context) {
     }
 
     private fun setMode(newMode: Mode) {
-        // Saindo do painel: adota o que foi composto (ver onComposedNotation).
-        if (mode == Mode.PANEL && newMode != Mode.PANEL) {
+        // Fechando o painel (nao rolando): adota o que foi composto (ver
+        // onComposedNotation). SO em COLLAPSED — nao em RESULT: toda rolagem
+        // (profile ou composer) passa por PANEL->RESULT, e cada uma ja seta
+        // seu proprio lastRollAction no caminho certo (rollWithInputs,
+        // rollOverlayNow, rollNotation). Adotar aqui TAMBEM sobrescrevia esse
+        // valor certo com o texto que sobrou no campo de notacao — a
+        // rolagem do SISTEMA acontecia, mas a mini-bolha "repetir" virava
+        // sempre a notacao solta, ignorando o profile.
+        if (mode == Mode.PANEL && newMode == Mode.COLLAPSED) {
             val composto = notationInput.text.toString().trim()
             if (composto.isNotEmpty() && composto != quickNotation) {
                 onComposedNotation?.invoke(composto)
             }
+            // Digitar um valor novo (CD, dificuldade, modificador...) e so
+            // minimizar SEM apertar Rolar nao salvava nada — o campo ficava
+            // certo na TELA, mas o proximo toque em "rolar" de fora repetia
+            // o `lastRollAction` de uma rolagem anterior, com o valor ANTIGO.
+            // Fechar o painel com o sistema aberto agora conta como "eu
+            // configurei isto", igual a tela de configuracoes ja faz a cada
+            // toque.
+            if (systemSection.visibility == View.VISIBLE) {
+                val overlayNotation = if (activeOverlayInfo != null) composto else null
+                onPersistSystemInputs?.invoke(currentInputsJson(), overlayNotation)
+            }
         }
         mode = newMode
         bubble.visibility =
-            if (newMode == Mode.PANEL || newMode == Mode.HISTORY ||
-                newMode == Mode.ROOM || newMode == Mode.SYSTEM
-            ) {
+            if (newMode == Mode.PANEL || newMode == Mode.HISTORY || newMode == Mode.ROOM) {
                 View.GONE
             } else {
                 View.VISIBLE
@@ -861,13 +1097,13 @@ class OverlayView(context: Context) {
         panel.visibility = if (newMode == Mode.PANEL) View.VISIBLE else View.GONE
         historyPanel.visibility = if (newMode == Mode.HISTORY) View.VISIBLE else View.GONE
         roomPanel.visibility = if (newMode == Mode.ROOM) View.VISIBLE else View.GONE
-        systemPanel.visibility = if (newMode == Mode.SYSTEM) View.VISIBLE else View.GONE
         resultFlash.visibility = if (newMode == Mode.RESULT) View.VISIBLE else View.GONE
         root.removeCallbacks(hideResultRunnable)
         if (newMode == Mode.RESULT) root.postDelayed(hideResultRunnable, RESULT_FLASH_MS)
-        // Campo de texto = janela focavel. Vale pro compositor e pro
-        // formulario de sistema (CD e modificador sao digitados).
-        val comTeclado = newMode == Mode.PANEL || newMode == Mode.SYSTEM
+        // Campo de texto = janela focavel. PANEL agora cobre tanto o
+        // compositor quanto os campos do sistema (CD, modificador...),
+        // mesclados na mesma janela — nao ha mais Mode.SYSTEM separado.
+        val comTeclado = newMode == Mode.PANEL
         onWindowFocusMode?.invoke(comTeclado)
         if (!comTeclado) hideKeyboard()
         if (newMode == Mode.HISTORY) renderHistory()

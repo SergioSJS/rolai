@@ -24,6 +24,13 @@ data class ProfileInput(
     val label: String,
     val type: String,
     val options: List<ProfileOption>,
+    // Hint de UI: pre-preenche o campo (ex. modificador comecando em "0").
+    // Nao muda obrigatoriedade nenhuma — so aparencia do formulario.
+    val default: String?,
+    // false = pode ficar vazio (roll_under "valor testado", fate
+    // "dificuldade"...) — o campo ganha um botao "limpar" e a rolagem segue
+    // sem esse input (as outcome_rules que dependem dele so ficam de fora).
+    val required: Boolean,
 ) {
     val isSelect: Boolean get() = type == "select" && options.isNotEmpty()
 }
@@ -32,9 +39,19 @@ data class SystemInfo(
     val system: String,
     val label: String,
     val inputs: List<ProfileInput>,
+    val rollType: String,
 ) {
     /** Sistema sem input nenhum rola direto — nao ha o que perguntar. */
     val needsForm: Boolean get() = inputs.isNotEmpty()
+
+    /**
+     * "overlay" (ex.: roll_under): sem dado proprio — a rolagem vem do
+     * composer de notacao livre, o profile so avalia outcome_rules sobre
+     * ela (ver rollOverlay em rules-engine/profile.ts). Os inputs dele
+     * (ex. "valor testado") entram JUNTO do composer, nao num card
+     * separado, e nao ha botao de rolar proprio.
+     */
+    val isOverlay: Boolean get() = rollType == "overlay"
 }
 
 object ProfileForm {
@@ -52,6 +69,7 @@ object ProfileForm {
                         system = id,
                         label = system.optString("label", id),
                         inputs = parseInputs(system.optJSONArray("inputs")),
+                        rollType = system.optString("rollType", "simple"),
                     ),
                 )
             }
@@ -71,6 +89,8 @@ object ProfileForm {
                         label = input.optString("label", id),
                         type = input.optString("type", "number"),
                         options = parseOptions(input.optJSONArray("options")),
+                        default = if (input.has("default")) input.optString("default") else null,
+                        required = input.optBoolean("required", true),
                     ),
                 )
             }

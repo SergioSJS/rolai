@@ -176,3 +176,114 @@ class CustomCodeIssueTest {
         assertEquals(8, RolaiSettings.CUSTOM_CODE_MIN_DISTINCT)
     }
 }
+
+/**
+ * O "Copiar link"/"Copiar link pro OBS" da web (RoomPanel.tsx) gera a URL
+ * inteira, nao so o codigo — colar isso no campo de sala do app tem que
+ * funcionar tanto quanto digitar o codigo puro.
+ */
+class ExtractRoomCodeTest {
+
+    @Test
+    fun `codigo puro passa direto`() {
+        assertEquals("a1B2-c3D", RolaiSettings.extractRoomCode("a1B2-c3D"))
+        assertEquals("a1B2-c3D", RolaiSettings.extractRoomCode("  a1B2-c3D  "))
+    }
+
+    @Test
+    fun `extrai o codigo do link normal e do link de OBS`() {
+        assertEquals(
+            "a1B2-c3D",
+            RolaiSettings.extractRoomCode("https://rolai.app/?room=a1B2-c3D"),
+        )
+        assertEquals(
+            "a1B2-c3D",
+            RolaiSettings.extractRoomCode(
+                "https://rolai.app/?room=a1B2-c3D&stream=1&scale=1.6",
+            ),
+        )
+        // Dev local (http, porta, sem stream).
+        assertEquals(
+            "abcd1234",
+            RolaiSettings.extractRoomCode("http://localhost:5273/?room=abcd1234"),
+        )
+    }
+
+    @Test
+    fun `room no meio da query string tambem funciona`() {
+        assertEquals(
+            "a1B2-c3D",
+            RolaiSettings.extractRoomCode("https://rolai.app/?utm=x&room=a1B2-c3D&scale=1"),
+        )
+    }
+
+    @Test
+    fun `codigo com caractere especial vem decodificado`() {
+        assertEquals(
+            "mesa do sergio",
+            RolaiSettings.extractRoomCode("https://rolai.app/?room=mesa+do+sergio"),
+        )
+    }
+
+    @Test
+    fun `link sem parametro room ou sem query devolve a string original`() {
+        assertEquals(
+            "https://rolai.app/",
+            RolaiSettings.extractRoomCode("https://rolai.app/"),
+        )
+        assertEquals(
+            "https://rolai.app/?stream=1",
+            RolaiSettings.extractRoomCode("https://rolai.app/?stream=1"),
+        )
+    }
+}
+
+/**
+ * Mao inversa do ExtractRoomCodeTest: montar o link que vai pro clipboard
+ * (botoes "Copiar link"/"Copiar link pro OBS" da tela de configuracoes).
+ */
+class RoomShareUrlTest {
+
+    @Test
+    fun `link normal leva a base e o codigo`() {
+        assertEquals(
+            "https://rolai.app/?room=a1B2-c3D",
+            RolaiSettings.roomShareUrl("https://rolai.app", "a1B2-c3D"),
+        )
+        // Barra final na base nao duplica.
+        assertEquals(
+            "https://rolai.app/?room=a1B2-c3D",
+            RolaiSettings.roomShareUrl("https://rolai.app/", "a1B2-c3D"),
+        )
+    }
+
+    @Test
+    fun `base vazia cai no default do buildType`() {
+        assertEquals(
+            "${RolaiSettings.DEFAULT_WEB_BASE_URL}/?room=abcd1234",
+            RolaiSettings.roomShareUrl("", "abcd1234"),
+        )
+    }
+
+    @Test
+    fun `link do OBS leva stream e scale, escala capada na mesma faixa da web`() {
+        assertEquals(
+            "https://rolai.app/?room=a1B2-c3D&stream=1&scale=1.0",
+            RolaiSettings.roomObsShareUrl("https://rolai.app", "a1B2-c3D", 100),
+        )
+        assertEquals(
+            "https://rolai.app/?room=a1B2-c3D&stream=1&scale=1.6",
+            RolaiSettings.roomObsShareUrl("https://rolai.app", "a1B2-c3D", 160),
+        )
+        // Fora da faixa capa pro extremo mais proximo (70..160), no sentido
+        // certo — 999 e ALTO demais, cai no teto, nao no piso.
+        assertEquals(
+            "https://rolai.app/?room=a1B2-c3D&stream=1&scale=1.6",
+            RolaiSettings.roomObsShareUrl("https://rolai.app", "a1B2-c3D", 999),
+        )
+        assertEquals(
+            "https://rolai.app/?room=a1B2-c3D&stream=1&scale=0.7",
+            RolaiSettings.roomObsShareUrl("https://rolai.app", "a1B2-c3D", 10),
+        )
+    }
+}

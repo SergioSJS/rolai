@@ -34,6 +34,42 @@
         <item name="android:textColor">#8B95A1</item>
     </style>
 
+    <!-- Variante do cabecalho de secao pra dentro da linha clicavel
+         (Rolai.SectionGroupHeader): ocupa o espaco que sobra (empurra o
+         chevron pra ponta) e nao duplica a margem, que ja esta na linha. -->
+    <style name="Rolai.SectionHeader.Inline">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginTop">0dp</item>
+    </style>
+
+    <!-- Linha clicavel que abre/fecha um grupo de configuracoes (ver
+         setupCollapsible em SettingsActivity.kt). A tela cresceu campo a
+         campo ao longo de varias specs; sem colapsar, rolar ate Sala ou
+         Avancado significa passar por Aparencia do dado inteira toda vez. -->
+    <style name="Rolai.SectionGroupHeader" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">28dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="android:background">?android:attr/selectableItemBackground</item>
+    </style>
+
+    <!-- Seta de expandido/colapsado — texto puro (▾/▸) trocado em runtime,
+         sem drawable novo pra um glifo so. -->
+    <style name="Rolai.Chevron" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">#25C48F</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
     <!-- Dialogo da roda de cores: o builder da colorpickerview herda de
          AppCompat, entao precisa de tema AppCompat mesmo a Activity sendo
          Material (ver ColorWheelDialog). -->

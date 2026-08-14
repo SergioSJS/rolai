@@ -16,6 +16,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import org.json.JSONObject
@@ -57,6 +58,12 @@ class OverlayService : Service() {
      *  notacao; null = ainda nao rolou (ou a config mudou) = rola a
      *  rolagem rapida configurada. */
     private var lastRollAction: (() -> Unit)? = null
+
+    /** Notacao usada na ultima rolagem "overlay" (roll_under) de fato
+     *  executada — pra saber se o campo de notacao mudou desde entao (ver
+     *  persistSystemInputs). Sistema "receita fixa" nao usa isto: quem
+     *  decide o dado e o profile, nao o composer. */
+    private var lastOverlayNotation: String? = null
     private var lastQuickKey: String = ""
     private val settingsReloadRunnable = Runnable { applySettings() }
     private var viewAttached = false
@@ -134,16 +141,31 @@ class OverlayService : Service() {
         overlay.onQuickRoll = { (lastRollAction ?: ::rollNow).invoke() }
         overlay.onRollNotation = { notation -> rollNotation(notation) }
         overlay.onRollWithInputs = ::rollWithInputs
+        overlay.onRollOverlay = ::rollOverlayNow
+        overlay.onOpenComposer = ::openComposer
+        overlay.onSelectFamilyMember = ::selectFamilyMember
+        overlay.onPersistSystemInputs = ::persistSystemInputs
         overlay.onComposedNotation = { notation ->
             // Compor e minimizar SEM rolar nao mudava nada: o botao recolhido
             // dispara a rolagem rapida das configuracoes, e a composicao vivia
             // so no campo do painel. Adotar aqui faz a composicao virar "a
             // rolagem" — incluindo a mini-bolha, que repete a ultima.
-            lastRollAction = { headlessRoller.roll(notation) }
-            getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(KEY_LAST_ROLL, notation)
-                .apply()
+            //
+            // SO quando NAO ha sistema configurado. Com sistema ativo, texto
+            // que sobrou no campo (um chip tocado por engano, um resto de
+            // notacao antiga) ao fechar o painel sequestrava o slot de
+            // "repetir" do sistema — a rolagem do profile acontecia certinho
+            // uma vez, mas a mini-bolha passava a repetir so dado solto,
+            // ignorando o profile pra sempre até limpar o campo. Rolar o
+            // composer de propósito continua funcionando: isso passa por
+            // rollNotation(), nao por aqui.
+            if (RolaiSettings.load(this).system.isEmpty()) {
+                lastRollAction = { headlessRoller.roll(notation) }
+                getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_LAST_ROLL, notation)
+                    .apply()
+            }
             overlay.setQuickNotation(notation)
         }
         lastQuickKey = quickKeyOf(settings)
@@ -175,6 +197,18 @@ class OverlayService : Service() {
             lastHandshakeUrl = null
             overlay.setRoster(emptyList())
             publishStatus(getString(R.string.status_disconnected), RoomState.NONE)
+        }
+        overlay.onCopyRoomLink = {
+            val atual = RolaiSettings.load(this)
+            if (!RolaiSettings.isValidRoomCode(atual.roomCode)) {
+                Toast.makeText(this, R.string.copy_link_needs_room, Toast.LENGTH_LONG).show()
+            } else {
+                val link = RolaiSettings.roomShareUrl(atual.webBaseUrl, atual.roomCode)
+                val clipboard =
+                    getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("rolai room link", link))
+                Toast.makeText(this, R.string.copy_link_done, Toast.LENGTH_SHORT).show()
+            }
         }
         overlay.onCloseOverlay = {
             // Mesma coisa que desligar o toggle: apaga a preferencia ANTES de
@@ -544,12 +578,78 @@ class OverlayService : Service() {
         // rolar, ja preenchido com os ultimos valores. Antes esses valores so
         // podiam ser mudados na tela de configuracoes, escritos como JSON —
         // trocar a CD de um teste custava sair do jogo.
+        // Membro de familia (Infaernum) abre a caixa mesmo sem input — e ali
+        // que moram as abas de modo (Acao/Sim ou Nao/Ideias); rolar direto
+        // tornava os outros dois modos inalcancaveis pelo toque na bolha.
         val info = systems[settings.system]
-        if (info != null && info.needsForm) {
-            overlay.askInputs(info, ProfileForm.fromJson(settings.inputsJson))
+        if (info != null && (info.needsForm || ProfileFamilies.familyFor(info.system) != null)) {
+            overlay.openComposer(info, ProfileForm.fromJson(settings.inputsJson))
             return
         }
         headlessRoller.rollWithProfile(settings.system, settings.inputsJson)
+    }
+
+    /**
+     * Botao "compor" do fan: abre o compositor de chips COM os campos do
+     * sistema ativo, se houver. Antes ignorava o sistema configurado por
+     * completo — "compor" e o atalho pra rolagem livre virou tambem o
+     * unico jeito de ver/editar CD e modificador sem rolar direto.
+     */
+    private fun openComposer() {
+        val settings = RolaiSettings.load(this)
+        overlay.setQuickNotation(settings.notation)
+        val info = systems[settings.system]
+        overlay.openComposer(info, ProfileForm.fromJson(settings.inputsJson))
+    }
+
+    /**
+     * Aba de modo tocada dentro da caixa (Infaernum: Acao/Sim ou Nao/Ideias)
+     * — troca o sistema ativo pra outro membro da MESMA familia e reabre o
+     * compositor ja com os campos do novo modo. Antes, o unico jeito de
+     * mudar isso era ir em configuracoes e usar o spinner "Modo", saindo do
+     * jogo pra cada troca.
+     */
+    private fun selectFamilyMember(system: String) {
+        val settings = RolaiSettings.load(this)
+        RolaiSettings.save(this, settings.copy(system = system, inputsJson = "{}"))
+        lastRollAction = null
+        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_LAST_ROLL)
+            .apply()
+        val info = systems[system]
+        overlay.openComposer(info, ProfileForm.fromJson("{}"))
+    }
+
+    /**
+     * Painel do sistema fechado (o "—", nao o "fechar" que desliga tudo) sem
+     * apertar Rolar — os campos digitados (CD, dificuldade, modificador)
+     * salvam do mesmo jeito que cada toque na tela de configuracoes salva.
+     * Sem isto, digitar um valor novo e minimizar nao mudava nada: o campo
+     * ficava certo na TELA, mas o proximo "rolar" de fora (mini-bolha do
+     * fan) repetia o `lastRollAction` de uma rolagem anterior — com o valor
+     * ANTIGO. Vale pra qualquer sistema, nao so pro roll_under.
+     *
+     * SO invalida o `lastRollAction` quando o campo (ou, no roll_under, a
+     * notacao do composer) de fato MUDOU desde o ultimo valor REALMENTE
+     * rolado. Sem essa comparacao, fechar o painel DEPOIS de rolar (o fluxo
+     * normal: abre, rola, minimiza) tambem zerava o `lastRollAction` que o
+     * proprio rollWithInputs/rollOverlayNow tinha acabado de setar certinho
+     * — o botao de "repetir" voltava a abrir o formulario sempre, o MESMO
+     * bug que ja tinha sido corrigido antes.
+     */
+    private fun persistSystemInputs(inputsJson: String, notation: String?) {
+        val settings = RolaiSettings.load(this)
+        if (settings.system.isEmpty()) return
+        val inputsChanged = inputsJson != settings.inputsJson
+        val notationChanged = notation != null && notation != lastOverlayNotation
+        if (!inputsChanged && !notationChanged) return
+        RolaiSettings.save(this, settings.copy(inputsJson = inputsJson))
+        lastRollAction = null
+        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_LAST_ROLL)
+            .apply()
     }
 
     /**
@@ -575,6 +675,39 @@ class OverlayService : Service() {
         if (settings.system.isEmpty()) return
         RolaiSettings.save(this, settings.copy(inputsJson = inputsJson))
         headlessRoller.rollWithProfile(settings.system, inputsJson)
+        // Sem isto, a mini-bolha "repetir ultima rolagem" nunca aprendia
+        // sobre rolagem de profile: sempre cai no fallback rollNow(), que
+        // pra sistema com input REABRE o formulario em vez de repetir —
+        // parecia que o botao de rolar chamava configuracao.
+        lastRollAction = { headlessRoller.rollWithProfile(settings.system, inputsJson) }
+        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_LAST_ROLL)
+            .apply()
+    }
+
+    /**
+     * Sistema "overlay" (roll_under): a notacao vem dos chips do
+     * compositor, nao de um dado proprio do sistema — o profile so avalia
+     * outcome_rules sobre o resultado (rollOverlay em rules-engine). Vira
+     * a "ultima rolagem" da mini-bolha do fan, igual rollNotation.
+     */
+    private fun rollOverlayNow(notation: String, inputsJson: String) {
+        val settings = RolaiSettings.load(this)
+        if (settings.system.isEmpty()) return
+        RolaiSettings.save(this, settings.copy(inputsJson = inputsJson))
+        headlessRoller.rollOverlay(settings.system, notation, inputsJson)
+        lastRollAction = { headlessRoller.rollOverlay(settings.system, notation, inputsJson) }
+        lastOverlayNotation = notation
+        // NAO grava em KEY_LAST_ROLL: aquele campo alimenta loadLastRoll(),
+        // que so sabe repetir via headlessRoller.roll(notation) CRU — sem
+        // avaliar outcome_rules do overlay. Depois de matar o processo, e
+        // melhor cair no fallback de rollNow() (reabre o composer) do que
+        // repetir a notacao ignorando a regra "<= valor testado".
+        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_LAST_ROLL)
+            .apply()
     }
 
     /**
@@ -754,7 +887,16 @@ class OverlayService : Service() {
                         (0 until rolls.length()).sumOf { rolls.getInt(it) }
                     }
                 }
-                val outcome = result.optString("outcome", "")
+                // Mais de uma flag bateu (Infaernum: "1 milagre" + "2
+                // desgraças" na mesma rolagem; Ironsworn: "strong_hit" +
+                // "match"): mostra todas, juntas — só o `outcome` (a
+                // primeira) escondia o resto sem erro nenhum.
+                val flags = result.optJSONArray("outcome_flags")
+                val outcome = if (flags != null && flags.length() > 1) {
+                    (0 until flags.length()).joinToString(", ") { outcomeLabel(flags.getString(it)) }
+                } else {
+                    result.optString("outcome", "").let { if (it.isEmpty()) it else outcomeLabel(it) }
+                }
                 buildString {
                     append(notation)
                     if (dice.isNotEmpty()) append(" [$dice]")

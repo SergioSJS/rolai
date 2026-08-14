@@ -95,4 +95,38 @@ class ProfileFormTest {
         val semInput = ProfileForm.parseSystems("""[{"system":"x","label":"X"}]""")
         assertFalse(semInput[0].needsForm)
     }
+
+    /** rollType ausente vira "simple" — profiles antigos no systems.json (sem
+     * o campo) continuam rolando por rollWithProfile normalmente. */
+    @Test
+    fun `rollType ausente vira simple, nao overlay`() {
+        val semTipo = ProfileForm.parseSystems("""[{"system":"x","label":"X"}]""")
+        assertFalse(semTipo[0].isOverlay)
+    }
+
+    /** roll_under: sem dado proprio — a rolagem vem do composer normal. */
+    @Test
+    fun `rollType overlay marca isOverlay`() {
+        val overlay = ProfileForm.parseSystems(
+            """[{"system":"roll_under","label":"Roll Under","rollType":"overlay","inputs":[
+                {"id":"target","label":"Valor testado","type":"number","options":[]}]}]""",
+        )
+        assertTrue(overlay[0].isOverlay)
+    }
+
+    /** default e so hint de UI: pre-preenche o campo sem mudar obrigatoriedade. */
+    @Test
+    fun `input com default vem preenchido`() {
+        val comDefault = ProfileForm.parseSystems(
+            """[{"system":"pbta","label":"PbtA","inputs":[
+                {"id":"mod","label":"Modificador","type":"number","options":[],"default":"0"}]}]""",
+        )
+        assertEquals("0", comDefault[0].inputs[0].default)
+    }
+
+    @Test
+    fun `input sem default fica nulo`() {
+        val semDefault = ProfileForm.parseSystems(d20)
+        assertEquals(null, semDefault[0].inputs[1].default)
+    }
 }

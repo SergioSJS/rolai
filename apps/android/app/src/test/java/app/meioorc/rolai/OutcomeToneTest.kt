@@ -39,6 +39,39 @@ class OutcomeToneTest {
         assertEquals(OutcomeTone.NEUTRAL, outcomeTone("match"))
     }
 
+    /** Infaernum padrao (3d6 individual, quantizado): desgraca e sempre
+     * ruim, facanha/milagre sempre bons, vislumbre e meio-termo, em
+     * qualquer contagem (x1/x2/x3). */
+    @Test
+    fun `infaernum quantizado`() {
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("desgraca_x1"))
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("desgraca_x3"))
+        assertEquals(OutcomeTone.PARTIAL, outcomeTone("vislumbre_x2"))
+        assertEquals(OutcomeTone.SUCCESS, outcomeTone("facanha_x1"))
+        assertEquals(OutcomeTone.SUCCESS, outcomeTone("milagre_x3"))
+    }
+
+    /** wod5: critico "sujo" ainda e sucesso; fracasso bestial e fracasso. */
+    @Test
+    fun `wod5`() {
+        assertEquals(OutcomeTone.SUCCESS, outcomeTone("messy_critical"))
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("bestial_failure"))
+    }
+
+    /** pool_d6 (Shadowrun-style): glitch e sempre reves. */
+    @Test
+    fun `pool_d6`() {
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("glitch"))
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("critical_glitch"))
+    }
+
+    /** Infaernum — oraculo sim ou não. */
+    @Test
+    fun `sim ou nao`() {
+        assertEquals(OutcomeTone.SUCCESS, outcomeTone("sim"))
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("nao"))
+    }
+
     @Test
     fun `outcome desconhecido fica neutro em vez de chutar`() {
         assertEquals(OutcomeTone.NEUTRAL, outcomeTone("algo_de_profile_custom"))

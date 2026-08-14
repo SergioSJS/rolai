@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Tela de configuracoes nativa (SettingsActivity). Widgets da plataforma
      de proposito: a activity nao usa appcompat. Visual escuro com os tokens
-     do apps/web — secoes com cabecalho verde, rotulos discretos. -->
+     do apps/web — secoes com cabecalho verde, rotulos discretos.
+
+     Cada secao e um par cabecalho-clicavel + grupo colapsavel (ver
+     Rolai.SectionGroupHeader/setupCollapsible em SettingsActivity.kt) — a
+     tela cresceu campo a campo ao longo de varias specs e virou rolagem
+     longa demais; colapsar o que nao se mexe toda hora reduz o que aparece
+     de cara sem tirar nada do alcance. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/settings_scroller"
@@ -58,6 +64,12 @@
             android:textColor="#FFFFFF"
             android:text="@string/open_app" />
 
+        <!-- ===== Botao flutuante =====
+             UNICA secao que nao colapsa: e o interruptor mestre (liga/desliga
+             o botao flutuante inteiro) — esconder ele atras de um toque a
+             mais e o tipo de coisa que "some" bem na hora que a pessoa mais
+             precisa mexer nisso. -->
+
         <TextView
             style="@style/Rolai.SectionHeader"
             android:text="@string/section_general" />
@@ -79,309 +91,445 @@
             android:textColor="#8B95A1"
             android:textSize="12sp" />
 
-        <TextView
-            style="@style/Rolai.SectionHeader"
-            android:text="@string/section_quickroll" />
+        <!-- ===== Rolagem rapida ===== -->
 
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/notation_label" />
-
-        <EditText
-            android:id="@+id/edit_notation"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:importantForAutofill="no"
-            android:inputType="text"
-            android:textColor="#E8ECF0" />
-
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/system_label" />
-
-        <Spinner
-            android:id="@+id/spinner_system"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" />
-
-        <!-- Campos do sistema escolhido (CD, modificador, vantagem...),
-             gerados em runtime a partir de assets/headless/systems.json.
-             Antes isto era um EditText onde se digitava o JSON cru dos
-             inputs — ver ProfileForm.kt. -->
         <LinearLayout
-            android:id="@+id/inputs_form"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:orientation="vertical" />
-
-        <TextView
-            style="@style/Rolai.SectionHeader"
-            android:text="@string/section_appearance" />
-
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/label_dice_preset" />
-
-        <Spinner
-            android:id="@+id/spinner_dice"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" />
-
-        <!-- Previa do dado (cor do corpo + numero, com contorno) — o
-             mesmo par de cores que vai pro palco 3D. -->
-        <FrameLayout
-            android:id="@+id/dice_preview"
-            android:layout_width="76dp"
-            android:layout_height="76dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="14dp">
+            android:id="@+id/header_quickroll"
+            style="@style/Rolai.SectionGroupHeader">
 
             <TextView
-                android:id="@+id/txt_preview"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:text="20"
-                android:textSize="26sp"
-                android:textStyle="bold" />
-        </FrameLayout>
+                style="@style/Rolai.SectionHeader.Inline"
+                android:text="@string/section_quickroll" />
 
-        <Switch
-            android:id="@+id/switch_harmony"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:text="@string/label_harmony"
-            android:textColor="#E8ECF0"
-            android:textSize="14sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/label_harmony_explain"
-            android:textColor="#8B95A1"
-            android:textSize="12sp" />
-
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/label_color_body" />
-
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/palette_body"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal" />
-        </HorizontalScrollView>
-
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/label_color_number" />
-
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/palette_number"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal" />
-        </HorizontalScrollView>
-
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/label_color_outline" />
-
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/palette_outline"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal" />
-        </HorizontalScrollView>
-
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/label_texture" />
-
-        <Spinner
-            android:id="@+id/spinner_texture"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" />
-
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/label_material" />
-
-        <Spinner
-            android:id="@+id/spinner_material"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" />
-
-        <TextView
-            android:id="@+id/txt_scale_label"
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/label_dice_scale" />
-
-        <SeekBar
-            android:id="@+id/seek_scale"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:min="70"
-            android:max="160" />
-
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/label_quality" />
-
-        <Spinner
-            android:id="@+id/spinner_quality"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" />
-
-        <TextView
-            style="@style/Rolai.SectionHeader"
-            android:text="@string/section_room" />
-
-        <!-- Estado da conexao: sem isto nao havia como saber se a sala
-             pegou (o botao "Criar" so criava e ficava por isso mesmo). -->
-        <!-- Indicador de conexao: cor + palavra, nao texto cinza miudo.
-             "1 jogador(es)" nao dizia a coisa mais importante — se conectou. -->
-        <TextView
-            android:id="@+id/txt_room_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="12dp"
-            android:background="@drawable/bg_status_chip"
-            android:paddingStart="12dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="10dp"
-            android:textColor="#0D1013"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            tools:text="CONECTADO · mesa-do-sergio · 2 na sala" />
-
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/server_label" />
-
-        <EditText
-            android:id="@+id/edit_server"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:importantForAutofill="no"
-            android:inputType="textUri"
-            android:textColor="#E8ECF0" />
-
-        <!-- Endereco que o botao "Abrir o rolai.app" carrega. Existia so como
-             preferencia, sem campo: numa build de DEBUG o padrao e o Vite da
-             maquina (localhost:5273) e o botao falhava sem ter como corrigir
-             pela tela. O palco 3D nao depende disto — ele vem do proprio APK
-             (ver DiceStageWindow.usaPalcoLocal). -->
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/web_label" />
-
-        <EditText
-            android:id="@+id/edit_web"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:importantForAutofill="no"
-            android:inputType="textUri"
-            android:textColor="#E8ECF0" />
-
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/room_code_label" />
+            <TextView
+                android:id="@+id/chevron_quickroll"
+                style="@style/Rolai.Chevron" />
+        </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/group_quickroll"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/system_label" />
+
+            <Spinner
+                android:id="@+id/spinner_system"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" />
+
+            <!-- Campos do sistema escolhido (CD, modificador, vantagem...),
+                 gerados em runtime a partir de assets/headless/systems.json.
+                 Antes isto era um EditText onde se digitava o JSON cru dos
+                 inputs — ver ProfileForm.kt. -->
+            <LinearLayout
+                android:id="@+id/inputs_form"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="vertical" />
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/notation_label" />
 
             <EditText
-                android:id="@+id/edit_room_code"
-                android:layout_width="0dp"
+                android:id="@+id/edit_notation"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:hint="@string/room_code_hint"
                 android:importantForAutofill="no"
                 android:inputType="text"
-                android:maxLength="32"
                 android:textColor="#E8ECF0" />
+        </LinearLayout>
 
+        <!-- ===== Aparencia do dado ===== -->
+
+        <LinearLayout
+            android:id="@+id/header_appearance"
+            style="@style/Rolai.SectionGroupHeader">
+
+            <TextView
+                style="@style/Rolai.SectionHeader.Inline"
+                android:text="@string/section_appearance" />
+
+            <TextView
+                android:id="@+id/chevron_appearance"
+                style="@style/Rolai.Chevron" />
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/group_appearance"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
+            android:orientation="vertical">
 
-            <Button
-                android:id="@+id/button_create_room"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/create_room" />
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/label_dice_preset" />
 
-            <Button
-                android:id="@+id/button_join_room"
-                android:layout_width="0dp"
+            <Spinner
+                android:id="@+id/spinner_dice"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:text="@string/join_room" />
+                android:layout_marginTop="4dp" />
+
+            <!-- Previa do dado (cor do corpo + numero, com contorno) — o
+                 mesmo par de cores que vai pro palco 3D. -->
+            <FrameLayout
+                android:id="@+id/dice_preview"
+                android:layout_width="76dp"
+                android:layout_height="76dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="14dp">
+
+                <TextView
+                    android:id="@+id/txt_preview"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="20"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <Switch
+                android:id="@+id/switch_harmony"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/label_harmony"
+                android:textColor="#E8ECF0"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/label_harmony_explain"
+                android:textColor="#8B95A1"
+                android:textSize="12sp" />
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/label_color_body" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/palette_body"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/label_color_number" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/palette_number"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/label_color_outline" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/palette_outline"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/label_texture" />
+
+            <Spinner
+                android:id="@+id/spinner_texture"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/label_material" />
+
+            <Spinner
+                android:id="@+id/spinner_material"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                android:id="@+id/txt_scale_label"
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/label_dice_scale" />
+
+            <SeekBar
+                android:id="@+id/seek_scale"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:min="70"
+                android:max="160" />
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/label_quality" />
+
+            <Spinner
+                android:id="@+id/spinner_quality"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" />
         </LinearLayout>
 
-        <TextView
-            style="@style/Rolai.FieldLabel"
-            android:text="@string/name_label" />
+        <!-- ===== Sala ===== -->
 
-        <EditText
-            android:id="@+id/edit_name"
+        <LinearLayout
+            android:id="@+id/header_room"
+            style="@style/Rolai.SectionGroupHeader">
+
+            <TextView
+                style="@style/Rolai.SectionHeader.Inline"
+                android:text="@string/section_room" />
+
+            <TextView
+                android:id="@+id/chevron_room"
+                style="@style/Rolai.Chevron" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/group_room"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:importantForAutofill="no"
-            android:inputType="textPersonName"
-            android:maxLength="24"
-            android:textColor="#E8ECF0" />
+            android:orientation="vertical">
 
-        <TextView
-            style="@style/Rolai.SectionHeader"
-            android:text="@string/section_about" />
+            <!-- Estado da conexao: sem isto nao havia como saber se a sala
+                 pegou (o botao "Criar" so criava e ficava por isso mesmo).
+                 Indicador de conexao: cor + palavra, nao texto cinza miudo.
+                 "1 jogador(es)" nao dizia a coisa mais importante — se
+                 conectou. -->
+            <TextView
+                android:id="@+id/txt_room_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="12dp"
+                android:background="@drawable/bg_status_chip"
+                android:paddingStart="12dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="10dp"
+                android:textColor="#0D1013"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                tools:text="CONECTADO · mesa-do-sergio · 2 na sala" />
 
-        <!-- Versao instalada. O app nao esta na Play Store: sem isto nao ha
-             como saber o que esta rodando no aparelho. -->
-        <TextView
-            android:id="@+id/txt_version"
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/room_code_label" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <!-- 32 era o teto do CODIGO puro (ROOM_CODE_REGEX). O campo
+                     agora tambem aceita o link inteiro colado
+                     (resolveRoomCodeInput extrai o `room=` depois) — 32
+                     truncava o link ANTES do extractRoomCode rodar, e a
+                     pessoa colava e via lixo cortado no meio, sem entender
+                     por que. Generoso o bastante pra
+                     `https://<host>/?room=<codigo de 32>&stream=1&scale=1.6`. -->
+                <EditText
+                    android:id="@+id/edit_room_code"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/room_code_hint"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:maxLength="256"
+                    android:textColor="#E8ECF0" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/button_create_room"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/create_room" />
+
+                <Button
+                    android:id="@+id/button_join_room"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:text="@string/join_room" />
+            </LinearLayout>
+
+            <!-- Sem isto o unico jeito de levar a sala pra outro aparelho
+                 era ditar o codigo em voz alta. Mesmo par de links que a
+                 web oferece em Sala (RoomPanel.tsx): link normal e link pro
+                 OBS. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/button_copy_room_link"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/copy_room_link" />
+
+                <Button
+                    android:id="@+id/button_copy_obs_link"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:text="@string/copy_obs_link" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/name_label" />
+
+            <EditText
+                android:id="@+id/edit_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:importantForAutofill="no"
+                android:inputType="textPersonName"
+                android:maxLength="24"
+                android:textColor="#E8ECF0" />
+        </LinearLayout>
+
+        <!-- ===== Versao ===== -->
+
+        <LinearLayout
+            android:id="@+id/header_about"
+            style="@style/Rolai.SectionGroupHeader">
+
+            <TextView
+                style="@style/Rolai.SectionHeader.Inline"
+                android:text="@string/section_about" />
+
+            <TextView
+                android:id="@+id/chevron_about"
+                style="@style/Rolai.Chevron" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/group_about"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textColor="#9AA6B2"
-            android:textSize="14sp" />
+            android:orientation="vertical">
+
+            <!-- Versao instalada. O app nao esta na Play Store: sem isto
+                 nao ha como saber o que esta rodando no aparelho. -->
+            <TextView
+                android:id="@+id/txt_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="#9AA6B2"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- ===== Avancado (por ultimo de proposito) =====
+             Servidor e Endereco do app so importam pra quem aponta o app
+             pra um deploy proprio ou pro Vite local — a grande maioria
+             nunca toca aqui. Ficavam no meio da secao Sala, entre o status
+             da conexao e o campo de codigo, e quem so queria entrar numa
+             sala precisava passar pelos dois campos "(avancado)" primeiro. -->
+
+        <LinearLayout
+            android:id="@+id/header_advanced"
+            style="@style/Rolai.SectionGroupHeader">
+
+            <TextView
+                style="@style/Rolai.SectionHeader.Inline"
+                android:text="@string/section_advanced" />
+
+            <TextView
+                android:id="@+id/chevron_advanced"
+                style="@style/Rolai.Chevron" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/group_advanced"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/server_label" />
+
+            <EditText
+                android:id="@+id/edit_server"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:importantForAutofill="no"
+                android:inputType="textUri"
+                android:textColor="#E8ECF0" />
+
+            <!-- Endereco que o botao "Abrir o rolai.app" carrega. Existia
+                 so como preferencia, sem campo: numa build de DEBUG o
+                 default aponta pro Vite da maquina (localhost:5273), entao
+                 sem campo na tela o botao ficava quebrado sem conserto
+                 possivel. O palco 3D nao depende disto — ele vem do
+                 proprio APK (ver DiceStageWindow.usaPalcoLocal). -->
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/web_label" />
+
+            <EditText
+                android:id="@+id/edit_web"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:importantForAutofill="no"
+                android:inputType="textUri"
+                android:textColor="#E8ECF0" />
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>

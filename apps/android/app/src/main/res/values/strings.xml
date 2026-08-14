@@ -19,6 +19,10 @@
     <string name="create_room_failed">nao deu pra criar a sala: %1$s</string>
     <string name="room_status_none">sem sala — o dado rola só neste aparelho</string>
     <string name="room_status_created">sala criada: %1$s — ative o botão flutuante para conectar</string>
+    <string name="copy_room_link">Copiar link</string>
+    <string name="copy_obs_link">Copiar link pro OBS</string>
+    <string name="copy_link_needs_room">digite ou crie uma sala primeiro</string>
+    <string name="copy_link_done">link copiado</string>
     <string name="name_label">Apelido</string>
     <string name="notation_label">Rolagem rápida do botão</string>
     <string name="system_label">Sistema de regras</string>
@@ -50,12 +54,14 @@
     <string name="overlay_room_create">criar sala</string>
     <string name="overlay_room_join">conectar</string>
     <string name="overlay_room_leave">sair da sala</string>
+    <string name="overlay_room_copy_link">copiar link</string>
     <string name="label_dice_preset">Estilo</string>
     <string name="section_general">Botão flutuante</string>
-    <string name="section_room">Conexão e sala</string>
-    <string name="section_quickroll">Rolagem rápida</string>
+    <string name="section_room">Sala</string>
+    <string name="section_quickroll">Padrão de rolagem</string>
     <string name="section_appearance">Aparência do dado</string>
     <string name="section_about">Versão</string>
+    <string name="section_advanced">Avançado</string>
     <!-- %1$s = versão instalada (BuildConfig.VERSION_NAME). -->
     <string name="version_installed">Rolaí %1$s</string>
     <!-- %1$s = versão nova encontrada nas Releases do GitHub. -->

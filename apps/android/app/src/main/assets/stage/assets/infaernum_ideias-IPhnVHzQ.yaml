@@ -1,0 +1,160 @@
+system: infaernum_ideias
+label: "Infaernum — Ideias (verbo + substantivo)"
+roll_type: multi
+inputs: []
+fields:
+  - id: verb
+    dice: "2d6"
+    compare_individually: true
+  - id: noun
+    dice: "2d6"
+    compare_individually: true
+# Cada tabela e lida pelos dois dados INDIVIDUALMENTE (linha = 1o dado,
+# coluna = 2o dado), nao pela soma — sao 36 celulas igualmente
+# provaveis, nao a curva de um 2d6 somado. Verbo e substantivo saem
+# de rolagens independentes (2d6 cada); una os dois pra interpretar.
+outcome_rules:
+  - condition: "verb.rolls[0] == 1 and verb.rolls[1] == 1"
+    result: ignorar
+  - condition: "verb.rolls[0] == 1 and verb.rolls[1] == 2"
+    result: descobrir
+  - condition: "verb.rolls[0] == 1 and verb.rolls[1] == 3"
+    result: comecar
+  - condition: "verb.rolls[0] == 1 and verb.rolls[1] == 4"
+    result: bloquear
+  - condition: "verb.rolls[0] == 1 and verb.rolls[1] == 5"
+    result: ganhar
+  - condition: "verb.rolls[0] == 1 and verb.rolls[1] == 6"
+    result: perseguir
+  - condition: "verb.rolls[0] == 2 and verb.rolls[1] == 1"
+    result: julgar
+  - condition: "verb.rolls[0] == 2 and verb.rolls[1] == 2"
+    result: fazer
+  - condition: "verb.rolls[0] == 2 and verb.rolls[1] == 3"
+    result: terminar
+  - condition: "verb.rolls[0] == 2 and verb.rolls[1] == 4"
+    result: vingar
+  - condition: "verb.rolls[0] == 2 and verb.rolls[1] == 5"
+    result: imitar
+  - condition: "verb.rolls[0] == 2 and verb.rolls[1] == 6"
+    result: iludir
+  - condition: "verb.rolls[0] == 3 and verb.rolls[1] == 1"
+    result: esconder
+  - condition: "verb.rolls[0] == 3 and verb.rolls[1] == 2"
+    result: conquistar
+  - condition: "verb.rolls[0] == 3 and verb.rolls[1] == 3"
+    result: aumentar
+  - condition: "verb.rolls[0] == 3 and verb.rolls[1] == 4"
+    result: guiar
+  - condition: "verb.rolls[0] == 3 and verb.rolls[1] == 5"
+    result: oprimir
+  - condition: "verb.rolls[0] == 3 and verb.rolls[1] == 6"
+    result: ajudar
+  - condition: "verb.rolls[0] == 4 and verb.rolls[1] == 1"
+    result: proteger
+  - condition: "verb.rolls[0] == 4 and verb.rolls[1] == 2"
+    result: pacificar
+  - condition: "verb.rolls[0] == 4 and verb.rolls[1] == 3"
+    result: diminuir
+  - condition: "verb.rolls[0] == 4 and verb.rolls[1] == 4"
+    result: expor
+  - condition: "verb.rolls[0] == 4 and verb.rolls[1] == 5"
+    result: emboscar
+  - condition: "verb.rolls[0] == 4 and verb.rolls[1] == 6"
+    result: controlar
+  - condition: "verb.rolls[0] == 5 and verb.rolls[1] == 1"
+    result: mudar
+  - condition: "verb.rolls[0] == 5 and verb.rolls[1] == 2"
+    result: encontrar
+  - condition: "verb.rolls[0] == 5 and verb.rolls[1] == 3"
+    result: tomar
+  - condition: "verb.rolls[0] == 5 and verb.rolls[1] == 4"
+    result: planejar
+  - condition: "verb.rolls[0] == 5 and verb.rolls[1] == 5"
+    result: criar
+  - condition: "verb.rolls[0] == 5 and verb.rolls[1] == 6"
+    result: recusar
+  - condition: "verb.rolls[0] == 6 and verb.rolls[1] == 1"
+    result: conhecer
+  - condition: "verb.rolls[0] == 6 and verb.rolls[1] == 2"
+    result: curar
+  - condition: "verb.rolls[0] == 6 and verb.rolls[1] == 3"
+    result: pausar
+  - condition: "verb.rolls[0] == 6 and verb.rolls[1] == 4"
+    result: perder
+  - condition: "verb.rolls[0] == 6 and verb.rolls[1] == 5"
+    result: trair
+  - condition: "verb.rolls[0] == 6 and verb.rolls[1] == 6"
+    result: aceitar
+  - condition: "noun.rolls[0] == 1 and noun.rolls[1] == 1"
+    result: ambiente
+  - condition: "noun.rolls[0] == 1 and noun.rolls[1] == 2"
+    result: poder
+  - condition: "noun.rolls[0] == 1 and noun.rolls[1] == 3"
+    result: falha
+  - condition: "noun.rolls[0] == 1 and noun.rolls[1] == 4"
+    result: clima
+  - condition: "noun.rolls[0] == 1 and noun.rolls[1] == 5"
+    result: animal
+  - condition: "noun.rolls[0] == 1 and noun.rolls[1] == 6"
+    result: perigo
+  - condition: "noun.rolls[0] == 2 and noun.rolls[1] == 1"
+    result: alianca
+  - condition: "noun.rolls[0] == 2 and noun.rolls[1] == 2"
+    result: problema
+  - condition: "noun.rolls[0] == 2 and noun.rolls[1] == 3"
+    result: atencao
+  - condition: "noun.rolls[0] == 2 and noun.rolls[1] == 4"
+    result: boato
+  - condition: "noun.rolls[0] == 2 and noun.rolls[1] == 5"
+    result: negocio
+  - condition: "noun.rolls[0] == 2 and noun.rolls[1] == 6"
+    result: cilada
+  - condition: "noun.rolls[0] == 3 and noun.rolls[1] == 1"
+    result: inimigo
+  - condition: "noun.rolls[0] == 3 and noun.rolls[1] == 2"
+    result: lar
+  - condition: "noun.rolls[0] == 3 and noun.rolls[1] == 3"
+    result: ferimento
+  - condition: "noun.rolls[0] == 3 and noun.rolls[1] == 4"
+    result: caido
+  - condition: "noun.rolls[0] == 3 and noun.rolls[1] == 5"
+    result: medo
+  - condition: "noun.rolls[0] == 3 and noun.rolls[1] == 6"
+    result: prova
+  - condition: "noun.rolls[0] == 4 and noun.rolls[1] == 1"
+    result: confronto
+  - condition: "noun.rolls[0] == 4 and noun.rolls[1] == 2"
+    result: caminho
+  - condition: "noun.rolls[0] == 4 and noun.rolls[1] == 3"
+    result: ilusao
+  - condition: "noun.rolls[0] == 4 and noun.rolls[1] == 4"
+    result: fe
+  - condition: "noun.rolls[0] == 4 and noun.rolls[1] == 5"
+    result: solidao
+  - condition: "noun.rolls[0] == 4 and noun.rolls[1] == 6"
+    result: vazio
+  - condition: "noun.rolls[0] == 5 and noun.rolls[1] == 1"
+    result: dor
+  - condition: "noun.rolls[0] == 5 and noun.rolls[1] == 2"
+    result: doenca
+  - condition: "noun.rolls[0] == 5 and noun.rolls[1] == 3"
+    result: raiva
+  - condition: "noun.rolls[0] == 5 and noun.rolls[1] == 4"
+    result: viagem
+  - condition: "noun.rolls[0] == 5 and noun.rolls[1] == 5"
+    result: esperanca
+  - condition: "noun.rolls[0] == 5 and noun.rolls[1] == 6"
+    result: objetivo
+  - condition: "noun.rolls[0] == 6 and noun.rolls[1] == 1"
+    result: mentira
+  - condition: "noun.rolls[0] == 6 and noun.rolls[1] == 2"
+    result: morte
+  - condition: "noun.rolls[0] == 6 and noun.rolls[1] == 3"
+    result: pista
+  - condition: "noun.rolls[0] == 6 and noun.rolls[1] == 4"
+    result: riqueza
+  - condition: "noun.rolls[0] == 6 and noun.rolls[1] == 5"
+    result: verdade
+  - condition: "noun.rolls[0] == 6 and noun.rolls[1] == 6"
+    result: sucesso

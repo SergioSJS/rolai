@@ -97,6 +97,26 @@ class HeadlessRoller(
         )
     }
 
+    /**
+     * Profile "overlay" (roll_under, `SystemInfo.isOverlay`): sem dado
+     * proprio — `notation` e o que o composer normal montou na tela, e o
+     * profile so avalia outcome_rules sobre o resultado (rollOverlay em
+     * @rolai/rules-engine).
+     */
+    fun rollOverlay(
+        system: String,
+        notation: String,
+        inputsJson: String,
+        optionsJson: String? = null,
+    ) {
+        val id = nextCallbackId()
+        eval(
+            "rolai.rollOverlay(${JSONObject.quote(system)}, ${JSONObject.quote(notation)}, " +
+                "${JSONObject.quote(inputsJson)}, ${JSONObject.quote(id)}" +
+                (optionsJson?.let { ", ${JSONObject.quote(it)}" } ?: "") + ")",
+        )
+    }
+
     fun destroy() {
         destroyed = true
         webView.destroy()

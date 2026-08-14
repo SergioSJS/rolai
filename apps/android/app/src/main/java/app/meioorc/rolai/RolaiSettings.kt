@@ -118,6 +118,53 @@ data class RolaiSettings(
 
         fun isValidRoomCode(code: String): Boolean = ROOM_CODE_REGEX.matches(code)
 
+        // O "Copiar link"/"Copiar link pro OBS" da web gera a URL inteira
+        // (`https://rolai.app/?room=CODIGO...`), nao so o codigo — colar
+        // isso direto no campo aqui tinha que funcionar tambem, senao o
+        // unico jeito de levar uma sala da web pro app era digitar o codigo
+        // a mao, letra por letra. `android.net.Uri` fica de fora de proposito:
+        // sob `isReturnDefaultValues=true` (testOptions do modulo) ele vira
+        // stub e devolve null sem parsear nada — string pura e o que da pra
+        // cobrir de verdade em teste JVM local (mesmo espirito do resto do
+        // arquivo).
+        fun extractRoomCode(raw: String): String {
+            val trimmed = raw.trim()
+            if (!trimmed.startsWith("http://", ignoreCase = true) &&
+                !trimmed.startsWith("https://", ignoreCase = true)
+            ) {
+                return trimmed
+            }
+            val query = trimmed.substringAfter('?', "").substringBefore('#')
+            for (pair in query.split('&')) {
+                val eq = pair.indexOf('=')
+                if (eq < 0) continue
+                if (pair.substring(0, eq) != "room") continue
+                return try {
+                    java.net.URLDecoder.decode(pair.substring(eq + 1), "UTF-8")
+                } catch (e: java.io.UnsupportedEncodingException) {
+                    trimmed
+                }
+            }
+            return trimmed
+        }
+
+        // Mao inversa do extractRoomCode: gerar o link pra colar em outro
+        // aparelho/navegador ou na Browser Source do OBS. Mesmo formato que
+        // RoomPanel.tsx monta na web (`?room=CODIGO`, `&stream=1&scale=`) —
+        // tem que abrir na MESMA sala dos dois lados.
+        fun roomShareUrl(webBaseUrl: String, code: String): String {
+            val base = webBaseUrl.trim().trimEnd('/').ifEmpty { DEFAULT_WEB_BASE_URL }
+            return "$base/?room=$code"
+        }
+
+        fun roomObsShareUrl(webBaseUrl: String, code: String, scalePercent: Int): String {
+            // /100.0 sempre fecha limpo (70..160 de 5 em 5): Double.toString
+            // no JVM devolve a representacao mais curta que da roundtrip,
+            // igual ao toString() do JS que a web usa pro mesmo numero.
+            val scale = clampScalePercent(scalePercent) / 100.0
+            return "${roomShareUrl(webBaseUrl, code)}&stream=1&scale=$scale"
+        }
+
         fun sanitizeName(name: String): String =
             name.trim().take(MAX_NAME_LENGTH).ifEmpty { DEFAULT_NAME }
 
