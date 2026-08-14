@@ -12,6 +12,7 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -716,11 +717,38 @@ class OverlayView(context: Context) {
                 )
                 if (input.isSelect) {
                     val view = Spinner(context).apply {
-                        adapter = ArrayAdapter(
+                        // O adapter padrao (simple_spinner_dropdown_item) pega
+                        // cor de texto do tema AMBIENTE — aqui o contexto e o
+                        // do WindowManager do overlay, nao uma Activity com
+                        // Theme.Rolai, entao o popup saia com texto escuro (as
+                        // vezes ilegivel) por padrao do sistema. Cor e fundo
+                        // do dropdown fixados na mao, nao emprestados de tema
+                        // nenhum.
+                        adapter = object : ArrayAdapter<String>(
                             context,
-                            android.R.layout.simple_spinner_dropdown_item,
+                            android.R.layout.simple_spinner_item,
                             input.options.map { it.label },
-                        )
+                        ) {
+                            override fun getView(
+                                position: Int,
+                                convertView: View?,
+                                parent: ViewGroup,
+                            ): View = (super.getView(position, convertView, parent) as TextView)
+                                .apply { setTextColor(TEXT) }
+
+                            override fun getDropDownView(
+                                position: Int,
+                                convertView: View?,
+                                parent: ViewGroup,
+                            ): View = (super.getDropDownView(position, convertView, parent) as TextView)
+                                .apply {
+                                    setTextColor(TEXT)
+                                    setBackgroundColor(PANEL)
+                                    setPadding(16.dp(), 12.dp(), 16.dp(), 12.dp())
+                                }
+                        }.apply {
+                            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                        }
                         setSelection(
                             input.options.indexOfFirst { it.value == saved[input.id] }
                                 .coerceAtLeast(0),
