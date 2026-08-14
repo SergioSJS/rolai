@@ -121,7 +121,11 @@ export function ComposerBar({ notation, onChange }: ComposerBarProps) {
         <span className="composer-label">Mod</span>
         <StepperInput
           value={String(base.modifier)}
-          aria-label="Modificador"
+          // Nao "Modificador" cru: profiles como pbta/d20 tem um input com
+          // esse MESMO rotulo, e agora o composer fica visivel do lado do
+          // profile (RollPanel) — nome ambiguo pra quem usa leitor de tela
+          // (e pra query de teste por label).
+          aria-label="Modificador do pool"
           onChange={(v) => {
             const target = Number(v) || 0;
             apply(adjustModifier(base, target - base.modifier));

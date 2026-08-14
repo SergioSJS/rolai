@@ -8,6 +8,9 @@ inputs:
 fields:
   - id: pool
     dice: "{input.pool_size}d6"
+    # Pool 0 (ou negativo): regra do FitD e rolar 2d6 e ficar so com o
+    # menor — "0d6" nao e notacao valida, entao troca antes de rolar.
+    zero_dice_fallback: "2d6kl1"
 outcome_rules:
   - condition: "count(pool, '>=6') >= 2"
     result: critical

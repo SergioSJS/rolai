@@ -14,11 +14,13 @@ o próprio usuário cria e salva, que aí sim vai pro Postgres, ver
 ```yaml
 system: string              # id único, usado na invocação (`ironsworn`, `pbta`, ...)
 label: string                # nome pra exibir na UI
-roll_type: simple | comparison
+roll_type: simple | comparison | multi | overlay
 inputs:                       # campos que a UI precisa pedir ao jogador
   - id: string
     label: string
     type: number | select
+    required: bool            # default true; false = pode ficar em branco
+    default: string           # opcional: valor pre-preenchido no formulario
     options:                  # obrigatório em `select`; string ou {value,label}
       - { value: "adv", label: "Vantagem" }
 fields:
@@ -26,10 +28,61 @@ fields:
     dice: string              # notação camada 1, pode referenciar {input.id}
     modifier: string | null   # referência a um input, se houver
     compare_individually: bool # true = mantém array, false = soma (default)
+    success_rule: string | null # ex. ">=5" — total vira CONTAGEM, não soma
 outcome_rules:                 # avaliadas em ordem, primeira que bater vence
   - condition: string          # expressão sobre os ids de `fields` e {input.id}
     result: string              # label do outcome
 ```
+
+`roll_type` define quantos `fields` o profile exige e como a notação final é
+montada:
+
+- `simple`: exatamente 1 field. Notação crua (`"2d6+1"`).
+- `comparison`: exatamente 2 fields que competem entre si (ação vs desafio).
+  Notação `"{a} vs {b}"` — ver Ironsworn.
+- `multi`: 2 ou mais fields **independentes** (não competem). Notação
+  `"{a} + {b}"` — ex: dado regular + dado de Fome/Ira do WoD5, ou o par
+  verbo/substantivo do oráculo de ideias do Infaernum.
+- `overlay`: **zero** fields — o profile não rola dado próprio. As
+  `outcome_rules` são avaliadas sobre uma rolagem que já aconteceu por
+  fora (o composer de notação livre normal). Usar `rollOverlay`, nunca
+  `rollWithProfile`, pra esse tipo — ver exemplo do roll under abaixo.
+
+`default` é só um hint de UI (formulário já vem preenchido, ex. um
+modificador começando em `"0"`) — não muda `required`/validação nenhuma.
+
+Um `input` com `required: false` pode chegar sem valor na rolagem — todo
+`outcome_rule` cuja `condition` referencie `{input.id}` dele é **pulada**
+nesse caso (não conta como erro), em vez de travar por input ausente. É o
+que faz o roll under genérico "só rolar, sem outcome" quando o jogador não
+informa o valor testado.
+
+## Exemplo — Genérico Roll Under (`overlay`: sem dado próprio)
+
+```yaml
+system: roll_under
+label: "Genérico — Roll Under"
+roll_type: overlay
+inputs:
+  - id: target
+    label: "Valor testado"
+    type: number
+    required: false
+fields: []
+outcome_rules:
+  - condition: "roll.total <= {input.target}"
+    result: success
+  - condition: "roll.total > {input.target}"
+    result: fail
+```
+
+Sem field próprio, o dado vem de fora: o jogador monta o pool no composer
+normal (1d20, 3d6, o que quiser) e `rollOverlay(profile, notation, inputs)`
+avalia as `outcome_rules` sobre o resultado — `roll` é o nome que a
+notação livre de um grupo só sempre recebe (docs/roll-notation.md), por
+isso a condition já bate sem configuração extra. Sem `target`, as duas
+`outcome_rules` são puladas (ambas referenciam o input ausente) e a
+rolagem sai sem `outcome` nem `outcome_flags` — só o dado.
 
 `select` só aceita, na rolagem, um dos `value` declarados — o valor é
 interpolado cru na notação (`"1d20{input.mode}"` -> `1d20adv`), então não pode
@@ -119,6 +172,40 @@ outcome_rules:
   - condition: "max(pool) < 4"
     result: miss
 ```
+
+## Exemplo — Pool de d6 (contagem de sucessos exposta via `success_rule`)
+
+```yaml
+system: pool_d6
+label: "Pool de d6 (Shadowrun)"
+roll_type: simple
+inputs:
+  - id: pool_size
+    label: "Tamanho do pool"
+    type: number
+  - id: threshold
+    label: "Limite (acertos necessários)"
+    type: number
+    required: false
+fields:
+  - id: pool
+    dice: "{input.pool_size}d6"
+    compare_individually: true
+    success_rule: ">=5"
+outcome_rules:
+  - condition: "pool.total >= {input.threshold}"
+    result: success
+  - condition: "pool.total < {input.threshold}"
+    result: fail
+```
+
+`success_rule` usa a mesma minilinguagem do 2º argumento de `count()`, mas
+**sem** as aspas internas (aqui é a string toda, não um literal embutido
+numa expressão maior: `">=5"`, não `"'>=5'"`). Quando setado, `total` do
+grupo vira a CONTAGEM de dados que batem a regra (sucessos), não a soma —
+`"[2, 5, 6, 1] = 2"` aparece pro jogador sem ele contar os dados na mão, e
+qualquer `outcome_rule` pode comparar `pool.total` direto em vez de
+repetir `count(pool, '>=5')` toda hora.
 
 ## Invocação (camada de UI/atalho)
 

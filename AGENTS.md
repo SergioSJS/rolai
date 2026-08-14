@@ -159,6 +159,19 @@ Aconteceu com o `dropped` do keep/drop: corrigido no engine, verde nos
 testes web, e `1d20dis` continuava errado no celular.
 `KeepDropHeadlessTest` (instrumentado) falha quando o bundle está velho.
 
+## Vai adicionar um sistema de rolagem novo?
+
+Leia `docs/adding-a-system.md` inteiro antes de abrir o primeiro YAML.
+É um checklist nascido de uma sessão real que levou vários rounds de "já
+corrigi" seguidos de "ainda tá quebrado" — motor, web e Android tratados
+como prontos sem checar uns aos outros, e o mesmo bug de fundo (repetir
+rolagem com valor velho no overlay do Android) voltando disfarçado de bug
+novo umas quatro vezes. Cobre: onde duplicar label/tom de outcome novo
+(web E Android são arquivos separados), onde a família de sub-modos precisa
+aparecer (configurações E overlay flutuante — dois lugares), e como testar
+o `lastRollAction` do overlay sem reintroduzir o mesmo bug de duas formas
+opostas.
+
 ## Armadilha recorrente deste projeto
 
 A maior parte dos bugs difíceis daqui teve a mesma forma: **código decidindo

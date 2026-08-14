@@ -268,6 +268,19 @@ class Parser {
 
 const CONDITION_STRING = /^(>=|<=|==|!=|>|<|=)\s*(-?\d+(?:\.\d+)?)$/;
 
+// Minilinguagem de condicao ("'>=6'", "'==1'") usada pelo count() e por
+// ProfileField.success_rule (profile.ts) — um so lugar pra parsear "op
+// valor", pra nao duplicar a regex/comparacao entre os dois usos.
+export function matchesCondition(value: number, condition: string): boolean {
+  const m = CONDITION_STRING.exec(condition);
+  if (!m) {
+    throw new ExpressionError(`condicao invalida: '${condition}'`);
+  }
+  const target = Number(m[2]);
+  const op = m[1] === "=" ? "==" : m[1]!;
+  return evaluateComparison(op, value, target);
+}
+
 function truthy(v: Value): boolean {
   if (typeof v === "boolean") return v;
   if (typeof v === "number") return v !== 0;
@@ -347,17 +360,7 @@ function evaluate(node: Node, scope: ExpressionScope): Value {
               "segundo argumento de count deve ser string, ex: '>=6'",
             );
           }
-          const m = CONDITION_STRING.exec(condNode.value);
-          if (!m) {
-            throw new ExpressionError(
-              `condicao invalida em count: '${condNode.value}'`,
-            );
-          }
-          const target = Number(m[2]);
-          const op = m[1] === "=" ? "==" : m[1]!;
-          return arr.filter((v) =>
-            truthy(evaluateComparison(op, v, target)),
-          ).length;
+          return arr.filter((v) => matchesCondition(v, condNode.value)).length;
         }
         case "max": {
           const arr = asArray(evaluate(args[0]!, scope), "max");

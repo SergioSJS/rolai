@@ -8,7 +8,7 @@ import type { RollGroup, RollResult } from "@rolai/rules-engine";
 // (packages/rules-engine/profiles/*.yaml). Outcome desconhecido (profile
 // custom) cai no id cru.
 const OUTCOME_LABELS: Record<string, string> = {
-  strong_hit: "sucesso forte",
+  strong_hit: "sucesso completo",
   weak_hit: "sucesso parcial",
   miss: "falha",
   match: "match!",
@@ -28,6 +28,31 @@ const OUTCOME_LABELS: Record<string, string> = {
   hard_success: "sucesso difícil",
   regular_success: "sucesso",
   fumble: "desastre",
+  // roll_under e wod5/pool_d6 (vs dificuldade/limite) reusam success/fail
+  // do fate, ja mapeados acima.
+  // infaernum — sim ou não
+  sim: "sim",
+  nao: "não",
+  // infaernum — rolagem padrão (3d6 individual, quantizado: pool fixo em
+  // 3 dados, cada categoria so ocorre 0 a 3 vezes).
+  desgraca_x1: "1 desgraça",
+  desgraca_x2: "2 desgraças",
+  desgraca_x3: "3 desgraças",
+  vislumbre_x1: "1 vislumbre",
+  vislumbre_x2: "2 vislumbres",
+  vislumbre_x3: "3 vislumbres",
+  facanha_x1: "1 façanha",
+  facanha_x2: "2 façanhas",
+  facanha_x3: "3 façanhas",
+  milagre_x1: "1 milagre",
+  milagre_x2: "2 milagres",
+  milagre_x3: "3 milagres",
+  // wod5 — pool Fome/Ira (critical reusa o do fitd, ja mapeado acima)
+  messy_critical: "crítico manchado",
+  bestial_failure: "fracasso bestial",
+  // pool_d6 (Shadowrun-style)
+  glitch: "pane",
+  critical_glitch: "pane crítica",
 };
 
 export function outcomeLabel(outcome: string): string {
@@ -58,10 +83,25 @@ const OUTCOME_TONES: Record<string, OutcomeTone> = {
   fail: "failure",
   critical_failure: "failure",
   fumble: "failure",
+  // Infaernum (3d6 individual): desgraca e sempre o lado ruim, em qualquer
+  // quantidade.
+  desgraca_x1: "failure",
+  desgraca_x2: "failure",
+  desgraca_x3: "failure",
+  // wod5: fracasso com custo extra — ainda fracasso.
+  bestial_failure: "failure",
+  // pool_d6 (Shadowrun-style): glitch e sempre revés, mesmo o nao-critico.
+  glitch: "failure",
+  critical_glitch: "failure",
+  // Infaernum — oraculo sim ou não.
+  nao: "failure",
   // Meio do caminho — sucesso com custo, ou empate. Nem verde, nem vermelho.
   weak_hit: "partial",
   partial_success: "partial",
   tie: "partial",
+  vislumbre_x1: "partial",
+  vislumbre_x2: "partial",
+  vislumbre_x3: "partial",
   // Sucesso.
   strong_hit: "success",
   full_success: "success",
@@ -72,6 +112,16 @@ const OUTCOME_TONES: Record<string, OutcomeTone> = {
   extreme_success: "success",
   hard_success: "success",
   regular_success: "success",
+  facanha_x1: "success",
+  facanha_x2: "success",
+  facanha_x3: "success",
+  milagre_x1: "success",
+  milagre_x2: "success",
+  milagre_x3: "success",
+  // wod5: critico "sujo" — ainda um sucesso, so com custo narrativo.
+  messy_critical: "success",
+  // Infaernum — oraculo sim ou não.
+  sim: "success",
   // Ironsworn: "match" e os dois dados de desafio iguais — um EVENTO que
   // pode acontecer junto de acerto ou de falha, entao nao tem tom proprio.
   match: "neutral",
@@ -104,7 +154,10 @@ export function formatGroup(group: RollGroup): string {
 // So os dados: "[4, 5] + 3 = 12". Separado do outcome porque a UI precisa
 // pintar o outcome (sucesso/falha) sem pintar os numeros junto.
 export function summarizeDice(result: RollResult): string {
-  const groups = Object.values(result.groups).map(formatGroup).join(" vs ");
+  // roll_type "multi" tem grupos independentes ("+" na notacao, nao "vs")
+  // — usar sempre " vs " rotulava campo que nao compete como se competisse.
+  const joiner = result.notation.includes(" + ") ? " + " : " vs ";
+  const groups = Object.values(result.groups).map(formatGroup).join(joiner);
   return groups === "" ? result.notation : groups;
 }
 

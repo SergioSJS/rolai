@@ -83,7 +83,7 @@ describe("App shell", () => {
     expect(screen.queryByText("clique ou Esc pra tirar os dados")).toBeNull();
   });
 
-  it("sistema e escolhido em Preferências e troca o painel de rolagem", async () => {
+  it("sistema e escolhido em Preferências e o painel do profile aparece ao lado do compositor", async () => {
     render(<App />);
     // modo livre: compositor visivel
     expect(screen.getByLabelText("Adicionar um d20")).toBeTruthy();
@@ -92,9 +92,9 @@ describe("App shell", () => {
       target: { value: "d20" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
-    // painel agora mostra os inputs do profile, sem compositor
+    // painel do profile aparece JUNTO do compositor — nao troca, soma.
     expect(screen.getByLabelText("CD")).toBeTruthy();
-    expect(screen.queryByLabelText("Adicionar um d20")).toBeNull();
+    expect(screen.getByLabelText("Adicionar um d20")).toBeTruthy();
   });
 
   it("Esc tambem tira os dados", async () => {

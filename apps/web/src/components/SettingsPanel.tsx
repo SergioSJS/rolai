@@ -21,6 +21,7 @@ import {
   THEME_LABELS,
 } from "../settings";
 import type { DiceMaterial, DiceTexture } from "../settings";
+import { familyFor, familyMemberSystems, PROFILE_FAMILIES } from "../profileFamilies";
 
 interface SettingsPanelProps {
   tier: QualityTier;
@@ -63,20 +64,46 @@ export function SettingsPanel({
       p.style.material === diceStyle.material,
   );
 
+  // Profiles que sao member de alguma familia (ex.: os 3 modos do
+  // Infaernum) nao aparecem soltos no dropdown principal — so a familia,
+  // uma vez. Selecionar a familia escolhe o PRIMEIRO member; o sub-seletor
+  // abaixo troca entre os modos sem sair da familia.
+  const grouped = familyMemberSystems();
+  const standalone = profiles.filter((p) => !grouped.has(p.system));
+  const activeFamily = familyFor(system);
+
   return (
     <div className="settings-panel">
       <h3>Sistema</h3>
       <label>
         Regras da mesa
-        <select value={system} onChange={(e) => onSystemChange(e.target.value)}>
+        <select
+          value={activeFamily?.key ?? system}
+          onChange={(e) => {
+            const family = PROFILE_FAMILIES.find((f) => f.key === e.target.value);
+            onSystemChange(family ? family.members[0]!.system : e.target.value);
+          }}
+        >
           <option value="">Notação livre</option>
-          {profiles.map((p) => (
+          {standalone.map((p) => (
             <option key={p.system} value={p.system}>
               {p.label}
             </option>
           ))}
+          {PROFILE_FAMILIES.map((family) => (
+            <option key={family.key} value={family.key}>
+              {family.label}
+            </option>
+          ))}
         </select>
       </label>
+      {activeFamily && (
+        <p className="settings-hint">
+          {activeFamily.label}: escolha o modo ({activeFamily.members
+            .map((m) => m.subLabel)
+            .join(" / ")}) direto na caixa de rolagem.
+        </p>
+      )}
 
       <h3>Dados</h3>
       {/* Previa com as MESMAS cores e textura (o proprio .webp estampado no

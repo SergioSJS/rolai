@@ -1,0 +1,30 @@
+system: pool_d6
+label: "Pool de d6 (Shadowrun)"
+roll_type: simple
+inputs:
+  - id: pool_size
+    label: "Tamanho do pool"
+    type: number
+  - id: threshold
+    label: "Limite (acertos necessários)"
+    type: number
+    required: false
+fields:
+  - id: pool
+    dice: "{input.pool_size}d6"
+    compare_individually: true
+    success_rule: ">=5"
+# 5 ou 6 e acerto — success_rule faz `pool.total` virar a CONTAGEM de
+# acertos (nao a soma dos dados), entao "[2, 5, 6, 1] = 2" ja mostra o
+# numero de sucessos sem o jogador contar na mao. Glitch: mais de metade
+# do pool mostra 1 (glitch critico se, alem disso, zero acertos).
+# "threshold" e opcional: sem ele so a contagem existe, sem success/fail.
+outcome_rules:
+  - condition: "count(pool, '==1') > {input.pool_size} / 2 and pool.total == 0"
+    result: critical_glitch
+  - condition: "count(pool, '==1') > {input.pool_size} / 2 and pool.total >= 1"
+    result: glitch
+  - condition: "pool.total >= {input.threshold}"
+    result: success
+  - condition: "pool.total < {input.threshold}"
+    result: fail

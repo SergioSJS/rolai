@@ -1,0 +1,22 @@
+system: pbta2d10
+label: "PbtA (2d10)"
+roll_type: simple
+inputs:
+  - id: mod
+    label: "Modificador"
+    type: number
+    default: "0"
+fields:
+  - id: roll
+    dice: "2d10"
+    modifier: "{input.mod}"
+# Reusa os mesmos ids de outcome do pbta 2d6 (strong_hit/weak_hit/miss) —
+# mesmos tiers narrativos, so a escala de dado muda. Assim o rotulo/cor da
+# UI (apps/web/src/format.ts) ja funciona sem entrada nova no mapa.
+outcome_rules:
+  - condition: "roll.total >= 15"
+    result: strong_hit
+  - condition: "roll.total >= 10 and roll.total < 15"
+    result: weak_hit
+  - condition: "roll.total < 10"
+    result: miss

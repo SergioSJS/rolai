@@ -7,10 +7,17 @@ import { parseProfile } from "@rolai/rules-engine";
 import type { SystemProfile } from "@rolai/rules-engine";
 import ironswornYaml from "@rolai/rules-engine/profiles/ironsworn.yaml?raw";
 import pbtaYaml from "@rolai/rules-engine/profiles/pbta.yaml?raw";
+import pbta2d10Yaml from "@rolai/rules-engine/profiles/pbta2d10.yaml?raw";
 import fitdYaml from "@rolai/rules-engine/profiles/fitd.yaml?raw";
 import fateYaml from "@rolai/rules-engine/profiles/fate.yaml?raw";
 import d20Yaml from "@rolai/rules-engine/profiles/d20.yaml?raw";
 import d100Yaml from "@rolai/rules-engine/profiles/d100.yaml?raw";
+import rollUnderYaml from "@rolai/rules-engine/profiles/roll_under.yaml?raw";
+import poolD6Yaml from "@rolai/rules-engine/profiles/pool_d6.yaml?raw";
+import wod5Yaml from "@rolai/rules-engine/profiles/wod5.yaml?raw";
+import infaernumYaml from "@rolai/rules-engine/profiles/infaernum.yaml?raw";
+import infaernumSimOuNaoYaml from "@rolai/rules-engine/profiles/infaernum_sim_ou_nao.yaml?raw";
+import infaernumIdeiasYaml from "@rolai/rules-engine/profiles/infaernum_ideias.yaml?raw";
 
 // A ordem aqui e a ordem do seletor de sistema na UI: do mais comum na
 // mesa pro mais especifico.
@@ -18,9 +25,16 @@ const PROFILE_YAMLS: Record<string, string> = {
   d20: d20Yaml,
   fate: fateYaml,
   pbta: pbtaYaml,
+  pbta2d10: pbta2d10Yaml,
   fitd: fitdYaml,
   ironsworn: ironswornYaml,
   d100: d100Yaml,
+  roll_under: rollUnderYaml,
+  pool_d6: poolD6Yaml,
+  wod5: wod5Yaml,
+  infaernum: infaernumYaml,
+  infaernum_sim_ou_nao: infaernumSimOuNaoYaml,
+  infaernum_ideias: infaernumIdeiasYaml,
 };
 
 let cache: Map<string, SystemProfile> | null = null;

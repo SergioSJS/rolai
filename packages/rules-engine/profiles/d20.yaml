@@ -9,12 +9,13 @@ inputs:
       - { value: "", label: "Normal" }
       - { value: "adv", label: "Vantagem" }
       - { value: "dis", label: "Desvantagem" }
-  - id: mod
-    label: "Modificador"
-    type: number
   - id: dc
     label: "CD"
     type: number
+  - id: mod
+    label: "Modificador"
+    type: number
+    default: "0"
 fields:
   # "1d20adv" / "1d20dis" viram 2d20kh1 / 2d20kl1 no parser (acucar da
   # notacao camada 1) — `rolls` fica com o unico dado mantido.

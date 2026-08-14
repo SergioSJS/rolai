@@ -1,0 +1,20 @@
+system: infaernum_sim_ou_nao
+label: "Infaernum — Sim ou Não"
+roll_type: simple
+inputs:
+  - id: chance
+    label: "Chance"
+    type: select
+    options:
+      - { value: "0", label: "Neutro" }
+      - { value: "1", label: "Provável" }
+      - { value: "-1", label: "Improvável" }
+fields:
+  - id: roll
+    dice: "1d6"
+    modifier: "{input.chance}"
+outcome_rules:
+  - condition: "roll.total >= 4"
+    result: sim
+  - condition: "roll.total < 4"
+    result: nao

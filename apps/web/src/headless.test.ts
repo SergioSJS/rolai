@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-import { roll, rollWithProfile } from "@rolai/rules-engine";
+import { roll, rollOverlay, rollWithProfile } from "@rolai/rules-engine";
 import type { RollResult } from "@rolai/rules-engine";
 import { getProfile } from "./profiles.js";
 
@@ -67,7 +67,21 @@ describe("bundle headless (WebView Android)", () => {
       inputs: unknown[];
     }[];
     const ids = systems.map((s) => s.system).sort();
-    expect(ids).toEqual(["d100", "d20", "fate", "fitd", "ironsworn", "pbta"]);
+    expect(ids).toEqual([
+      "d100",
+      "d20",
+      "fate",
+      "fitd",
+      "infaernum",
+      "infaernum_ideias",
+      "infaernum_sim_ou_nao",
+      "ironsworn",
+      "pbta",
+      "pbta2d10",
+      "pool_d6",
+      "roll_under",
+      "wod5",
+    ]);
     for (const s of systems) {
       expect(s.label.length).toBeGreaterThan(0);
       expect(Array.isArray(s.inputs)).toBe(true);
@@ -133,6 +147,45 @@ describe("bundle headless (WebView Android)", () => {
     if (delivery.ok) {
       expect(delivery.result.outcome).toBe("strong_hit");
       expect(delivery.result.profile).toBe("pbta");
+    }
+  });
+
+  // roll_under: sem dado proprio — a tela nativa precisa saber que este
+  // system e "overlay" pra mesclar o form com o composer normal.
+  it("systems() marca rollType overlay no roll_under", () => {
+    const systems = JSON.parse(globalThis.rolai.systems()) as {
+      system: string;
+      rollType: string;
+      inputs: { id: string; default?: string }[];
+    }[];
+    const rollUnder = systems.find((s) => s.system === "roll_under");
+    expect(rollUnder?.rollType).toBe("overlay");
+    const pbta = systems.find((s) => s.system === "pbta");
+    expect(pbta?.rollType).toBe("simple");
+    expect(pbta?.inputs.find((i) => i.id === "mod")?.default).toBe("0");
+  });
+
+  it("rollOverlay() bate com o rules-engine (roll_under)", async () => {
+    const capture = installBridge();
+    await globalThis.rolai.rollOverlay(
+      "roll_under",
+      "1d20",
+      JSON.stringify({ target: 10 }),
+      "cb-overlay",
+      JSON.stringify({ deterministic: [10], timestamp: "2026-01-01T00:00:00.000Z" }),
+    );
+    const delivery = await waitDelivery(capture, "cb-overlay");
+
+    const profile = getProfile("roll_under");
+    expect(profile).toBeDefined();
+    const expected = await rollOverlay(profile!, "1d20", { target: 10 }, {
+      deterministic: [10],
+      timestamp: "2026-01-01T00:00:00.000Z",
+    });
+    expect(delivery).toEqual({ ok: true, result: expected });
+    if (delivery.ok) {
+      expect(delivery.result.outcome).toBe("success");
+      expect(delivery.result.profile).toBe("roll_under");
     }
   });
 

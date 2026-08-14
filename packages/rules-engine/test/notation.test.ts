@@ -76,8 +76,31 @@ describe("parseNotation", () => {
     expect(ast.groups[1]!.dice).toMatchObject({ count: 2, sides: 10 });
   });
 
+  it("grupo: {2d10} + {2d10} produz N grupos independentes (roll_type multi)", () => {
+    const ast = parseNotation("{2d10} + {2d10}");
+    expect(ast.groups.map((g) => g.name)).toEqual(["group0", "group1"]);
+    expect(ast.groups[0]!.dice).toMatchObject({ count: 2, sides: 10 });
+    expect(ast.groups[1]!.dice).toMatchObject({ count: 2, sides: 10 });
+  });
+
+  it("grupo: aceita mais de dois blocos com +", () => {
+    const ast = parseNotation("{1d6} + {2d8} + {1d20+1}");
+    expect(ast.groups).toHaveLength(3);
+    expect(ast.groups[2]!.dice).toMatchObject({ count: 1, sides: 20, modifier: 1 });
+  });
+
   it("rejeita notacao invalida", () => {
-    for (const bad of ["", "d6x", "2d", "x2d6", "2d6kh", "{1d6} vs", "0d6", "2d1"]) {
+    for (const bad of [
+      "",
+      "d6x",
+      "2d",
+      "x2d6",
+      "2d6kh",
+      "{1d6} vs",
+      "0d6",
+      "2d1",
+      "{1d6} + {2d8} vs {1d20}",
+    ]) {
       expect(() => parseNotation(bad), bad).toThrow(NotationError);
     }
   });

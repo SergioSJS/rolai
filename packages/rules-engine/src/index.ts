@@ -23,6 +23,7 @@ export { cryptoRandomSource, rollDie } from "./rng.js";
 export {
   evaluateExpression,
   parseExpression,
+  matchesCondition,
   ExpressionError,
 } from "./expression.js";
 export type { ExpressionScope, FieldValue } from "./expression.js";
@@ -30,6 +31,7 @@ export {
   parseProfile,
   loadProfile,
   rollWithProfile,
+  rollOverlay,
   evaluateOutcomeRules,
   ProfileError,
 } from "./profile.js";

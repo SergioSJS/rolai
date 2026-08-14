@@ -48,9 +48,36 @@ def test_post_invalid_profile_rejected_with_422(client: TestClient) -> None:
     extra = {**VALID_PROFILE, "on_save": "rm -rf /"}
     assert client.post("/profiles", json=extra).status_code == 422
 
-    # fields vazio
-    no_fields = {**VALID_PROFILE, "fields": []}
-    assert client.post("/profiles", json=no_fields).status_code == 422
+    # fields alem do teto (roll_type "overlay" legitimamente nao tem field
+    # nenhum — a contagem CERTA por roll_type e do rules-engine, o backend
+    # so limita tamanho de payload, docs/security.md)
+    too_many_fields = {
+        **VALID_PROFILE,
+        "fields": [VALID_PROFILE["fields"][0] for _ in range(9)],
+    }
+    assert client.post("/profiles", json=too_many_fields).status_code == 422
+
+
+def test_post_overlay_profile_without_fields_is_valid(client: TestClient) -> None:
+    # roll_under: roll_type "overlay" nao rola dado proprio, "fields" fica
+    # vazio de proposito — a rolagem vem de fora (composer de notacao
+    # livre), so as outcome_rules sao avaliadas sobre ela.
+    overlay_profile = {
+        **VALID_PROFILE,
+        "system": "roll-under-custom",
+        "roll_type": "overlay",
+        "inputs": [
+            {"id": "target", "label": "Valor testado", "type": "number", "required": False},
+        ],
+        "fields": [],
+        "outcome_rules": [
+            {"condition": "roll.total <= {input.target}", "result": "success"},
+            {"condition": "roll.total > {input.target}", "result": "fail"},
+        ],
+    }
+    resp = client.post("/profiles", json=overlay_profile)
+    assert resp.status_code == 201
+    assert resp.json()["profile"]["fields"] == []
 
 
 def test_get_unknown_profile_is_404(client: TestClient) -> None:

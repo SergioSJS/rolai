@@ -62,6 +62,10 @@ const MAX_DICE = 100;
 const MAX_SIDES = 1000;
 
 const GROUP_PATTERN = /^\{([^{}]+)\}\s*vs\s*\{([^{}]+)\}$/i;
+// N grupos independentes ("nao competem entre si", roll_type "multi" dos
+// profiles — docs/system-profiles.md): "{2d10} + {2d10}". Sem "vs": os
+// grupos aqui nunca sao comparados um com o outro pela gramatica.
+const PLUS_GROUP_PATTERN = /^\{[^{}]+\}(?:\s*\+\s*\{[^{}]+\})+$/;
 // "2d6", "d20" e tambem o dado Fudge "4dF" (faces -1/0/+1).
 const DICE_HEAD = /^(\d*)d(\d+|f)/i;
 const NUMBER = /^(\d+)/;
@@ -238,12 +242,26 @@ function parseGroupDice(expr: string): { dice: DiceSpec; terms: DiceTerm[] } {
   }
 }
 
+// Grupos "+" (PLUS_GROUP_PATTERN ja garantiu o formato inteiro da string —
+// so blocos {...} separados por "+", nada mais): extrai cada bloco na
+// ordem em que aparece. Nomes genericos ("group0", "group1", ...) bastam
+// porque quem consome (rollWithProfile, displayGroups, diceFromResult)
+// sempre zipa pelo INDICE do array, nunca pelo nome.
+function parsePlusGroups(trimmed: string): NotationAST {
+  const blocks = [...trimmed.matchAll(/\{([^{}]+)\}/g)].map((m) => m[1]!);
+  return {
+    groups: blocks.map((expr, i) => ({ name: `group${i}`, ...parseGroupDice(expr) })),
+  };
+}
+
 // Parseia a notacao camada 1 completa.
 //
 // - Expressao unica ("2d6+3", "2d6+1d4+3") vira um unico grupo "roll".
 // - "{...} vs {...}" produz dois grupos: "action" (esquerda) e
 //   "challenge" (direita), resolvidos em arrays separados — a gramatica
 //   nunca soma um grupo contra o outro.
+// - "{...} + {...} + ..." produz N grupos independentes (roll_type "multi"
+//   dos profiles) — tambem nunca somados entre si.
 export function parseNotation(notation: string): NotationAST {
   const trimmed = notation.trim();
   if (trimmed === "") {
@@ -257,6 +275,9 @@ export function parseNotation(notation: string): NotationAST {
         { name: "challenge", ...parseGroupDice(vs[2]!) },
       ],
     };
+  }
+  if (PLUS_GROUP_PATTERN.test(trimmed)) {
+    return parsePlusGroups(trimmed);
   }
   if (/[{}]|\bvs\b/i.test(trimmed)) {
     throw new NotationError(`sintaxe de grupo invalida: "${notation}"`);

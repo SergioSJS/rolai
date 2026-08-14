@@ -326,6 +326,16 @@ body.stream-mode {
   min-width: 0;
 }
 
+/* RollPanel: profile (receita fixa) + composer sao dois .panel separados
+   quando ambos existem — este wrapper so empilha os dois com o mesmo gap
+   do resto da sidebar. */
+.roll-panel-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
 /* ---------- Palco (overlay acima de TODA a UI) ---------- */
 
 /* O canvas fica fixed no viewport inteiro, ACIMA dos paineis (menu z5,
@@ -573,6 +583,23 @@ body.stream-mode .stage canvas {
   border-color: rgba(255, 198, 92, 0.5);
 }
 
+.stream-root .result-tally-item {
+  background: #12171c;
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #2ee6a8;
+  text-shadow: none;
+}
+
+.stream-root .result-tally-item.tone-failure {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.55);
+}
+
+.stream-root .result-tally-item.tone-partial {
+  color: #ffc65c;
+  border-color: rgba(255, 198, 92, 0.5);
+}
+
 .stream-root .die-chip {
   background: #12171c;
   border-color: rgba(255, 255, 255, 0.3);
@@ -781,6 +808,41 @@ button:disabled {
   box-shadow: none;
 }
 
+/* Modos de uma familia (Infaernum: acao/sim-ou-nao/ideias) como botoes
+   dentro da propria caixa de rolagem — trocar de modo nao deveria exigir
+   abrir Preferências. Substitui o <h2> do profile quando ha familia. */
+.family-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+}
+
+.family-tab {
+  flex: 1 1 auto;
+  padding: 0.4rem 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--muted);
+}
+
+.family-tab:hover:not(.is-active) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.family-tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 /* ---------- Seletor de sistema ---------- */
 
 .system-select {
@@ -793,11 +855,23 @@ button:disabled {
   color: var(--muted);
 }
 
+/* Linha que quebra, nao coluna: com 3 campos (wod5: regulares/fome/
+   dificuldade) cada um virava uma linha inteira so pra um stepper de
+   3.1rem — desperdicio de altura enorme. Campos curtos (numero, select)
+   ficam lado a lado; so quebra pra proxima linha quando nao cabe. */
 .profile-inputs {
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
   margin-bottom: 0.3rem;
+}
+
+/* .field tambem e usado sozinho (RoomPanel) — aqui dentro o gap do pai ja
+   espaca as linhas, e o item nao deve ser forcado a largura cheia. */
+.profile-inputs .field {
+  margin-bottom: 0;
+  min-width: 0;
 }
 
 /* ---------- Compositor ---------- */
@@ -1034,6 +1108,17 @@ button:disabled {
   background: var(--panel-border);
 }
 
+/* So em campo OPCIONAL (roll_under "valor testado", wod5 "dificuldade")
+   — voltar pra "sem valor" e diferente de "zero". Mudo/menor que +/-: e
+   uma acao secundaria, nao teria por que competir visualmente com elas. */
+.stepper-clear {
+  color: var(--muted);
+}
+
+.stepper-clear:disabled {
+  opacity: 0.4;
+}
+
 /* ---------- Resultado ---------- */
 
 .result-display {
@@ -1129,6 +1214,50 @@ button:disabled {
 }
 
 .result-flag.tone-partial {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* Infaernum padrao (3d6 individual): lista de linhas de peso IGUAL, nao
+   headline gigante + pills pequenos — cada categoria e uma quantidade
+   ("2 milagres"), nao um hit/miss, e mais de uma pode bater junto. */
+.result-tally {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+/* Infaernum Ideias: verbo + substantivo sao um PAR, lado a lado — nenhum
+   dos dois e "o principal" com o outro de coadjuvante (ao contrario do
+   .result-tally em coluna, que empilha quantas categorias baterem). */
+.result-tally-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
+.result-tally-item {
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent-strong);
+  background: var(--panel);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.result-tally-item.tone-failure {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.result-tally-item.tone-partial {
   border-color: var(--warn);
   color: var(--warn);
 }

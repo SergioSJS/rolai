@@ -1,6 +1,6 @@
 // Stepper numerico (+/-) pra inputs de profile e modificador do compositor.
 
-import { MinusIcon, PlusIcon } from "./Glyphs";
+import { MinusIcon, PlusIcon, TimesIcon } from "./Glyphs";
 
 interface StepperInputProps {
   id?: string;
@@ -9,6 +9,10 @@ interface StepperInputProps {
   min?: number;
   max?: number;
   "aria-label"?: string;
+  // So pra campo OPCIONAL (roll_under sem "valor testado", wod5 sem
+  // "dificuldade"...): voltar pra "sem valor" nao e a mesma coisa que
+  // "zero" — dar um jeito de esvaziar sem apertar backspace repetido.
+  onClear?: () => void;
 }
 
 export function StepperInput({
@@ -18,6 +22,7 @@ export function StepperInput({
   min,
   max,
   "aria-label": ariaLabel,
+  onClear,
 }: StepperInputProps) {
   const clamp = (n: number) =>
     Math.min(max ?? Number.MAX_SAFE_INTEGER, Math.max(min ?? Number.MIN_SAFE_INTEGER, n));
@@ -52,6 +57,17 @@ export function StepperInput({
       >
         <PlusIcon />
       </button>
+      {onClear && (
+        <button
+          type="button"
+          className="stepper-button stepper-clear"
+          aria-label="limpar"
+          disabled={value === ""}
+          onClick={onClear}
+        >
+          <TimesIcon />
+        </button>
+      )}
     </div>
   );
 }

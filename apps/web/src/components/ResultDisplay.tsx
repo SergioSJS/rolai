@@ -59,24 +59,50 @@ export function ResultDisplay({
           <span className="result-player-verb">rolou</span>
         </div>
       )}
-      {/* Falha nao pode ter a cara de acerto: o tom vem do outcome (ver
-          outcomeTone). Sem outcome — rolagem livre — nao ha o que afirmar. */}
-      <div
-        className={
-          typeof result.outcome === "string"
-            ? `result-headline is-outcome tone-${outcomeTone(result.outcome)}`
-            : "result-headline"
-        }
-      >
-        {headline}
-      </div>
-      {result.outcome_flags
-        ?.filter((flag) => flag !== result.outcome)
-        .map((flag) => (
-          <div key={flag} className={`result-flag tone-${outcomeTone(flag)}`}>
-            {outcomeLabel(flag)}
+      {/* Infaernum padrao (3d6 individual): cada categoria e uma CONTAGEM
+          ("2 milagres"), nao um hit/miss — uma palavra gigante escondia
+          que mais de uma bateu junto. Lista de linhas de peso igual em
+          vez de headline + pills pequenos. */}
+      {result.profile === "infaernum" ? (
+        <div className="result-tally">
+          {result.outcome_flags?.map((flag) => (
+            <div key={flag} className={`result-tally-item tone-${outcomeTone(flag)}`}>
+              {outcomeLabel(flag)}
+            </div>
+          ))}
+        </div>
+      ) : result.profile === "infaernum_ideias" ? (
+        /* Verbo + substantivo sao um PAR — nenhum dos dois e "o resultado
+           principal" com o outro de coadjuvante. Lado a lado, mesmo estilo. */
+        <div className="result-tally result-tally-row">
+          {result.outcome_flags?.map((flag) => (
+            <div key={flag} className={`result-tally-item tone-${outcomeTone(flag)}`}>
+              {outcomeLabel(flag)}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* Falha nao pode ter a cara de acerto: o tom vem do outcome (ver
+              outcomeTone). Sem outcome — rolagem livre — nao ha o que afirmar. */}
+          <div
+            className={
+              typeof result.outcome === "string"
+                ? `result-headline is-outcome tone-${outcomeTone(result.outcome)}`
+                : "result-headline"
+            }
+          >
+            {headline}
           </div>
-        ))}
+          {result.outcome_flags
+            ?.filter((flag) => flag !== result.outcome)
+            .map((flag) => (
+              <div key={flag} className={`result-flag tone-${outcomeTone(flag)}`}>
+                {outcomeLabel(flag)}
+              </div>
+            ))}
+        </>
+      )}
       <div className="result-groups">
         {groups.map((group, gi) => (
           <div key={`${group.name}-${gi}`} className="result-group">

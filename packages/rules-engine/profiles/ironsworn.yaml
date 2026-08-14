@@ -5,6 +5,7 @@ inputs:
   - id: attribute
     label: "Atributo"
     type: number
+    default: "0"
 fields:
   - id: action
     dice: "1d6"

@@ -1,0 +1,41 @@
+system: wod5
+label: "World of Darkness v5 — Pool de sucessos"
+roll_type: multi
+inputs:
+  - id: regular
+    label: "Dados regulares"
+    type: number
+  - id: hunger
+    label: "Dados de Fome/Ira"
+    type: number
+  - id: difficulty
+    label: "Dificuldade (sucessos necessários)"
+    type: number
+    required: false
+fields:
+  - id: regular
+    dice: "{input.regular}d10"
+    compare_individually: true
+  - id: hunger
+    dice: "{input.hunger}d10"
+    compare_individually: true
+# Mecanica compartilhada por toda a linha v5 (Vampiro, Lobisomem, Caçador...)
+# — os dados de Fome/Ira SUBSTITUEM parte do pool regular, entao ambos os
+# campos exigem >=1 dado cada (limite do parser de notacao: "0d10" nao e
+# valido). Cobre o caso comum; Fome 0 ou pool 100% Fome ficam fora.
+# 6-9 = 1 sucesso, 10 = 1 sucesso, e cada PAR de 10s (regular+fome juntos)
+# soma +2 sucessos extra — critico "limpo" sem dado de Fome no par, "sujo"
+# (messy) com pelo menos um. Fracasso com zero sucessos e um 1 na Fome vira
+# fracasso bestial. "difficulty" e opcional: sem ela so os eventos
+# intrinsecos ao pool (critico/messy/bestial) aparecem, sem success/fail.
+outcome_rules:
+  - condition: "(count(regular, '==10') + count(hunger, '==10')) >= 2 and count(hunger, '==10') >= 1"
+    result: messy_critical
+  - condition: "(count(regular, '==10') + count(hunger, '==10')) >= 2 and count(hunger, '==10') == 0"
+    result: critical
+  - condition: "(count(regular, '>=6') + count(hunger, '>=6')) == 0 and count(hunger, '==1') >= 1"
+    result: bestial_failure
+  - condition: "(count(regular, '>=6') + count(hunger, '>=6')) >= {input.difficulty}"
+    result: success
+  - condition: "(count(regular, '>=6') + count(hunger, '>=6')) < {input.difficulty}"
+    result: fail

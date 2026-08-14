@@ -1,0 +1,20 @@
+system: roll_under
+label: "Genérico — Roll Under"
+roll_type: overlay
+inputs:
+  - id: target
+    label: "Valor testado"
+    type: number
+    required: false
+fields: []
+# Sucesso e rolar igual ou menor que o valor testado — o oposto do d20/d100.
+# Sem dado proprio: a rolagem vem do composer de notacao livre normal
+# (1d20, 3d6, o que a mesa usar) — ver rollOverlay em profile.ts. "roll" e
+# o nome que o parser da pro grupo unico de notacao livre.
+# "target" e opcional: sem ele, so a rolagem existe, sem outcome_rule
+# batendo (evaluateOutcomeRules pula regra que referencia input ausente).
+outcome_rules:
+  - condition: "roll.total <= {input.target}"
+    result: success
+  - condition: "roll.total > {input.target}"
+    result: fail

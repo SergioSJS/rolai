@@ -3,11 +3,11 @@
 // profiles custom chegam como conteudo YAML (string) e passam pela mesma
 // validacao antes de serem usados.
 
-import { parseExpression, evaluateExpression } from "./expression.js";
+import { parseExpression, evaluateExpression, matchesCondition } from "./expression.js";
 import type { ExpressionScope } from "./expression.js";
 import { parseNotation } from "./parser.js";
 import type { DiceSpec } from "./parser.js";
-import { createRollState, rollDice } from "./roller.js";
+import { createRollState, roll, rollDice } from "./roller.js";
 import type { RollOptions } from "./roller.js";
 import type { RollGroup, RollResult } from "./types.js";
 import { parse as parseYaml } from "yaml";
@@ -32,6 +32,15 @@ export interface ProfileInput {
   // interpolado cru na notacao ("1d20{input.mode}" -> "1d20adv"), o `label`
   // e o que a UI mostra.
   options?: ProfileOption[];
+  // false = jogador pode deixar em branco (ex: "valor testado" do roll
+  // under sem meta, "dificuldade" do WoD sem alvo — so rola, sem outcome).
+  // Default true: todo input existente antes disso continua obrigatorio.
+  required: boolean;
+  // Hint de UI: valor pre-preenchido no formulario (string crua, mesmo
+  // formato de ProfileInputs). So aparencia — nao afeta required/validacao;
+  // um "mod" de modificador comeca em "0" em vez de forcar o jogador a
+  // digitar antes da primeira rolagem.
+  default?: string;
 }
 
 export interface ProfileField {
@@ -39,6 +48,18 @@ export interface ProfileField {
   dice: string;
   modifier: string | null;
   compareIndividually: boolean;
+  // Mesma minilinguagem do 2o argumento de count(), mas SEM as aspas
+  // (aqui e a string toda, nao um literal embutido numa expressao maior):
+  // ex. ">=5", nao "'>=5'". Quando setado, `group.total` vira a CONTAGEM
+  // de dados que batem a condicao (sucessos), em vez da soma automatica —
+  // e o que faz "[2, 5, 6, 1] = 2" aparecer pro jogador sem ele ter que
+  // contar os dados na mao (pool_d6/Shadowrun).
+  successRule: string | null;
+  // Notacao alternativa quando o campo de dados interpolado da CONTAGEM
+  // zero ou negativa (ex. "{input.pool_size}d6" com pool_size 0) — a
+  // notacao normal quebraria ("0d6" nao e valido). FitD: pool 0 rola
+  // "2d6kl1" (2d6, mantem o menor) em vez de nao rolar nada.
+  zeroDiceFallback: string | null;
 }
 
 export interface OutcomeRule {
@@ -49,7 +70,15 @@ export interface OutcomeRule {
 export interface SystemProfile {
   system: string;
   label: string;
-  rollType: "simple" | "comparison";
+  // simple: 1 field. comparison: 2 fields, notacao "{a} vs {b}" (rolagem
+  // desafia outra). multi: >=2 fields INDEPENDENTES, notacao "{a} + {b}"
+  // (nao competem entre si — ex: dado regular + dado de Fome do WoD5, ou
+  // par verbo/substantivo do oraculo de ideias do Infaernum). overlay: ZERO
+  // fields — nao rola dado proprio, so avalia outcome_rules sobre uma
+  // rolagem externa (roll_under: aplica "<= target" em cima do que o
+  // composer de notacao livre montar). Usar rollOverlay, nunca
+  // rollWithProfile, pra esse tipo.
+  rollType: "simple" | "comparison" | "multi" | "overlay";
   inputs: ProfileInput[];
   fields: ProfileField[];
   outcomeRules: OutcomeRule[];
@@ -82,11 +111,21 @@ function validateInputs(raw: unknown): ProfileInput[] {
     if (type !== "number" && type !== "select") {
       throw new ProfileError(`${where}: type deve ser "number" ou "select"`);
     }
+    const requiredRaw = item["required"];
+    if (requiredRaw !== undefined && typeof requiredRaw !== "boolean") {
+      throw new ProfileError(`${where}: "required" deve ser boolean`);
+    }
+    const defaultRaw = item["default"];
+    if (defaultRaw !== undefined && typeof defaultRaw !== "string") {
+      throw new ProfileError(`${where}: "default" deve ser string`);
+    }
     const input: ProfileInput = {
       id: requireString(item, "id", where),
       label: requireString(item, "label", where),
       type,
+      required: requiredRaw ?? true,
     };
+    if (defaultRaw !== undefined) input.default = defaultRaw;
     const options = validateOptions(item["options"], where);
     if (options) input.options = options;
     if (type === "select" && !options) {
@@ -117,8 +156,11 @@ function validateOptions(raw: unknown, where: string): ProfileOption[] | null {
 }
 
 function validateFields(raw: unknown): ProfileField[] {
-  if (!Array.isArray(raw) || raw.length === 0) {
-    throw new ProfileError('profile: "fields" deve ser uma lista nao vazia');
+  // Lista vazia e valida pra roll_type "overlay" (sem dado proprio) — a
+  // contagem certa por roll_type e checada em parseProfile, depois que o
+  // roll_type ja foi lido.
+  if (!Array.isArray(raw)) {
+    throw new ProfileError('profile: "fields" deve ser uma lista');
   }
   return raw.map((item, i) => {
     const where = `fields[${i}]`;
@@ -131,11 +173,25 @@ function validateFields(raw: unknown): ProfileField[] {
     if (compare !== undefined && typeof compare !== "boolean") {
       throw new ProfileError(`${where}: "compare_individually" deve ser boolean`);
     }
+    const successRule = item["success_rule"];
+    if (successRule !== undefined && successRule !== null && typeof successRule !== "string") {
+      throw new ProfileError(`${where}: "success_rule" deve ser string ou null`);
+    }
+    const zeroDiceFallback = item["zero_dice_fallback"];
+    if (
+      zeroDiceFallback !== undefined &&
+      zeroDiceFallback !== null &&
+      typeof zeroDiceFallback !== "string"
+    ) {
+      throw new ProfileError(`${where}: "zero_dice_fallback" deve ser string ou null`);
+    }
     return {
       id: requireString(item, "id", where),
       dice: requireString(item, "dice", where),
       modifier: modifier ?? null,
       compareIndividually: compare ?? false,
+      successRule: successRule ?? null,
+      zeroDiceFallback: zeroDiceFallback ?? null,
     };
   });
 }
@@ -177,8 +233,15 @@ export function parseProfile(yamlContent: string): SystemProfile {
     throw new ProfileError("profile: documento YAML deve ser um objeto");
   }
   const rollType = requireString(raw, "roll_type", "profile");
-  if (rollType !== "simple" && rollType !== "comparison") {
-    throw new ProfileError('profile: "roll_type" deve ser "simple" ou "comparison"');
+  if (
+    rollType !== "simple" &&
+    rollType !== "comparison" &&
+    rollType !== "multi" &&
+    rollType !== "overlay"
+  ) {
+    throw new ProfileError(
+      'profile: "roll_type" deve ser "simple", "comparison", "multi" ou "overlay"',
+    );
   }
   const profile: SystemProfile = {
     system: requireString(raw, "system", "profile"),
@@ -188,10 +251,24 @@ export function parseProfile(yamlContent: string): SystemProfile {
     fields: validateFields(raw["fields"]),
     outcomeRules: validateOutcomeRules(raw["outcome_rules"]),
   };
-  const expectedFields = profile.rollType === "comparison" ? 2 : 1;
-  if (profile.fields.length !== expectedFields) {
+  if (profile.rollType === "comparison" && profile.fields.length !== 2) {
     throw new ProfileError(
-      `profile "${profile.system}": roll_type "${rollType}" exige exatamente ${expectedFields} field(s)`,
+      `profile "${profile.system}": roll_type "comparison" exige exatamente 2 field(s)`,
+    );
+  }
+  if (profile.rollType === "simple" && profile.fields.length !== 1) {
+    throw new ProfileError(
+      `profile "${profile.system}": roll_type "simple" exige exatamente 1 field(s)`,
+    );
+  }
+  if (profile.rollType === "multi" && profile.fields.length < 2) {
+    throw new ProfileError(
+      `profile "${profile.system}": roll_type "multi" exige pelo menos 2 fields`,
+    );
+  }
+  if (profile.rollType === "overlay" && profile.fields.length !== 0) {
+    throw new ProfileError(
+      `profile "${profile.system}": roll_type "overlay" nao aceita fields (a rolagem vem de fora)`,
     );
   }
   return profile;
@@ -243,7 +320,13 @@ function fieldSpec(
   field: ProfileField,
   inputs: ProfileInputs,
 ): { spec: DiceSpec; notation: string } {
-  const dice = interpolate(field.dice, inputs, `field "${field.id}"`).trim();
+  let dice = interpolate(field.dice, inputs, `field "${field.id}"`).trim();
+  // Contagem interpolada <= 0 (ex.: pool_size 0) quebraria a notacao
+  // ("0d6" nao existe) — troca pela alternativa antes de parsear.
+  const countMatch = /^(-?\d+)d/i.exec(dice);
+  if (countMatch && Number(countMatch[1]) <= 0 && field.zeroDiceFallback !== null) {
+    dice = field.zeroDiceFallback;
+  }
   let modifierSuffix = "";
   let modifier: number | null = null;
   if (field.modifier !== null) {
@@ -284,6 +367,17 @@ function buildScope(groups: Record<string, RollGroup>): ExpressionScope {
   return scope;
 }
 
+// ids de input opcional que o jogador deixou em branco nesta rolagem —
+// qualquer outcome_rule cuja condition os referencie e pulada em vez de
+// estourar erro (roll_under sem "target" so rola, sem outcome).
+function referencesAny(condition: string, ids: ReadonlySet<string>): boolean {
+  if (ids.size === 0) return false;
+  for (const m of condition.matchAll(INPUT_REF)) {
+    if (ids.has(m[1]!)) return true;
+  }
+  return false;
+}
+
 // Avalia as outcome_rules em ordem contra os grupos ja rolados.
 // Retorna a primeira regra que bate (outcome) e a lista de TODAS as que
 // bateram (flags) — o "match" do Ironsworn e independente do hit/miss.
@@ -291,10 +385,12 @@ export function evaluateOutcomeRules(
   rules: OutcomeRule[],
   groups: Record<string, RollGroup>,
   inputs: ProfileInputs = {},
+  optionalMissing: ReadonlySet<string> = new Set(),
 ): { outcome?: string; flags: string[] } {
   const scope = buildScope(groups);
   const flags: string[] = [];
   for (const rule of rules) {
+    if (referencesAny(rule.condition, optionalMissing)) continue;
     // A condition tambem interpola inputs: "roll.total >= {input.cd}"
     // (dificuldade/CD/pericia sao dado do jogador, nao constante do sistema).
     const condition = interpolate(
@@ -318,19 +414,22 @@ export function evaluateOutcomeRules(
 
 // ---------- Rolagem via profile ----------
 
-// Rola um profile com os inputs do jogador. Aceita um SystemProfile ja
-// carregado, um id de sistema (Node) ou conteudo YAML (string).
-export async function rollWithProfile(
-  profile: SystemProfile | string,
+// Valida os inputs do jogador contra os declarados no profile. Devolve os
+// ids de input OPCIONAL que vieram ausentes — evaluateOutcomeRules pula
+// toda outcome_rule que os referencia, em vez de estourar erro. Uso
+// compartilhado entre rollWithProfile e rollOverlay.
+function validateProfileInputs(
+  resolved: SystemProfile,
   inputs: ProfileInputs,
-  options: RollOptions = {},
-): Promise<RollResult> {
-  const resolved = typeof profile === "string" ? await loadProfile(profile) : profile;
-
-  // Valida inputs declarados.
+): Set<string> {
+  const optionalMissing = new Set<string>();
   for (const input of resolved.inputs) {
     const value = inputs[input.id];
     if (value === undefined) {
+      if (input.required === false) {
+        optionalMissing.add(input.id);
+        continue;
+      }
       throw new ProfileError(`input obrigatorio ausente: "${input.id}"`);
     }
     if (input.type === "number" && !Number.isFinite(Number(value))) {
@@ -342,6 +441,25 @@ export async function rollWithProfile(
       throw new ProfileError(`input "${input.id}": valor invalido "${String(value)}"`);
     }
   }
+  return optionalMissing;
+}
+
+// Rola um profile com os inputs do jogador. Aceita um SystemProfile ja
+// carregado, um id de sistema (Node) ou conteudo YAML (string).
+export async function rollWithProfile(
+  profile: SystemProfile | string,
+  inputs: ProfileInputs,
+  options: RollOptions = {},
+): Promise<RollResult> {
+  const resolved = typeof profile === "string" ? await loadProfile(profile) : profile;
+
+  if (resolved.rollType === "overlay") {
+    throw new ProfileError(
+      `profile "${resolved.system}": roll_type "overlay" nao rola por conta propria — use rollOverlay`,
+    );
+  }
+
+  const optionalMissing = validateProfileInputs(resolved, inputs);
 
   const state = createRollState(options);
   const groups: Record<string, RollGroup> = {};
@@ -349,10 +467,15 @@ export async function rollWithProfile(
   for (const field of resolved.fields) {
     const { spec, notation } = fieldSpec(field, inputs);
     const group = rollDice(spec, state);
-    // compare_individually: false (default) = soma — garante total mesmo
-    // sem modificador; true mantem o array pra comparacao elemento a
-    // elemento (docs/system-profiles.md).
-    if (!field.compareIndividually && group.total === undefined) {
+    if (field.successRule !== null) {
+      // Sucessos: CONTAGEM de dados que batem a regra, nao a soma —
+      // "[2, 5, 6, 1] = 2" em vez do jogador ter que contar na mao
+      // (pool_d6/Shadowrun).
+      group.total = group.rolls.filter((v) => matchesCondition(v, field.successRule!)).length;
+    } else if (!field.compareIndividually && group.total === undefined) {
+      // compare_individually: false (default) = soma — garante total mesmo
+      // sem modificador; true mantem o array pra comparacao elemento a
+      // elemento (docs/system-profiles.md).
       group.total = group.rolls.reduce((sum, v) => sum + v, 0) + (group.modifier ?? 0);
     }
     groups[field.id] = group;
@@ -362,12 +485,15 @@ export async function rollWithProfile(
   const notation =
     resolved.rollType === "comparison"
       ? `{${notations[0]!}} vs {${notations[1]!}}`
-      : notations[0]!;
+      : resolved.rollType === "multi"
+        ? notations.map((n) => `{${n}}`).join(" + ")
+        : notations[0]!;
 
   const { outcome, flags } = evaluateOutcomeRules(
     resolved.outcomeRules,
     groups,
     inputs,
+    optionalMissing,
   );
 
   const result: RollResult = {
@@ -376,6 +502,53 @@ export async function rollWithProfile(
     profile: resolved.system,
     timestamp: options.timestamp ?? new Date().toISOString(),
   };
+  if (outcome !== undefined) result.outcome = outcome;
+  if (flags.length > 0) result.outcome_flags = flags;
+  return result;
+}
+
+// Rola uma notacao camada 1 QUALQUER (o composer de dados livre monta o
+// que o jogador escolheu, sem saber de profile nenhum) e avalia as
+// outcome_rules de um profile "overlay" sobre o resultado — roll_under
+// aplica "<= target" em cima de "1d20", "3d6", etc, o que o jogador tiver
+// montado. Aceita um SystemProfile ja carregado, um id de sistema (Node)
+// ou conteudo YAML (string), igual rollWithProfile.
+export async function rollOverlay(
+  profile: SystemProfile | string,
+  notation: string,
+  inputs: ProfileInputs,
+  options: RollOptions = {},
+): Promise<RollResult> {
+  const resolved = typeof profile === "string" ? await loadProfile(profile) : profile;
+  if (resolved.rollType !== "overlay") {
+    throw new ProfileError(
+      `profile "${resolved.system}": rollOverlay exige roll_type "overlay"`,
+    );
+  }
+
+  const optionalMissing = validateProfileInputs(resolved, inputs);
+  const rolled = roll(notation, options);
+
+  // roll() so preenche `total` com operador de soma explicito (modificador
+  // ou keep/drop) ou grupo de 1 dado (docs/roll-notation.md) — um "3d6"
+  // solto do composer nao teria total, e as outcome_rules do overlay
+  // (ex.: "roll.total <= {input.target}") precisam de um numero sempre.
+  const groups: Record<string, RollGroup> = {};
+  for (const [id, group] of Object.entries(rolled.groups)) {
+    groups[id] =
+      group.total === undefined
+        ? { ...group, total: group.rolls.reduce((sum, v) => sum + v, 0) + (group.modifier ?? 0) }
+        : group;
+  }
+
+  const { outcome, flags } = evaluateOutcomeRules(
+    resolved.outcomeRules,
+    groups,
+    inputs,
+    optionalMissing,
+  );
+
+  const result: RollResult = { ...rolled, groups, profile: resolved.system };
   if (outcome !== undefined) result.outcome = outcome;
   if (flags.length > 0) result.outcome_flags = flags;
   return result;

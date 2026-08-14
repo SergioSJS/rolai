@@ -2,12 +2,14 @@ system: fate
 label: "Fate / Fudge — 4dF"
 roll_type: simple
 inputs:
-  - id: skill
-    label: "Habilidade"
-    type: number
   - id: difficulty
     label: "Dificuldade"
     type: number
+    required: false
+  - id: skill
+    label: "Habilidade"
+    type: number
+    default: "0"
 fields:
   - id: roll
     dice: "4dF"

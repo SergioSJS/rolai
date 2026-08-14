@@ -49,6 +49,17 @@ describe("profile: fate", () => {
     expect(result.outcome_flags).toEqual(["fail"]);
   });
 
+  it("sem dificuldade: so rola, sem outcome (nao obriga a informar CD)", async () => {
+    const result = await rollWithProfile(
+      "fate",
+      { skill: 2 },
+      { deterministic: [1, 1, 0, -1] },
+    );
+    expect(result.groups["roll"]!.total).toBe(3);
+    expect(result.outcome).toBeUndefined();
+    expect(result.outcome_flags).toBeUndefined();
+  });
+
   it("modificador negativo entra na notacao", async () => {
     const result = await rollWithProfile(
       "fate",

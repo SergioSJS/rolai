@@ -1,0 +1,39 @@
+system: infaernum
+label: "Infaernum — Rolagem padrão (3d6)"
+roll_type: simple
+inputs: []
+fields:
+  - id: pool
+    dice: "3d6"
+    compare_individually: true
+# Cada dado do 3d6 e lido INDIVIDUALMENTE, nao somado: 1 = desgraca, 2 ou 3 =
+# vislumbre, 4 ou 5 = facanha, 6 = milagre. Pool fixo em 3 dados: cada
+# categoria so pode ocorrer 0/1/2/3 vezes, entao quantiza sem gambiarra —
+# "2 milagres" em vez de uma flag booleana que esconde quantos cairam.
+# Ordem prioriza os extremos: milagre e desgraca (o destaque, "outcome")
+# vem antes de facanha/vislumbre.
+outcome_rules:
+  - condition: "count(pool, '==6') == 3"
+    result: milagre_x3
+  - condition: "count(pool, '==6') == 2"
+    result: milagre_x2
+  - condition: "count(pool, '==6') == 1"
+    result: milagre_x1
+  - condition: "count(pool, '==1') == 3"
+    result: desgraca_x3
+  - condition: "count(pool, '==1') == 2"
+    result: desgraca_x2
+  - condition: "count(pool, '==1') == 1"
+    result: desgraca_x1
+  - condition: "(count(pool, '==4') + count(pool, '==5')) == 3"
+    result: facanha_x3
+  - condition: "(count(pool, '==4') + count(pool, '==5')) == 2"
+    result: facanha_x2
+  - condition: "(count(pool, '==4') + count(pool, '==5')) == 1"
+    result: facanha_x1
+  - condition: "(count(pool, '==2') + count(pool, '==3')) == 3"
+    result: vislumbre_x3
+  - condition: "(count(pool, '==2') + count(pool, '==3')) == 2"
+    result: vislumbre_x2
+  - condition: "(count(pool, '==2') + count(pool, '==3')) == 1"
+    result: vislumbre_x1

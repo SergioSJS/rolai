@@ -1,10 +1,11 @@
 system: pbta
-label: "PbtA — Rolagem 2d6"
+label: "PbtA (2d6)"
 roll_type: simple
 inputs:
   - id: mod
     label: "Modificador"
     type: number
+    default: "0"
 fields:
   - id: roll
     dice: "2d6"

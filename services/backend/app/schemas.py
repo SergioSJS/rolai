@@ -86,6 +86,12 @@ class ProfileInput(BaseModel):
     id: str = Field(max_length=32)
     label: str = Field(max_length=80)
     type: Literal["number", "select"]
+    # false = pode ficar em branco (rules-engine pula outcome_rules que o
+    # referenciam). Default True preserva profiles gravados antes deste campo.
+    required: bool = True
+    # Hint de UI (pre-preenche o formulario, ex. "0" num modificador) — nao
+    # afeta required/validacao, so aparencia. Ver rules-engine/profile.ts.
+    default: str | None = Field(default=None, max_length=32)
     options: list[str] | None = Field(default=None, max_length=32)
 
 
@@ -96,6 +102,9 @@ class ProfileField(BaseModel):
     dice: str = Field(max_length=160)
     modifier: str | None = Field(default=None, max_length=160)
     compare_individually: bool = False
+    # Minilinguagem do count() sem aspas (ex. ">=5"): `total` do grupo vira
+    # a contagem de dados que batem, nao a soma. Ver rules-engine/profile.ts.
+    success_rule: str | None = Field(default=None, max_length=16)
 
 
 class OutcomeRule(BaseModel):
@@ -110,9 +119,12 @@ class CustomProfile(BaseModel):
 
     system: str = Field(max_length=64)
     label: str = Field(max_length=120)
-    roll_type: Literal["simple", "comparison"]
+    roll_type: Literal["simple", "comparison", "multi", "overlay"]
     inputs: list[ProfileInput] = Field(default_factory=list, max_length=24)
-    fields: list[ProfileField] = Field(min_length=1, max_length=8)
+    # min_length=0: roll_type "overlay" nao tem field proprio (a rolagem vem
+    # de fora) — a contagem certa por roll_type e responsabilidade do
+    # rules-engine (parseProfile), o backend so limita o TAMANHO da lista.
+    fields: list[ProfileField] = Field(default_factory=list, max_length=8)
     outcome_rules: list[OutcomeRule] = Field(default_factory=list, max_length=64)
 
 
