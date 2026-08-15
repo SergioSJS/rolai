@@ -103,6 +103,18 @@ export function ResultDisplay({
             ))}
         </>
       )}
+      {/* Contra o que o resultado foi medido (CD, pericia, valor testado,
+          limite...) — sem isto, "sucesso" sozinho nao diz muito nem pra
+          quem rolou, nem pros outros vendo pela sala. */}
+      {result.tested !== undefined && result.tested.length > 0 && (
+        <div className="result-tested">
+          {result.tested.map((t) => (
+            <span key={t.label} className="result-tested-item">
+              {t.label}: {t.value}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="result-groups">
         {groups.map((group, gi) => (
           <div key={`${group.name}-${gi}`} className="result-group">

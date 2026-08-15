@@ -485,6 +485,36 @@
                 android:textColor="#9AA6B2"
                 android:textColorLink="#25C48F"
                 android:textSize="13sp" />
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/section_changelog" />
+
+            <!-- Preenchido em codigo por SettingsActivity.showVersion() a
+                 partir de Changelog.kt — mesma lista do
+                 apps/web/src/changelog.ts, mantida a mao entre os dois (nao
+                 ha camada compartilhada de texto estatico, so o rules-engine
+                 e). -->
+            <TextView
+                android:id="@+id/txt_changelog"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:lineSpacingExtra="3dp"
+                android:textColor="#9AA6B2"
+                android:textSize="13sp" />
+
+            <TextView
+                style="@style/Rolai.FieldLabel"
+                android:text="@string/section_acknowledgments" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/acknowledgments_placeholder"
+                android:textColor="#9AA6B2"
+                android:textSize="13sp" />
         </LinearLayout>
 
         <!-- ===== Avancado (por ultimo de proposito) =====

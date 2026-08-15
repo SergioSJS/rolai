@@ -2,13 +2,21 @@ system: pbta2d10
 label: "PbtA (2d10)"
 roll_type: simple
 inputs:
+  - id: mode
+    label: "Modo"
+    type: select
+    options:
+      - { value: "", label: "Normal" }
+      - { value: "adv", label: "Vantagem" }
+      - { value: "dis", label: "Desvantagem" }
   - id: mod
     label: "Modificador"
     type: number
     default: "0"
 fields:
+  # "2d10adv" -> 3d10kh2 (acucar do parser) — fica com os 2 maiores de 3.
   - id: roll
-    dice: "2d10"
+    dice: "2d10{input.mode}"
     modifier: "{input.mod}"
 # Reusa os mesmos ids de outcome do pbta 2d6 (strong_hit/weak_hit/miss) —
 # mesmos tiers narrativos, so a escala de dado muda. Assim o rotulo/cor da

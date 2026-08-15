@@ -1,7 +1,19 @@
 system: roll_under
 label: "Genérico — Roll Under"
 roll_type: overlay
+# Numero MENOR e melhor aqui (roll.total <= target) — o oposto de d20/pbta,
+# onde "adv" (Vantagem) fica com o dado MAIOR. Sem isto "Vantagem" faria a
+# rolagem PIORAR em roll_under (aplica o token literal "adv" do parser,
+# que sempre significa "fica com o maior") — ver applyOverlayMode.
+mode_favors_low: true
 inputs:
+  - id: mode
+    label: "Modo"
+    type: select
+    options:
+      - { value: "", label: "Normal" }
+      - { value: "adv", label: "Vantagem" }
+      - { value: "dis", label: "Desvantagem" }
   - id: target
     label: "Valor testado"
     type: number
@@ -13,6 +25,10 @@ fields: []
 # o nome que o parser da pro grupo unico de notacao livre.
 # "target" e opcional: sem ele, so a rolagem existe, sem outcome_rule
 # batendo (evaluateOutcomeRules pula regra que referencia input ausente).
+# "mode": aplicado em cima da notacao do composer (nao de um field do
+# profile — este e "overlay", nao tem dado proprio) so quando ela e UM
+# termo simples ("1d20", "3d6"); pool composto ("2d6+1d4") ignora o modo
+# em silencio — ver applyOverlayMode em profile.ts.
 outcome_rules:
   - condition: "roll.total <= {input.target}"
     result: success

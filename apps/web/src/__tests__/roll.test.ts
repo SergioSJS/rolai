@@ -150,7 +150,7 @@ describe("profiles versionados — tiers exclusivos (regressao FitD/PbtA)", () =
 
   it("pbta: strong_hit nao arrasta weak_hit nas flags", async () => {
     const profile = parseProfile(pbtaYaml);
-    const result = await rollWithProfile(profile, { mod: 1 }, {
+    const result = await rollWithProfile(profile, { mode: "", mod: 1 }, {
       deterministic: [6, 4],
     });
     expect(result.outcome).toBe("strong_hit");

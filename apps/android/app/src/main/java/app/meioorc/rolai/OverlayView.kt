@@ -166,6 +166,13 @@ class OverlayView(context: Context) {
     private val panel: LinearLayout
     private val historyPanel: LinearLayout
     private val roomPanel: LinearLayout
+    // Conteudo ROLAVEL de cada cartao (dentro do card visual, que so tem
+    // fundo/borda/padding) — ver fitToScreen: em paisagem a tela e baixa
+    // demais pro cartao inteiro caber, e sem isto o que passasse da borda
+    // simplesmente sumia, sem rolar.
+    private lateinit var panelScroll: MaxHeightScrollView
+    private lateinit var historyScroll: MaxHeightScrollView
+    private lateinit var roomScroll: MaxHeightScrollView
     // Sub-secao DENTRO do panel (nao um card separado): os campos do
     // sistema ativo (CD, modificador...) ficam visiveis JUNTO dos chips de
     // dado normais, nao escondem um ao outro. Antes eram dois cards
@@ -524,12 +531,8 @@ class OverlayView(context: Context) {
 
         renderPool()
 
-        return LinearLayout(context).apply {
+        val body = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            background = cardBackground()
-            elevation = 12.dp().toFloat()
-            setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
-            layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
             addView(header)
             addView(statusView, vParams(topMargin = 2))
             addView(systemSection, vParams(topMargin = 10))
@@ -541,6 +544,16 @@ class OverlayView(context: Context) {
             addView(activityView, vParams(topMargin = 6))
             addView(divider)
             addView(actionRow, vParams(topMargin = 2))
+        }
+        panelScroll = scrollWrapper(context, body)
+
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = cardBackground()
+            elevation = 12.dp().toFloat()
+            setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
+            layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
+            addView(panelScroll)
         }
     }
 
@@ -576,15 +589,21 @@ class OverlayView(context: Context) {
             setText(R.string.overlay_history_empty)
         }
 
+        val body = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(header)
+            addView(historyResultView, vParams(topMargin = 10))
+            addView(historyLinesView, vParams(topMargin = 8))
+        }
+        historyScroll = scrollWrapper(context, body)
+
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = cardBackground()
             elevation = 12.dp().toFloat()
             setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
             layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
-            addView(header)
-            addView(historyResultView, vParams(topMargin = 10))
-            addView(historyLinesView, vParams(topMargin = 8))
+            addView(historyScroll)
         }
     }
 
@@ -646,17 +665,23 @@ class OverlayView(context: Context) {
             onCopyRoomLink?.invoke()
         }
 
+        val body = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(header)
+            addView(roomStatusView, vParams(topMargin = 6))
+            addView(roomRosterView, vParams(topMargin = 10))
+            addView(acoes, vParams(topMargin = 12))
+            addView(copiarLink, vParams(topMargin = 6))
+        }
+        roomScroll = scrollWrapper(context, body)
+
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = cardBackground()
             elevation = 12.dp().toFloat()
             setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
             layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
-            addView(header)
-            addView(roomStatusView, vParams(topMargin = 6))
-            addView(roomRosterView, vParams(topMargin = 10))
-            addView(acoes, vParams(topMargin = 12))
-            addView(copiarLink, vParams(topMargin = 6))
+            addView(roomScroll)
         }
     }
 
@@ -867,6 +892,10 @@ class OverlayView(context: Context) {
                 background = chipBackground(active = false)
                 setPadding(0, 9.dp(), 0, 9.dp())
                 setOnClickListener { addDie(key) }
+                // Segurar tira um do pool — antes so existia "Limpar" (zera
+                // tudo), entao trocar de 3d6 pra 2d6 exigia remontar o pool
+                // inteiro. Espelha o "−" do die-slot da web (ComposerBar.tsx).
+                setOnLongClickListener { removeDie(key); true }
             }
             chips[key] = chip
             row.addView(
@@ -1003,6 +1032,15 @@ class OverlayView(context: Context) {
             setOnClickListener { onClick() }
         }
 
+    /** Envolve o conteudo de um cartao num MaxHeightScrollView — ver
+     *  fitToScreen pra quem ajusta o teto de altura em runtime. */
+    private fun scrollWrapper(context: Context, body: View): MaxHeightScrollView =
+        MaxHeightScrollView(context).apply {
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(body)
+        }
+
     private fun pill(color: Int): GradientDrawable =
         GradientDrawable().apply {
             cornerRadius = 999f
@@ -1013,6 +1051,14 @@ class OverlayView(context: Context) {
 
     private fun addDie(key: String) {
         pool[key] = (pool[key] ?: 0) + 1
+        renderPool()
+    }
+
+    /** Tira um dado do tipo; o termo some do pool ao zerar (senao
+     *  `poolNotation` imprimiria "0d6"). Ligado ao long-press do chip. */
+    private fun removeDie(key: String) {
+        val count = (pool[key] ?: 0) - 1
+        if (count > 0) pool[key] = count else pool.remove(key)
         renderPool()
     }
 
@@ -1126,6 +1172,12 @@ class OverlayView(context: Context) {
         historyPanel.visibility = if (newMode == Mode.HISTORY) View.VISIBLE else View.GONE
         roomPanel.visibility = if (newMode == Mode.ROOM) View.VISIBLE else View.GONE
         resultFlash.visibility = if (newMode == Mode.RESULT) View.VISIBLE else View.GONE
+        when (newMode) {
+            Mode.PANEL -> fitToScreen(panelScroll)
+            Mode.HISTORY -> fitToScreen(historyScroll)
+            Mode.ROOM -> fitToScreen(roomScroll)
+            else -> {}
+        }
         root.removeCallbacks(hideResultRunnable)
         if (newMode == Mode.RESULT) root.postDelayed(hideResultRunnable, RESULT_FLASH_MS)
         // Campo de texto = janela focavel. PANEL agora cobre tanto o
@@ -1180,13 +1232,55 @@ class OverlayView(context: Context) {
         if (mode == Mode.HISTORY) renderHistory()
     }
 
+    // Guardados aqui pra fitToScreen poder reposicionar a janela ao abrir um
+    // cartao alto — a mesma referencia que bindDrag recebe do OverlayService.
+    private var windowManager: WindowManager? = null
+    private var windowParams: WindowManager.LayoutParams? = null
+
     /** Arrasto da bolha e dos cabecalhos, com snap na borda ao soltar. */
     @SuppressLint("ClickableViewAccessibility")
     fun bindDrag(windowManager: WindowManager, params: WindowManager.LayoutParams) {
+        this.windowManager = windowManager
+        this.windowParams = params
         val listener = DragTouchListener(windowManager, params)
         bubble.setOnTouchListener(listener)
         dragHandle.setOnTouchListener(listener)
         historyDragHandle.setOnTouchListener(listener)
+    }
+
+    /**
+     * Teto de altura do cartao (deixando uma margem) + reposiciona a
+     * janela pra caber inteira na tela ATUAL.
+     *
+     * Sem isto, um cartao WRAP_CONTENT que cabia sobrando em retrato passa
+     * da borda em paisagem (tela bem mais baixa) — e como a janela e
+     * ancorada TOP|START num x/y que nao muda sozinho, o que passasse da
+     * borda ficava cortado, sem rolar e sem reposicionar.
+     *
+     * `root.post`: a nova visibilidade/maxHeightPx so refletem em
+     * `root.height` depois do proximo layout, que ainda nao rodou no
+     * ponto em que setMode chama isto.
+     */
+    private fun fitToScreen(scroll: MaxHeightScrollView) {
+        val metrics = root.resources.displayMetrics
+        val margin = 32.dp()
+        scroll.maxHeightPx = (metrics.heightPixels - margin).coerceAtLeast(120.dp())
+        val wm = windowManager ?: return
+        val params = windowParams ?: return
+        root.post {
+            val width = root.width
+            val height = root.height
+            if (width <= 0 || height <= 0) return@post
+            val maxX = (metrics.widthPixels - width).coerceAtLeast(0)
+            val maxY = (metrics.heightPixels - height).coerceAtLeast(0)
+            val clampedX = params.x.coerceIn(0, maxX)
+            val clampedY = params.y.coerceIn(0, maxY)
+            if (clampedX != params.x || clampedY != params.y) {
+                params.x = clampedX
+                params.y = clampedY
+                wm.updateViewLayout(root, params)
+            }
+        }
     }
 
     private inner class DragTouchListener(

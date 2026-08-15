@@ -62,6 +62,9 @@
     <string name="section_appearance">Aparência do dado</string>
     <string name="section_about">Versão</string>
     <string name="about_contact">Sérgio Sousa · @sergiosjs · meioorc.com · sergiosjs@pm.me</string>
+    <string name="section_changelog">Notas de versão</string>
+    <string name="section_acknowledgments">Agradecimentos</string>
+    <string name="acknowledgments_placeholder">Em breve.</string>
     <string name="section_advanced">Avançado</string>
     <!-- %1$s = versão instalada (BuildConfig.VERSION_NAME). -->
     <string name="version_installed">Rolaí %1$s</string>

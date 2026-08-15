@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicReference
  * (apps/web/dist-headless, mesma fonte que a WebView carrega), rodando
  * src/headless.test.ts com as mesmas filas deterministicas:
  *   rolai.roll("2d6", det [3,4])                    -> rolls [3,4], sem total
- *   rolai.rollWithProfile("pbta", {mod:1}, [6,6])   -> "2d6+1", total 13,
- *                                                      outcome strong_hit
+ *   rolai.rollWithProfile("pbta", {mode:"",mod:1}, [6,6]) -> "2d6+1", total 13,
+ *                                                             outcome strong_hit
  * A fila `deterministic` (RollOptions do rules-engine) e o que permite
  * comparar valor exato sem depender de RNG.
  *
@@ -97,7 +97,7 @@ class HeadlessRollerParityTest {
         val json = rollAndAwait { roller ->
             roller.rollWithProfile(
                 "pbta",
-                """{"mod":1}""",
+                """{"mode":"","mod":1}""",
                 """{"deterministic":[6,6],"timestamp":"2026-01-01T00:00:00.000Z"}""",
             )
         }

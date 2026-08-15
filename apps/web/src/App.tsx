@@ -14,6 +14,7 @@ import type { RollResult } from "@rolai/rules-engine";
 import { availableProfiles } from "./profiles";
 import { familyFor } from "./profileFamilies";
 import { APK_LATEST_URL } from "./config";
+import { CHANGELOG } from "./changelog";
 import type {
   DiceStyle,
   QualityTier,
@@ -578,6 +579,27 @@ export function App() {
               código de sala escolhido por você funciona como mesa fixa — a
               mesma URL vale pra sempre.
             </p>
+
+            <h3>Notas de versão</h3>
+            <dl className="changelog">
+              {CHANGELOG.map((entry) => (
+                <div key={entry.version} className="changelog-entry">
+                  <dt>
+                    {entry.version} <span className="changelog-date">{entry.date}</span>
+                  </dt>
+                  <dd>
+                    <ul>
+                      {entry.notes.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+
+            <h3>Agradecimentos</h3>
+            <p className="settings-hint">Em breve.</p>
           </div>
         </Modal>
       )}

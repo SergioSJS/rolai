@@ -15,6 +15,9 @@ describe("profile: d20", () => {
     expect(result.groups["roll"]!.total).toBe(17);
     expect(result.outcome).toBe("success");
     expect(result.outcome_flags).toEqual(["success"]);
+    // "mod" nao aparece (nao esta em nenhuma condition, ja esta embutido no
+    // total) — so "dc", que e o que a outcome_rule de fato compara.
+    expect(result.tested).toEqual([{ label: "CD", value: 15 }]);
   });
 
   it("fail: total < CD", async () => {

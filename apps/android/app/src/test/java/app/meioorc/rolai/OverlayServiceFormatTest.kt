@@ -40,6 +40,19 @@ class OverlayServiceFormatTest {
         assertEquals(true, OverlayService.formatResult(json).endsWith("sucesso completo, match!"))
     }
 
+    /** roll_under: "tested" traz o valor testado, que nao mora em nenhum
+     *  grupo/dado — sem isto "sucesso" nao dizia contra o que. */
+    @Test
+    fun `tested aparece entre parenteses no fim`() {
+        val json = """{"notation":"1d20","groups":{"roll":{"rolls":[8],"total":8}},
+            "outcome":"success","outcome_flags":["success"],
+            "tested":[{"label":"Valor testado","value":10}]}"""
+        assertEquals(
+            "1d20 [8] = 8 — sucesso (Valor testado: 10)",
+            OverlayService.formatResult(json),
+        )
+    }
+
     @Test
     fun `sem outcome nao aparece traco nenhum`() {
         val json = """{"notation":"2d6","groups":{"roll":{"rolls":[3,4]}}}"""

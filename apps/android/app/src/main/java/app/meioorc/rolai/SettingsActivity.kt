@@ -338,6 +338,7 @@ class SettingsActivity : Activity() {
     private fun showVersion() {
         findViewById<TextView>(R.id.txt_version).text =
             getString(R.string.version_installed, BuildConfig.VERSION_NAME)
+        findViewById<TextView>(R.id.txt_changelog).text = Changelog.formatted()
     }
 
     /**

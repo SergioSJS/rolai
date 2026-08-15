@@ -6,7 +6,7 @@
 import { parseExpression, evaluateExpression, matchesCondition } from "./expression.js";
 import type { ExpressionScope } from "./expression.js";
 import { parseNotation } from "./parser.js";
-import type { DiceSpec } from "./parser.js";
+import type { DiceSpec, NotationAST } from "./parser.js";
 import { createRollState, roll, rollDice } from "./roller.js";
 import type { RollOptions } from "./roller.js";
 import type { RollGroup, RollResult } from "./types.js";
@@ -79,6 +79,11 @@ export interface SystemProfile {
   // composer de notacao livre montar). Usar rollOverlay, nunca
   // rollWithProfile, pra esse tipo.
   rollType: "simple" | "comparison" | "multi" | "overlay";
+  // roll_under: numero MENOR e melhor (roll.total <= target) — o oposto do
+  // que "adv"/"dis" significa nas outras profiles (maior e melhor, como
+  // d20). Aqui "Vantagem" tem que manter o dado BAIXO, entao o token
+  // literal do parser sai invertido — ver applyOverlayMode.
+  modeFavorsLow?: boolean;
   inputs: ProfileInput[];
   fields: ProfileField[];
   outcomeRules: OutcomeRule[];
@@ -243,6 +248,10 @@ export function parseProfile(yamlContent: string): SystemProfile {
       'profile: "roll_type" deve ser "simple", "comparison", "multi" ou "overlay"',
     );
   }
+  const modeFavorsLowRaw = raw["mode_favors_low"];
+  if (modeFavorsLowRaw !== undefined && typeof modeFavorsLowRaw !== "boolean") {
+    throw new ProfileError('profile: "mode_favors_low" deve ser boolean');
+  }
   const profile: SystemProfile = {
     system: requireString(raw, "system", "profile"),
     label: requireString(raw, "label", "profile"),
@@ -251,6 +260,7 @@ export function parseProfile(yamlContent: string): SystemProfile {
     fields: validateFields(raw["fields"]),
     outcomeRules: validateOutcomeRules(raw["outcome_rules"]),
   };
+  if (modeFavorsLowRaw === true) profile.modeFavorsLow = true;
   if (profile.rollType === "comparison" && profile.fields.length !== 2) {
     throw new ProfileError(
       `profile "${profile.system}": roll_type "comparison" exige exatamente 2 field(s)`,
@@ -504,6 +514,8 @@ export async function rollWithProfile(
   };
   if (outcome !== undefined) result.outcome = outcome;
   if (flags.length > 0) result.outcome_flags = flags;
+  const tested = testedInputs(resolved, inputs, optionalMissing);
+  if (tested.length > 0) result.tested = tested;
   return result;
 }
 
@@ -513,6 +525,57 @@ export async function rollWithProfile(
 // aplica "<= target" em cima de "1d20", "3d6", etc, o que o jogador tiver
 // montado. Aceita um SystemProfile ja carregado, um id de sistema (Node)
 // ou conteudo YAML (string), igual rollWithProfile.
+// Input "mode" (adv/dis) na notacao LIVRE do overlay (roll_under): mesmo
+// acucar NdXadv/NdXdis que d20/pbta aplicam via "{input.mode}" num field
+// fixo, so que aqui a notacao nao pertence ao profile — vem de fora, do
+// composer. So aplica quando a notacao e UM grupo de UM termo so ("1d20",
+// "3d6"): em "2d6+1d4" ou "{a} vs {b}" nao ha como saber qual dado vira
+// vantagem, entao fica intocada e o "mode" e ignorado (o proximo roll com
+// notacao simples volta a funcionar sozinho).
+function applyOverlayMode(
+  notation: string,
+  inputs: ProfileInputs,
+  profile: SystemProfile,
+): string {
+  const mode = inputs["mode"];
+  if (mode !== "adv" && mode !== "dis") return notation;
+  let ast: NotationAST;
+  try {
+    ast = parseNotation(notation);
+  } catch {
+    return notation;
+  }
+  if (ast.groups.length !== 1 || ast.groups[0]!.terms.length !== 1) return notation;
+  // profile.modeFavorsLow (roll_under): "Vantagem" tem que manter o dado
+  // BAIXO, entao o token literal do parser (adv = fica com o maior) sai
+  // trocado pelo oposto.
+  const token = profile.modeFavorsLow ? (mode === "adv" ? "dis" : "adv") : mode;
+  return `${notation}${token}`;
+}
+
+// Inputs do profile citados nas outcome_rules (o "quanto precisava tirar")
+// — CD, pericia, valor testado, limite... "mod"/"mode" nunca aparecem
+// dentro de uma condition (eles mudam a rolagem, nao a comparacao), entao
+// ficam de fora sozinhos, sem lista de exclusao a mao.
+function testedInputs(
+  profile: SystemProfile,
+  inputs: ProfileInputs,
+  optionalMissing: ReadonlySet<string>,
+): { label: string; value: number | string }[] {
+  const ids = new Set<string>();
+  for (const rule of profile.outcomeRules) {
+    for (const m of rule.condition.matchAll(INPUT_REF)) ids.add(m[1]!);
+  }
+  const result: { label: string; value: number | string }[] = [];
+  for (const input of profile.inputs) {
+    if (!ids.has(input.id) || optionalMissing.has(input.id)) continue;
+    const value = inputs[input.id];
+    if (value === undefined) continue;
+    result.push({ label: input.label, value });
+  }
+  return result;
+}
+
 export async function rollOverlay(
   profile: SystemProfile | string,
   notation: string,
@@ -527,7 +590,7 @@ export async function rollOverlay(
   }
 
   const optionalMissing = validateProfileInputs(resolved, inputs);
-  const rolled = roll(notation, options);
+  const rolled = roll(applyOverlayMode(notation, inputs, resolved), options);
 
   // roll() so preenche `total` com operador de soma explicito (modificador
   // ou keep/drop) ou grupo de 1 dado (docs/roll-notation.md) — um "3d6"
@@ -551,5 +614,7 @@ export async function rollOverlay(
   const result: RollResult = { ...rolled, groups, profile: resolved.system };
   if (outcome !== undefined) result.outcome = outcome;
   if (flags.length > 0) result.outcome_flags = flags;
+  const tested = testedInputs(resolved, inputs, optionalMissing);
+  if (tested.length > 0) result.tested = tested;
   return result;
 }

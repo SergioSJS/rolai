@@ -621,7 +621,8 @@ body.stream-mode .stage canvas {
 }
 
 .stream-root .result-group-name,
-.stream-root .result-notation {
+.stream-root .result-notation,
+.stream-root .result-tested {
   color: rgba(244, 247, 245, 0.8);
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
@@ -1216,6 +1217,18 @@ button:disabled {
 .result-flag.tone-partial {
   border-color: var(--warn);
   color: var(--warn);
+}
+
+/* Contra o que o resultado foi medido (CD, pericia, valor testado...) —
+   discreto de proposito: e contexto pro headline, nao compete com ele. */
+.result-tested {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 /* Infaernum padrao (3d6 individual): lista de linhas de peso IGUAL, nao
@@ -2047,6 +2060,41 @@ input[type="range"]:focus {
 
 a.about-contact-chip:hover {
   border-color: var(--accent);
+}
+
+/* Notas de versao, no fim do "Sobre": versao mais nova primeiro, cada uma
+   com sua data e uma lista curta de notas — sem exigir rolar ate o fim do
+   histórico completo pra achar o que mudou por ultimo. */
+.changelog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 0;
+}
+
+.changelog-entry dt {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.changelog-date {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.changelog-entry dd {
+  margin: 0.25rem 0 0;
+}
+
+.changelog-entry ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 /* Dado descartado pelo keep/drop: aparece, mas nao compete com o que conta. */

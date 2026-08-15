@@ -26,6 +26,13 @@ export interface RollResult {
   // `outcome` e sempre o primeiro elemento (eventos independentes do
   // resultado principal, como o "match" do Ironsworn, aparecem aqui).
   outcome_flags?: string[];
+  // Inputs do profile citados nas outcome_rules — o numero contra o qual o
+  // resultado foi medido (CD, perícia, valor testado, limite...). So
+  // ESTES, nao todos os inputs: "mod"/"mode" ja aparecem embutidos na
+  // notacao/nos dados, e repetir escondia o motivo de existir (mostrar o
+  // que nao da pra ver so olhando pro resultado). Ausente = profile sem
+  // nenhum input desse tipo, ou nenhum foi preenchido.
+  tested?: { label: string; value: number | string }[];
   timestamp: string;
 }
 

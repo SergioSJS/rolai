@@ -897,11 +897,23 @@ class OverlayService : Service() {
                 } else {
                     result.optString("outcome", "").let { if (it.isEmpty()) it else outcomeLabel(it) }
                 }
+                // Contra o que o resultado foi medido (CD, pericia, valor
+                // testado...) — "tested" so existe quando algum input do
+                // profile aparece nas outcome_rules (ver testedInputs em
+                // rules-engine/profile.ts). Sem isto "sucesso" sozinho nao
+                // diz contra o que.
+                val tested = result.optJSONArray("tested")?.let { arr ->
+                    (0 until arr.length()).joinToString(", ") { i ->
+                        val item = arr.getJSONObject(i)
+                        "${item.getString("label")}: ${item.get("value")}"
+                    }
+                } ?: ""
                 buildString {
                     append(notation)
                     if (dice.isNotEmpty()) append(" [$dice]")
                     if (total != null) append(" = $total")
                     if (outcome.isNotEmpty()) append(" — $outcome")
+                    if (tested.isNotEmpty()) append(" ($tested)")
                 }
             } catch (e: Exception) {
                 resultJson.take(80)

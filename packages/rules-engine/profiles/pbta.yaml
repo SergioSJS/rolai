@@ -2,13 +2,24 @@ system: pbta
 label: "PbtA (2d6)"
 roll_type: simple
 inputs:
+  - id: mode
+    label: "Modo"
+    type: select
+    options:
+      - { value: "", label: "Normal" }
+      - { value: "adv", label: "Vantagem" }
+      - { value: "dis", label: "Desvantagem" }
   - id: mod
     label: "Modificador"
     type: number
     default: "0"
 fields:
+  # Vantagem/desvantagem nao e regra oficial do PbtA (que usa +1
+  # forward/ongoing — ja coberto por "mod"), mas varios hacks tem essa
+  # opcao (ex.: Kult usa a mesma ideia no pbta2d10.yaml). "2d6adv" vira
+  # 3d6kh2 (acucar do parser) — fica com os 2 maiores de 3.
   - id: roll
-    dice: "2d6"
+    dice: "2d6{input.mode}"
     modifier: "{input.mod}"
 outcome_rules:
   - condition: "roll.total >= 10"

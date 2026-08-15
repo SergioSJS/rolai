@@ -132,7 +132,7 @@ describe("bundle headless (WebView Android)", () => {
     const capture = installBridge();
     await globalThis.rolai.rollWithProfile(
       "pbta",
-      JSON.stringify({ mod: 1 }),
+      JSON.stringify({ mode: "", mod: 1 }),
       "cb-profile",
       JSON.stringify({ deterministic: [6, 6], timestamp: "2026-01-01T00:00:00.000Z" }),
     );
@@ -140,7 +140,7 @@ describe("bundle headless (WebView Android)", () => {
 
     const profile = getProfile("pbta");
     expect(profile).toBeDefined();
-    const expected = await rollWithProfile(profile!, { mod: 1 }, {
+    const expected = await rollWithProfile(profile!, { mode: "", mod: 1 }, {
       deterministic: [6, 6],
       timestamp: "2026-01-01T00:00:00.000Z",
     });
@@ -171,7 +171,7 @@ describe("bundle headless (WebView Android)", () => {
     await globalThis.rolai.rollOverlay(
       "roll_under",
       "1d20",
-      JSON.stringify({ target: 10 }),
+      JSON.stringify({ mode: "", target: 10 }),
       "cb-overlay",
       JSON.stringify({ deterministic: [10], timestamp: "2026-01-01T00:00:00.000Z" }),
     );
@@ -179,7 +179,7 @@ describe("bundle headless (WebView Android)", () => {
 
     const profile = getProfile("roll_under");
     expect(profile).toBeDefined();
-    const expected = await rollOverlay(profile!, "1d20", { target: 10 }, {
+    const expected = await rollOverlay(profile!, "1d20", { mode: "", target: 10 }, {
       deterministic: [10],
       timestamp: "2026-01-01T00:00:00.000Z",
     });
