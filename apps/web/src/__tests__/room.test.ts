@@ -26,7 +26,7 @@ const STYLE = {
 const SNAPSHOT = {
   type: "snapshot" as const,
   roster: [{ name: "ana" }, { name: "bia", style: STYLE }],
-  history: [{ player: "ana", result: makeResult() }],
+  history: [{ type: "roll" as const, player: "ana", result: makeResult() }],
 };
 
 describe("roomReducer", () => {
@@ -216,7 +216,7 @@ describe("protocolo: estilo do dado por jogador", () => {
     let state = roomReducer(initialRoomState, { type: "joining", code: "x" });
     state = roomReducer(state, { ...SNAPSHOT, history: [] });
     state = roomReducer(state, event!);
-    expect(state.history[0]!.style).toEqual(STYLE);
+    expect(state.history[0]).toMatchObject({ style: STYLE });
   });
 
   it("roll sem estilo (cliente antigo) continua valido", () => {
@@ -295,12 +295,17 @@ describe("recusa no handshake", () => {
 
 // Fake minimo de WebSocket: so o suficiente pra RoomClient abrir/fechar sem
 // rede de verdade. `triggerClose` simula o servidor derrubando a conexao.
+// `readyState` sempre OPEN e `sent` grava o payload — o bastante pra testar
+// a MONTAGEM do envelope sem precisar simular o handshake de verdade.
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
+  static readonly OPEN = 1;
   onopen: (() => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
   onerror: (() => void) | null = null;
+  readyState = FakeWebSocket.OPEN;
+  sent: string[] = [];
 
   constructor(public url: string) {
     FakeWebSocket.instances.push(this);
@@ -311,7 +316,9 @@ class FakeWebSocket {
        nao precisa disparar pra o teste ficar correto. */
   }
 
-  send(): void {}
+  send(data: string): void {
+    this.sent.push(data);
+  }
 
   triggerClose(code: number): void {
     this.onclose?.(new CloseEvent("close", { code }));
@@ -409,5 +416,166 @@ describe("RoomClient (reconexao)", () => {
     FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!.triggerClose(1006);
     vi.advanceTimersByTime(30_000);
     expect(FakeWebSocket.instances.length).toBe(countBefore + 1);
+  });
+});
+
+// specs/08-baralho.md: mesmo esquema de confianca da rolagem — o cliente
+// ja calculou local (deck-engine), so avisa a sala. Campos em snake_case no
+// wire (services/backend/app/schemas.py), o cliente traduz de/pra camelCase.
+describe("RoomClient (envio de baralho)", () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+  });
+
+  it("sendDeckDraw manda cartas e restante, com timestamp", () => {
+    const client = new RoomClient("sala1", "ana", () => {});
+    client.connect();
+    const ws = FakeWebSocket.instances[0]!;
+    const cards = [{ id: "hearts-A", suit: "hearts" as const, rank: "A" as const }];
+    client.sendDeckDraw(cards, 51, "2026-01-01T00:00:00Z");
+    const sent = JSON.parse(ws.sent[0]!);
+    expect(sent).toEqual({
+      type: "deck_draw",
+      cards,
+      remaining: 51,
+      timestamp: "2026-01-01T00:00:00Z",
+    });
+  });
+
+  it("sendDeckShuffle manda so o envelope com timestamp", () => {
+    const client = new RoomClient("sala1", "ana", () => {});
+    client.connect();
+    const ws = FakeWebSocket.instances[0]!;
+    client.sendDeckShuffle();
+    const sent = JSON.parse(ws.sent[0]!);
+    expect(sent.type).toBe("deck_shuffle");
+    expect(typeof sent.timestamp).toBe("string");
+  });
+
+  it("sendDeckConfig traduz camelCase pra snake_case e so manda o que mudou", () => {
+    const client = new RoomClient("sala1", "ana", () => {});
+    client.connect();
+    const ws = FakeWebSocket.instances[0]!;
+    client.sendDeckConfig({ includeJokers: true });
+    const sent = JSON.parse(ws.sent[0]!);
+    expect(sent).toEqual({
+      type: "deck_config",
+      include_jokers: true,
+      timestamp: sent.timestamp,
+    });
+    expect(sent.removal_mode).toBeUndefined();
+    expect(sent.auto_reshuffle_on_empty).toBeUndefined();
+  });
+
+  it("espectador nunca manda evento de baralho", () => {
+    const client = new RoomClient("sala1", "ana", () => {}, undefined, true);
+    client.connect();
+    const ws = FakeWebSocket.instances[0]!;
+    client.sendDeckDraw(
+      [{ id: "hearts-A", suit: "hearts", rank: "A" }],
+      51,
+      "2026-01-01T00:00:00Z",
+    );
+    client.sendDeckShuffle();
+    client.sendDeckConfig({ includeJokers: true });
+    expect(ws.sent).toHaveLength(0);
+  });
+});
+
+describe("parseServerMessage: eventos de baralho", () => {
+  it("parseia deck_draw", () => {
+    const event = parseServerMessage(
+      JSON.stringify({
+        type: "deck_draw",
+        player: "ana",
+        cards: [{ id: "hearts-A", suit: "hearts", rank: "A" }],
+        remaining: 51,
+        timestamp: "2026-01-01T00:00:00Z",
+      }),
+    );
+    expect(event).toEqual({
+      type: "deck_draw",
+      player: "ana",
+      cards: [{ id: "hearts-A", suit: "hearts", rank: "A" }],
+      remaining: 51,
+      timestamp: "2026-01-01T00:00:00Z",
+    });
+  });
+
+  it("parseia deck_shuffle", () => {
+    const event = parseServerMessage(
+      JSON.stringify({ type: "deck_shuffle", player: "ana", timestamp: "2026-01-01T00:00:00Z" }),
+    );
+    expect(event).toEqual({
+      type: "deck_shuffle",
+      player: "ana",
+      timestamp: "2026-01-01T00:00:00Z",
+    });
+  });
+
+  it("parseia deck_config traduzindo snake_case pra camelCase, so campo presente", () => {
+    const event = parseServerMessage(
+      JSON.stringify({
+        type: "deck_config",
+        player: "ana",
+        include_jokers: true,
+        removal_mode: null,
+        auto_reshuffle_on_empty: null,
+        timestamp: "2026-01-01T00:00:00Z",
+      }),
+    );
+    expect(event).toEqual({
+      type: "deck_config",
+      player: "ana",
+      includeJokers: true,
+      timestamp: "2026-01-01T00:00:00Z",
+    });
+  });
+
+  it("deck_draw malformado (sem timestamp/remaining) e ignorado", () => {
+    expect(
+      parseServerMessage(
+        JSON.stringify({ type: "deck_draw", player: "ana", cards: [], remaining: "muitas" }),
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("roomReducer: eventos de baralho no historico", () => {
+  it("deck_draw/deck_shuffle/deck_config entram no historico na ordem de chegada", () => {
+    let state = roomReducer(initialRoomState, { type: "joining", code: "x" });
+    state = roomReducer(state, { ...SNAPSHOT, history: [] });
+    state = roomReducer(state, {
+      type: "deck_draw",
+      player: "ana",
+      cards: [{ id: "hearts-A", suit: "hearts", rank: "A" }],
+      remaining: 51,
+      timestamp: "2026-01-01T00:00:00Z",
+    });
+    state = roomReducer(state, {
+      type: "deck_shuffle",
+      player: "bia",
+      timestamp: "2026-01-01T00:00:01Z",
+    });
+    state = roomReducer(state, {
+      type: "deck_config",
+      player: "ana",
+      includeJokers: true,
+      timestamp: "2026-01-01T00:00:02Z",
+    });
+    expect(state.history.map((e) => e.type)).toEqual(["deck_draw", "deck_shuffle", "deck_config"]);
+    expect(state.history.map((e) => e.player)).toEqual(["ana", "bia", "ana"]);
+  });
+
+  it("deck_draw fora de sala conectada e ignorado (mesma regra do roll)", () => {
+    const state = roomReducer(initialRoomState, {
+      type: "deck_draw",
+      player: "ana",
+      cards: [{ id: "hearts-A", suit: "hearts", rank: "A" }],
+      remaining: 51,
+      timestamp: "2026-01-01T00:00:00Z",
+    });
+    expect(state.history).toHaveLength(0);
   });
 });

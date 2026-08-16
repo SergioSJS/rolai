@@ -5,7 +5,7 @@
 
 import type { RollResult } from "@rolai/rules-engine";
 import type { DiceStyle } from "../settings";
-import { dieFaceLabel, displayGroups, outcomeLabel, outcomeTone } from "../format";
+import { dieFaceLabel, displayGroups, groupLabel, outcomeLabel, outcomeTone } from "../format";
 import { PlayerTag } from "./PlayerTag";
 
 export function ResultDisplay({
@@ -39,7 +39,7 @@ export function ResultDisplay({
   const singleTotal =
     single !== undefined
       ? (single.total ??
-        single.rolls.reduce((sum, v) => sum + v, 0) + (single.modifier ?? 0))
+        single.rolls.reduce((sum, r) => sum + r.value, 0) + (single.modifier ?? 0))
       : undefined;
   const headline =
     typeof result.outcome === "string"
@@ -119,27 +119,36 @@ export function ResultDisplay({
         {groups.map((group, gi) => (
           <div key={`${group.name}-${gi}`} className="result-group">
             {groups.length > 1 && (
-              <span className="result-group-name">{group.name}</span>
+              <span className="result-group-name">{groupLabel(group.name)}</span>
             )}
             <span className="result-chips">
-              {group.rolls.map((value, i) => (
-                <span key={i} className="die-chip">
-                  {dieFaceLabel(value, group.fudge)}
-                  {group.sides !== null && (
+              {group.rolls.map((roll, i) => (
+                <span
+                  key={i}
+                  className={`die-chip${roll.card ? ` card-chip${roll.isRed ? " is-red" : ""}` : ""}`}
+                >
+                  {dieFaceLabel(roll.value, roll.fudge, roll.card)}
+                  {roll.symbol ?? ""}
+                  {roll.sides !== null && (
                     <span className="die-chip-sides">
-                      {group.fudge ? "dF" : `d${group.sides}`}
+                      {roll.card ? "carta" : roll.fudge ? "dF" : `d${roll.sides}`}
                     </span>
                   )}
                 </span>
               ))}
               {/* Descartados: mesma cara, apagados. A ordem (mantidos
                   primeiro) mantem o total facil de conferir. */}
-              {group.dropped?.map((value, i) => (
-                <span key={`d${i}`} className="die-chip is-dropped" title="descartado">
-                  {dieFaceLabel(value, group.fudge)}
-                  {group.sides !== null && (
+              {group.dropped?.map((roll, i) => (
+                <span
+                  key={`d${i}`}
+                  className={`die-chip is-dropped${roll.card ? ` card-chip${roll.isRed ? " is-red" : ""}` : ""}`}
+                  title="descartado"
+                >
+                  {dieFaceLabel(roll.value, roll.fudge, roll.card)}
+                  {roll.symbol ?? ""}
+                  {roll.sides !== null && (
                     <span className="die-chip-sides">
-                      {group.fudge ? "dF" : `d${group.sides}`}
+                      {roll.card ? "carta" : roll.fudge ? "dF" : `d${roll.sides}`}
                     </span>
                   )}
                 </span>

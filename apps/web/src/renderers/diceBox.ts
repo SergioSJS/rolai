@@ -200,8 +200,29 @@ export function buildBoxNotation(dice: RenderedDie[]): string {
     } else if (die.sides === 100) {
       push("d100", Math.floor((die.value % 100) / 10));
       push("d10", die.value % 10);
-    } else {
+    } else if (die.sides === 66) {
+      // Um d66 no RPG e um par de d6 (dezena 1..6 + unidade 1..6)
+      const tens = Math.floor(die.value / 10);
+      const units = die.value % 10;
+      if (tens >= 1 && tens <= 6 && units >= 1 && units <= 6) {
+        push("d6", tens);
+        push("d6", units);
+      } else {
+        const t = Math.max(1, Math.min(6, Math.floor((die.value - 1) / 6) + 1));
+        const u = Math.max(1, Math.min(6, ((die.value - 1) % 6) + 1));
+        push("d6", t);
+        push("d6", u);
+      }
+    } else if (die.sides === 3) {
+      // d3 simula em d6 (face 1, 2 ou 3)
+      push("d6", Math.max(1, Math.min(3, die.value)));
+    } else if ([2, 4, 6, 8, 10, 12, 20].includes(die.sides)) {
       push(`d${die.sides}`, die.value);
+    } else {
+      // Qualquer outro dado customizado (ex.: d30): joga no mesh padrao mais proximo
+      const fallbackSides = die.sides > 12 ? 20 : die.sides > 8 ? 10 : die.sides > 6 ? 8 : 6;
+      const normalizedVal = Math.max(1, Math.min(fallbackSides, die.value % fallbackSides || fallbackSides));
+      push(`d${fallbackSides}`, normalizedVal);
     }
   }
   for (const [type, group] of groups) {

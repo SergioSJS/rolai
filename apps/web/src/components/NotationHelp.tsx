@@ -15,6 +15,8 @@ const BASICO: Linha[] = [
   { exemplo: "1d20", explica: "um dado de vinte" },
   { exemplo: "1d100", explica: "percentil (rola como dois d10)" },
   { exemplo: "4dF", explica: "dados Fate/Fudge — cada um vale −1, 0 ou +1" },
+  { exemplo: "1c", explica: "uma carta de baralho (Ás a Rei)" },
+  { exemplo: "2c", explica: "duas cartas de baralho" },
 ];
 
 const SELECAO: Linha[] = [
@@ -31,6 +33,7 @@ const COMBINADO: Linha[] = [
   { exemplo: "1d20-1d4", explica: "subtrai um grupo do outro" },
   { exemplo: "4d6kh3+1d20", explica: "seleção vale só no grupo em que está" },
   { exemplo: "{1d6+2} vs {2d10}", explica: "dois lados separados, sem somar um no outro" },
+  { exemplo: "{2d6+2} vs {2c}", explica: "dados de ação contra cartas de desafio (Firelights)" },
 ];
 
 /** Todos os exemplos exibidos — o teste garante que o parser aceita cada um. */
@@ -68,7 +71,7 @@ export function NotationHelp() {
       <Bloco titulo="Combinar" linhas={COMBINADO} />
       <p className="notation-foot">
         Escolher sistema em <strong>Preferências</strong> troca o painel por
-        campos prontos (Ironsworn, PbtA, FitD, Fate, d20, d100) — a notação
+        campos prontos (Firelights, Ironsworn, PbtA, FitD, Fate, d20, d100) — a notação
         livre continua disponível.
       </p>
     </div>

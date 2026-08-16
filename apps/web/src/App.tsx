@@ -4,6 +4,9 @@
 // (pointer-events: none — os controles continuam clicaveis): os dados
 // voam pela tela inteira, por cima dos paineis, como overlay de stream.
 // O resultado (headline + chips) fica num overlay proprio, acima do canvas.
+// Baralho usa o MESMO overlay (specs/08-baralho.md) — cartas puxadas
+// aparecem la tambem, nunca dado e carta ao mesmo tempo (animate/
+// animateCards zeram um ao mostrar o outro).
 //
 // Fluxo de uma rolagem (docs/architecture.md): calcula local via
 // rules-engine, anima local com o valor decidido, envia pronto via WS;
@@ -11,6 +14,9 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { RollResult } from "@rolai/rules-engine";
+import type { Card, DeckConfig, DeckState, DrawResult } from "@rolai/deck-engine";
+import { createDeck, draw } from "@rolai/deck-engine";
+import { playCardDraw } from "./deckSound";
 import { availableProfiles } from "./profiles";
 import { familyFor } from "./profileFamilies";
 import { APK_LATEST_URL } from "./config";
@@ -22,6 +28,7 @@ import type {
 } from "./settings";
 import {
   clearRoomCode,
+  loadDeckConfig,
   loadDiceScale,
   loadDiceStyle,
   loadPlayerName,
@@ -29,6 +36,7 @@ import {
   loadRoomCode,
   loadSystem,
   loadTheme,
+  saveDeckConfig,
   saveDiceScale,
   saveDiceStyle,
   savePlayerName,
@@ -38,18 +46,23 @@ import {
   saveTheme,
 } from "./settings";
 import type { RollRenderer } from "./renderers/types";
-import { exceedsAnimationCap } from "./renderers/types";
+import { exceedsAnimationCap, cardsFromResult } from "./renderers/types";
 import { createRenderer } from "./renderers";
 import { TextRenderer } from "./renderers/text";
 import { initialRoomState, roomReducer } from "./room/reducer";
 import type { HistoryEntry, RoomEvent } from "./room/reducer";
 import { createRoom, RoomClient } from "./room/client";
-import { PendingRolls } from "./room/echo";
+import { PendingDeckDraws, PendingRolls } from "./room/echo";
 import { RollPanel } from "./components/RollPanel";
+import { DeckPanel } from "./components/DeckPanel";
 import { RoomPanel } from "./components/RoomPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { HistoryList } from "./components/HistoryList";
 import { ResultDisplay } from "./components/ResultDisplay";
+import { CardStack } from "./components/CardStack";
+import { CardStage3D } from "./components/CardStage3D";
+import { PlayerTag } from "./components/PlayerTag";
+import { cardLabel, isRedSuit } from "./cardFormat";
 import { useStageFloor } from "./stage/floor";
 import { RosterCard } from "./components/RosterCard";
 import { NotationHelp } from "./components/NotationHelp";
@@ -101,6 +114,11 @@ export function App() {
   // Sistema de regras vive em Preferências: e escolha de mesa, nao algo que
   // se troca a cada rolagem.
   const [system, setSystem] = useState<string>(() => loadSystem(window.localStorage));
+  // Config do baralho tambem mora em Preferências (mesmo motivo do sistema
+  // de regras) — DeckPanel so recebe e aplica, nao e mais dono disso.
+  const [deckConfig, setDeckConfig] = useState<DeckConfig>(() =>
+    loadDeckConfig(window.localStorage),
+  );
   const [room, dispatch] = useReducer(roomReducer, initialRoomState);
   const [localHistory, setLocalHistory] = useState<HistoryEntry[]>([]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
@@ -108,17 +126,27 @@ export function App() {
   const [lastRoller, setLastRoller] = useState<
     { name: string; style?: DiceStyle | null } | null
   >(null);
+  // Cartas puxadas na tela — mesmo palco compartilhado do dado, so que sem
+  // renderer proprio (CardFlip e sempre CSS). Mutuamente exclusivo com
+  // lastResult: um substitui o outro, nunca os dois ao mesmo tempo (ver
+  // animate/animateCards).
+  const [lastCards, setLastCards] = useState<Card[] | null>(null);
+  const [lastCardPlayer, setLastCardPlayer] = useState<string | null>(null);
   // Freio de spam (ver rollCooldown.ts). Em ref porque muda a cada rolagem
   // e nao deve re-renderizar nada por si.
   const cooldownRef = useRef(initialCooldown);
   const [notice, setNotice] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
+  // Alterna a caixa de sorteio da sidebar entre dado e baralho
+  // (specs/08-baralho.md) — dois modos, nunca os dois ao mesmo tempo.
+  const [sidebarView, setSidebarView] = useState<"dice" | "deck">("dice");
 
   const stageRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<RollRenderer | null>(null);
   const clientRef = useRef<RoomClient | null>(null);
   const pendingRef = useRef(new PendingRolls());
+  const pendingDeckRef = useRef(new PendingDeckDraws());
   const selfNameRef = useRef("anonymous");
   // Reserva a faixa do pe do palco com a placa JA na tela e so entao rola.
   const queueRoll = useStageFloor(stageRef, overlayRef, rendererRef);
@@ -151,11 +179,13 @@ export function App() {
     document.documentElement.dataset["theme"] = theme;
   }, [theme]);
 
-  // Tira os dados da tela. Eles ficam parados depois que assentam (a mesa
-  // quer ler o resultado), entao precisa de uma saida explicita.
+  // Tira os dados/cartas da tela. Eles ficam parados depois que assentam (a
+  // mesa quer ler o resultado), entao precisa de uma saida explicita.
   const dismissDice = useCallback(() => {
     rendererRef.current?.clear();
     setLastResult(null);
+    setLastCards(null);
+    setLastCardPlayer(null);
     setNotice(null);
   }, []);
 
@@ -168,7 +198,7 @@ export function App() {
   // inteiro fazia o clique no proprio dado nao funcionar, que e justo o
   // gesto natural.
   useEffect(() => {
-    if (lastResult === null) return;
+    if (lastResult === null && lastCards === null) return;
     const onClick = (event: MouseEvent) => {
       const target = event.target;
       if (
@@ -188,12 +218,21 @@ export function App() {
       window.removeEventListener("click", onClick);
       window.removeEventListener("keydown", onKey);
     };
-  }, [lastResult, dismissDice]);
+  }, [lastResult, lastCards, dismissDice]);
 
   // `style` = aparencia dos dados de quem rolou (nulo = rolagem local, vale
   // a propria). Cada cliente ve o dado do outro na cor do outro.
   const animate = useCallback(
     (result: RollResult, style?: DiceStyle | null, player?: string) => {
+      const cards = cardsFromResult(result);
+      if (cards.length > 0) {
+        setLastCards(cards);
+        setLastCardPlayer(player ?? null);
+        playCardDraw();
+      } else {
+        setLastCards(null);
+        setLastCardPlayer(null);
+      }
       setLastResult(result);
       setLastRoller(player === undefined ? null : { name: player, style });
       if (exceedsAnimationCap(result)) {
@@ -213,6 +252,18 @@ export function App() {
     [queueRoll],
   );
 
+  // Cartas puxadas: mesmo palco compartilhado do dado (specs/08-baralho.md,
+  // ajuste pos-review — cravado dentro do DeckPanel ficava pequeno demais).
+  // Sem fisica pra esperar: aparece na hora, igual ao tier texto do dado.
+  const animateCards = useCallback((cards: Card[], player?: string) => {
+    rendererRef.current?.clear();
+    setLastResult(null);
+    setLastRoller(null);
+    setNotice(null);
+    setLastCards(cards);
+    setLastCardPlayer(player ?? null);
+  }, []);
+
   // Eventos WS vindos do RoomClient.
   const handleRoomEvent = useCallback(
     (event: RoomEvent) => {
@@ -224,6 +275,11 @@ export function App() {
         if (!pendingRef.current.consumeEcho(event.player, event.result)) {
           animate(event.result, event.style, event.player);
         }
+      } else if (event.type === "deck_draw") {
+        // Mesma logica do roll acima, so que pro baralho (echo.ts).
+        if (!pendingDeckRef.current.consumeEcho(event.player, event.timestamp)) {
+          animateCards(event.cards, event.player);
+        }
       } else if (event.type === "rejected") {
         // Codigo recusado (sala nao encontrada/cheia/origem barrada): nao
         // adianta guardar pra reentrar sozinho no proximo carregamento, nem
@@ -232,7 +288,7 @@ export function App() {
         setRoomUrlParam(null);
       }
     },
-    [animate],
+    [animate, animateCards],
   );
 
   const joinRoom = useCallback(
@@ -244,6 +300,7 @@ export function App() {
       saveRoomCode(window.localStorage, code);
       setRoomUrlParam(code);
       pendingRef.current = new PendingRolls();
+      pendingDeckRef.current = new PendingDeckDraws();
       dispatch({ type: "joining", code });
       // O estilo do dado vai no join: a sala inteira anima a rolagem de
       // cada um com a cor de cada um.
@@ -365,7 +422,7 @@ export function App() {
         pendingRef.current.track(selfNameRef.current, result);
         client.send(result);
       } else {
-        setLocalHistory((prev) => [...prev, { player: "você", result }]);
+        setLocalHistory((prev) => [...prev, { type: "roll", player: "você", result }]);
         if (room.code !== null) {
           // Dentro de uma sala mas sem conexao agora (reconectando/caida):
           // sem isto a rolagem anima igual e some no vazio, sem ninguem mais
@@ -376,6 +433,61 @@ export function App() {
       }
     },
     [animate, room.status, room.code, room.roster.length],
+  );
+
+  // Baralho: DeckPanel calcula local (deck-engine) e chama isto DEPOIS do
+  // estado local ja ter sido atualizado — mesmo papel do handleRoll acima,
+  // sem freio de cooldown (puxar carta nao e ruidoso pra mesa do jeito que
+  // rolagem repetida e). `timestamp` vem do PROPRIO DeckPanel (nao gerado
+  // aqui) pra ser a mesma chave usada no envelope WS e no dedupe do echo.
+  // Fora de sala (ou sem conexao agora): mesmo fallback do handleRoll —
+  // entra no historico local, senao a puxada acontece e nao fica log
+  // nenhum em lugar nenhum.
+  const handleDeckDraw = useCallback(
+    (result: DrawResult, timestamp: string) => {
+      animateCards(result.cards, "você");
+      const client = clientRef.current;
+      if (client && room.status === "connected") {
+        pendingDeckRef.current.track(selfNameRef.current, timestamp);
+        client.sendDeckDraw(result.cards, result.remaining, timestamp);
+      } else {
+        setLocalHistory((prev) => [
+          ...prev,
+          {
+            type: "deck_draw",
+            player: "você",
+            cards: result.cards,
+            remaining: result.remaining,
+            timestamp,
+          },
+        ]);
+      }
+    },
+    [animateCards, room.status],
+  );
+
+  const handleDeckReshuffle = useCallback(() => {
+    const client = clientRef.current;
+    if (client && room.status === "connected") {
+      client.sendDeckShuffle();
+    }
+  }, [room.status]);
+
+  // Config do baralho vive aqui (Preferências) — igual ao sistema de
+  // regras. Salva local sempre; retransmite pra sala so quando conectado.
+  const handleDeckConfigChange = useCallback(
+    (changes: Partial<DeckConfig>) => {
+      setDeckConfig((prev) => {
+        const next = { ...prev, ...changes };
+        saveDeckConfig(window.localStorage, next);
+        return next;
+      });
+      const client = clientRef.current;
+      if (client && room.status === "connected") {
+        client.sendDeckConfig(changes);
+      }
+    },
+    [room.status],
   );
 
   const handleTierChange = useCallback((next: QualityTier) => {
@@ -422,6 +534,24 @@ export function App() {
   const inRoom = room.code !== null;
   const online = useOnline();
 
+  const sharedDeckRef = useRef<DeckState | null>(null);
+
+  const handleComposerCardDraw = useCallback(
+    (count: number) => {
+      if (!sharedDeckRef.current) {
+        sharedDeckRef.current = createDeck(deckConfig);
+      }
+      try {
+        const result = draw(sharedDeckRef.current, count);
+        playCardDraw();
+        handleDeckDraw(result, new Date().toISOString());
+      } catch (err) {
+        console.error("Erro ao puxar cartas:", err);
+      }
+    },
+    [deckConfig, handleDeckDraw],
+  );
+
   return (
     <main className="app">
       {/* Abrir qualquer modal tira os dados da tela: o menu e uso da UI,
@@ -452,14 +582,43 @@ export function App() {
         </div>
 
         <aside className="sidebar">
-          {/* key: trocar de sistema recomeça os inputs do zero */}
-          <RollPanel
-            key={system}
-            profile={profiles.find((p) => p.system === system)}
-            family={familyFor(system)}
-            onSelectFamilyMember={handleSystemChange}
-            onRoll={handleRoll}
-          />
+          <div className="family-tabs" role="tablist" aria-label="Modo de sorteio">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sidebarView === "dice"}
+              className={sidebarView === "dice" ? "family-tab is-active" : "family-tab"}
+              onClick={() => setSidebarView("dice")}
+            >
+              Dados
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sidebarView === "deck"}
+              className={sidebarView === "deck" ? "family-tab is-active" : "family-tab"}
+              onClick={() => setSidebarView("deck")}
+            >
+              Baralho
+            </button>
+          </div>
+          {sidebarView === "dice" ? (
+            // key: trocar de sistema recomeça os inputs do zero
+            <RollPanel
+              key={system}
+              profile={profiles.find((p) => p.system === system)}
+              family={familyFor(system)}
+              onSelectFamilyMember={handleSystemChange}
+              onRoll={handleRoll}
+              onDrawCards={handleComposerCardDraw}
+            />
+          ) : (
+            <DeckPanel
+              config={deckConfig}
+              onDraw={handleDeckDraw}
+              onReshuffle={handleDeckReshuffle}
+            />
+          )}
           <RosterCard room={room} />
         </aside>
       </div>
@@ -467,6 +626,20 @@ export function App() {
       {/* Palco: overlay fixed acima de TODA a UI (dados voam pela tela
           inteira); o resultado fica num overlay logo acima do canvas. */}
       <div className="stage" ref={stageRef} aria-label="Palco de rolagem" />
+      {/* Cartas animadas (tier != texto) vivem NESTA camada, separada da
+          caixa de resultado — mesma divisao do dado: o dado caindo fica no
+          `.stage` acima, solto por cima de tudo, sem caixa nenhuma ao
+          redor; a caixa abaixo (`.result-display`) so mostra o VALOR
+          (texto), nunca a animacao em si. */}
+      {lastCards !== null && lastCards.length > 0 && tier !== "text" && (
+        <div className="card-stage" aria-hidden>
+          {tier === "2d" ? (
+            <CardStack cards={lastCards} />
+          ) : (
+            <CardStage3D cards={lastCards} />
+          )}
+        </div>
+      )}
       <div className="stage-overlay" ref={overlayRef}>
         {notice !== null && <p className="notice">{notice}</p>}
         <ResultDisplay
@@ -474,6 +647,27 @@ export function App() {
           player={lastRoller?.name}
           playerStyle={lastRoller?.style}
         />
+        {lastCards !== null && lastCards.length > 0 && lastResult === null && (
+          <div className="result-display">
+            {lastCardPlayer !== null && lastCardPlayer !== "" && (
+              <div className="result-player">
+                <PlayerTag name={lastCardPlayer} />
+                <span className="result-player-verb">puxou</span>
+              </div>
+            )}
+            <div className="result-chips">
+              {lastCards.map((card, i) => (
+                <span
+                  key={`${card.id}-${i}`}
+                  className={`die-chip card-chip${isRedSuit(card) ? " is-red" : ""}`}
+                >
+                  {cardLabel(card)}
+                </span>
+              ))}
+            </div>
+            <p className="result-dismiss-hint">clique ou Esc pra tirar as cartas</p>
+          </div>
+        )}
       </div>
 
       {modal === "room" && (
@@ -504,11 +698,13 @@ export function App() {
             diceScale={diceScale}
             system={system}
             profiles={profiles}
+            deckConfig={deckConfig}
             onTierChange={handleTierChange}
             onThemeChange={handleThemeChange}
             onDiceStyleChange={handleDiceStyleChange}
             onDiceScaleChange={handleDiceScaleChange}
             onSystemChange={handleSystemChange}
+            onDeckConfigChange={handleDeckConfigChange}
           />
         </Modal>
       )}
@@ -598,8 +794,36 @@ export function App() {
               ))}
             </dl>
 
-            <h3>Agradecimentos</h3>
-            <p className="settings-hint">Em breve.</p>
+            <h3>Agradecimentos e Créditos</h3>
+            <div className="about-credits">
+              <div className="about-credit-item">
+                <strong>Sons de Baralho:</strong>{" "}
+                <a href="https://kenney.nl" target="_blank" rel="noreferrer">
+                  Kenney.nl
+                </a>{" "}
+                — <em>Casino Audio</em> (efeitos sonoros gravados de manuseio e embaralhamento de cartas, licença CC0 / Domínio Público).
+              </div>
+              <div className="about-credit-item">
+                <strong>Cartas Vetoriais:</strong>{" "}
+                <a href="https://github.com/letele/playing-cards" target="_blank" rel="noreferrer">
+                  @letele
+                </a>{" "}
+                — Cartas de baralho clássicas em SVG vetorial de alta definição (licença MIT / CC-BY).
+              </div>
+              <div className="about-credit-item">
+                <strong>Dados 3D e Física:</strong>{" "}
+                <a href="https://github.com/3d-dice/dice-box-threejs" target="_blank" rel="noreferrer">
+                  Frank Ali
+                </a>{" "}
+                e comunidade — <code>@3d-dice/dice-box-threejs</code> (renderização com Three.js e Cannon-es, licença MIT).
+              </div>
+              <div className="about-credit-item">
+                <strong>Texturas de Dados:</strong> MajorVictory, SpencerThayer e contribuidores do ecossistema de dados 3D.
+              </div>
+              <div className="about-credit-item">
+                <strong>Tipografia:</strong> Fontes <em>Cinzel</em> (Natanael Gama) e <em>Inter</em> (Rasmus Andersson) via Google Fonts (SIL Open Font License).
+              </div>
+            </div>
           </div>
         </Modal>
       )}

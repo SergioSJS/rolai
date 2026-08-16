@@ -3,17 +3,20 @@ import { describe, expect, it } from "vitest";
 import {
   clampDiceScale,
   clearRoomCode,
+  DEFAULT_DECK_CONFIG,
   DEFAULT_DICE_STYLE,
   DEFAULT_QUALITY_TIER,
   DICE_MATERIALS,
   DICE_PRESETS,
   DICE_TEXTURES,
   isQualityTier,
+  loadDeckConfig,
   loadDiceScale,
   loadDiceStyle,
   loadQualityTier,
   loadRoomCode,
   loadTheme,
+  saveDeckConfig,
   saveDiceScale,
   saveDiceStyle,
   saveQualityTier,
@@ -210,5 +213,45 @@ describe("ultima sala (reentrar sozinho ao reabrir o app)", () => {
     saveRoomCode(storage, "mesa-fixa-do-sergio-2026");
     clearRoomCode(storage);
     expect(loadRoomCode(storage)).toBe("");
+  });
+});
+
+describe("config do baralho (specs/08-baralho.md)", () => {
+  it("default sem curinga, permanent, sem auto-reembaralhar", () => {
+    expect(loadDeckConfig(makeStorage())).toEqual(DEFAULT_DECK_CONFIG);
+  });
+
+  it("persiste e recupera", () => {
+    const storage = makeStorage();
+    saveDeckConfig(storage, {
+      includeJokers: true,
+      removalMode: "returns",
+      autoReshuffleOnEmpty: true,
+    });
+    expect(loadDeckConfig(storage)).toEqual({
+      includeJokers: true,
+      removalMode: "returns",
+      autoReshuffleOnEmpty: true,
+    });
+  });
+
+  it("campo corrompido cai no default so daquele campo", () => {
+    const storage = makeStorage({
+      "rolai.deck-config": JSON.stringify({
+        includeJokers: "sim",
+        removalMode: "invalido",
+        autoReshuffleOnEmpty: true,
+      }),
+    });
+    expect(loadDeckConfig(storage)).toEqual({
+      includeJokers: false,
+      removalMode: "permanent",
+      autoReshuffleOnEmpty: true,
+    });
+  });
+
+  it("JSON quebrado cai no default inteiro", () => {
+    const storage = makeStorage({ "rolai.deck-config": "{quebrado" });
+    expect(loadDeckConfig(storage)).toEqual(DEFAULT_DECK_CONFIG);
   });
 });

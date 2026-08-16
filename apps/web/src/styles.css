@@ -361,6 +361,53 @@ body.stream-mode {
   pointer-events: none;
 }
 
+/* Cartas animadas: MESMA posicao/camada do .stage do dado (solta por cima
+   de tudo, sem caixa) — so que sem fisica, entao nao precisa de canvas
+   proprio, so o CardStack direto. A caixa de resultado (.result-display)
+   mostra so o texto; a animacao vive aqui, z-index 59 pra ficar por baixo do dado (60). */
+.card-stage {
+  position: fixed;
+  inset: 0;
+  bottom: var(--stage-bottom, min(210px, 45vh));
+  z-index: 59;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Palco 3D (CardStage3D): preenche a area toda — o canvas do three.js
+   precisa de dimensao propria, nao de flex centralizando um filho do
+   tamanho do conteudo. */
+.card-stage-3d {
+  width: 100%;
+  height: 100%;
+}
+
+.card-stage-3d canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Escada de cartas: em vez de lado a lado (que espremia tudo numa fileira
+   minuscula com varias cartas numa tela estreita — ver historico do PR),
+   cada carta EMPILHA sobre a anterior. O indice (canto superior esquerdo,
+   onde rank+naipe ficam) da carta de baixo nunca fica tapado pela de cima.
+   margin-left e transform de cada item vem INLINE (CardStack.tsx) — a
+   sobreposicao e CALCULADA a partir da largura real da carta e da
+   quantidade puxada, nao um valor CSS fixo (fixo cabia bem com poucas
+   cartas mas so cortava na tela com muitas). */
+.card-stack {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+.card-stack-item {
+  flex-shrink: 0;
+}
+
 /* Barreiras: uma por borda. Ficam a 3.5% da beirada do palco, que e onde a
    parede da fisica esta de verdade (0.93 do meio pra borda) — a posicao vem
    do JS, nao daqui. Sem impacto o elemento nao desenha nada: no OBS com
@@ -938,23 +985,19 @@ button:disabled {
   color: #fff;
 }
 
-/* Os 8 dados: uma linha de 8 ou DUAS DE 4 — nunca 5+3, 6+2 ou 7+1.
-   Com flex-wrap cabia o que coubesse e a segunda linha ficava torta.
-   Grade fixa de 4 colunas resolve; a de 8 entra por container query
-   (a largura que importa e a do painel, nao a da janela: o painel e
-   estreito na barra lateral do desktop e largo no celular). */
+/* Os 12 slots (11 dados + Carta): 6 colunas ou 12 colunas no container largo */
 .composer-dice {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   /* folga pros badges "−" e contador, que sobram pra fora do slot */
-  gap: 0.55rem;
+  gap: 0.4rem;
   margin-top: 0.8rem;
 }
 
-/* ~620px = 8 slots de 68px + 7 gaps. Abaixo disso, 4+4. */
-@container panel (min-width: 620px) {
+/* ~640px = 12 slots + gaps. Abaixo disso, 6+6. */
+@container panel (min-width: 640px) {
   .composer-dice {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-columns: repeat(12, minmax(0, 1fr));
   }
 }
 
@@ -973,11 +1016,11 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.15rem;
+  gap: 0.2rem;
   width: 100%;
-  padding: 0.45rem 0.2rem 0.35rem;
+  padding: 0.5rem 0.2rem 0.4rem;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: 0.85rem;
   font-weight: 700;
   background: var(--chip-bg);
   color: var(--text);
@@ -1006,8 +1049,8 @@ button:disabled {
 }
 
 .die-icon {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   color: var(--muted);
 }
 
@@ -1338,6 +1381,112 @@ button:disabled {
   color: var(--accent-strong);
 }
 
+/* ---------- Baralho (specs/08-baralho.md) ---------- */
+
+.card-chip {
+  font-size: 1.3rem;
+  min-width: 2.6rem;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+}
+
+.card-chip.is-red {
+  color: #dc2626;
+}
+
+.card-chip .die-chip-sides {
+  color: #64748b;
+}
+
+.stream-root .die-chip.card-chip {
+  background: #ffffff;
+  color: #111827;
+  border-color: rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.stream-root .die-chip.card-chip.is-red {
+  color: #dc2626;
+}
+
+.stream-root .die-chip.card-chip .die-chip-sides {
+  color: #64748b;
+}
+
+.deck-remaining {
+  margin: 0 0 0.6rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Reembaralhar: acao secundaria full-width, mesma largura do botao
+   principal (Puxar) — antes era um botao-fantasma solto embaixo, sem
+   peso nenhum, meio perdido na caixa. */
+.deck-reshuffle-button {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+/* Flip 3D via CSS: a carta nasce de verso, flipa pra face na entrada
+   (CardFlip.tsx). perspective no container, preserve-3d no inner, cada
+   face com backface-visibility escondida — a face comeca pre-rotada 180deg
+   pra ficar de frente (nao espelhada) quando o inner completa o giro.
+   Tamanho grande de proposito: mostra no palco compartilhado (App.tsx),
+   igual ao dado — nao mais encolhida dentro do DeckPanel.
+   flex-shrink: 0 e o que importa aqui: sem isso, `.card-stack` (flex)
+   ENCOLHE as cartas pra caber tudo numa linha em vez de deixar a escada
+   (.card-stack-item, abaixo) fazer o trabalho de economizar espaco. */
+.card-flip {
+  display: inline-block;
+  flex-shrink: 0;
+  width: clamp(110px, 20vw, 210px);
+  aspect-ratio: 5 / 7;
+  perspective: 800px;
+}
+
+.card-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.3, 0.1, 0.2, 1);
+}
+
+.card-flip.is-flipped .card-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.card-flip-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 6px;
+  /* brightness(0.72): a arte da carta e branco quase puro — sem isso o
+     card estoura contra o fundo escuro do app (mesmo fator do tier 3D,
+     ver cardTexture.tsx, pra nao ficar mais claro que a versao 3D). */
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45)) brightness(0.72);
+}
+
+.card-flip-back {
+  transform: rotateY(0deg);
+}
+
+.card-flip-front {
+  transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-flip-inner {
+    transition: none;
+  }
+}
+
 .result-notation {
   margin-top: 0.5rem;
   display: flex;
@@ -1464,8 +1613,34 @@ button:disabled {
 
 /* ---------- Preferências ---------- */
 
+/* Titulo de secao com icone + separador: antes era so texto empilhado, um
+   bloco de select confuso sem nada pra ancorar o olho ao rolar. O icone da
+   ponto de referencia rapido (Dados=d20, Baralho=cartas...) e a linha
+   acima marca onde uma secao acaba e a proxima comeca. */
+.settings-panel h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.6rem 0 0.9rem;
+  padding-top: 1.3rem;
+  border-top: 1px solid var(--panel-border);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.settings-panel h3 svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--accent-strong);
+  flex-shrink: 0;
+}
+
 .settings-panel h3:first-child {
   margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .settings-row {
@@ -1713,6 +1888,30 @@ input[type="range"]:focus {
 .history-outcome::before {
   content: "— ";
   color: var(--muted);
+}
+
+/* Carta dentro da linha do historico: formato de mini-carta com fundo
+   branco, naipe e valor pretos (espadas/paus) ou vermelhos (copas/ouros)
+   pra contraste perfeito em qualquer tema. */
+.history-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.82rem;
+  line-height: 1;
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  margin-right: 0.25rem;
+  vertical-align: middle;
+}
+
+.history-card.is-red {
+  color: #dc2626;
 }
 
 .history-flag {
@@ -2070,6 +2269,30 @@ a.about-contact-chip:hover {
   flex-direction: column;
   gap: 0.85rem;
   margin: 0;
+}
+
+/* Agradecimentos e creditos de recursos abertos */
+.about-credits {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+}
+
+.about-credit-item {
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.about-credit-item strong {
+  color: var(--text);
+}
+
+.about-credit-item a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .changelog-entry dt {

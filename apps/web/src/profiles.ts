@@ -19,6 +19,7 @@ import infaernumYaml from "@rolai/rules-engine/profiles/infaernum.yaml?raw";
 import infaernumSimOuNaoYaml from "@rolai/rules-engine/profiles/infaernum_sim_ou_nao.yaml?raw";
 import infaernumIdeiasYaml from "@rolai/rules-engine/profiles/infaernum_ideias.yaml?raw";
 import fractalYaml from "@rolai/rules-engine/profiles/fractal.yaml?raw";
+import firelightsYaml from "@rolai/rules-engine/profiles/firelights.yaml?raw";
 
 // A ordem aqui e a ordem do seletor de sistema na UI: do mais comum na
 // mesa pro mais especifico.
@@ -29,6 +30,7 @@ const PROFILE_YAMLS: Record<string, string> = {
   pbta2d10: pbta2d10Yaml,
   fitd: fitdYaml,
   ironsworn: ironswornYaml,
+  firelights: firelightsYaml,
   d100: d100Yaml,
   roll_under: rollUnderYaml,
   pool_d6: poolD6Yaml,

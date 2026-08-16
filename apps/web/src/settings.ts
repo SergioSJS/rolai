@@ -5,6 +5,8 @@
 //
 // A logica de load/save recebe um StorageLike pra ser testavel sem DOM.
 
+import type { DeckConfig } from "@rolai/deck-engine";
+
 export type QualityTier = "3d-full" | "3d-light" | "2d" | "text";
 
 export const QUALITY_TIERS: readonly QualityTier[] = [
@@ -384,4 +386,48 @@ export function saveRoomCode(storage: StorageLike, code: string): void {
 
 export function clearRoomCode(storage: StorageLike): void {
   storage.setItem(ROOM_CODE_KEY, "");
+}
+
+// ---------- Baralho (specs/08-baralho.md) ----------
+
+export const DEFAULT_DECK_CONFIG: DeckConfig = {
+  includeJokers: false,
+  removalMode: "permanent",
+  autoReshuffleOnEmpty: false,
+};
+
+const DECK_CONFIG_KEY = "rolai.deck-config";
+
+function isRemovalMode(value: unknown): value is DeckConfig["removalMode"] {
+  return value === "permanent" || value === "returns";
+}
+
+export function loadDeckConfig(storage: StorageLike): DeckConfig {
+  const raw = storage.getItem(DECK_CONFIG_KEY);
+  if (raw === null) return DEFAULT_DECK_CONFIG;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return DEFAULT_DECK_CONFIG;
+    const { includeJokers, removalMode, autoReshuffleOnEmpty } = parsed as Record<
+      string,
+      unknown
+    >;
+    return {
+      includeJokers:
+        typeof includeJokers === "boolean"
+          ? includeJokers
+          : DEFAULT_DECK_CONFIG.includeJokers,
+      removalMode: isRemovalMode(removalMode) ? removalMode : DEFAULT_DECK_CONFIG.removalMode,
+      autoReshuffleOnEmpty:
+        typeof autoReshuffleOnEmpty === "boolean"
+          ? autoReshuffleOnEmpty
+          : DEFAULT_DECK_CONFIG.autoReshuffleOnEmpty,
+    };
+  } catch {
+    return DEFAULT_DECK_CONFIG;
+  }
+}
+
+export function saveDeckConfig(storage: StorageLike, config: DeckConfig): void {
+  storage.setItem(DECK_CONFIG_KEY, JSON.stringify(config));
 }

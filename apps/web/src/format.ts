@@ -11,7 +11,7 @@ const OUTCOME_LABELS: Record<string, string> = {
   strong_hit: "sucesso completo",
   weak_hit: "sucesso parcial",
   miss: "falha",
-  match: "match!",
+  match: "combinação!",
   critical: "crítico",
   full_success: "sucesso total",
   partial_success: "sucesso parcial",
@@ -67,6 +67,21 @@ const OUTCOME_LABELS: Record<string, string> = {
 
 export function outcomeLabel(outcome: string): string {
   return OUTCOME_LABELS[outcome] ?? outcome;
+}
+
+const GROUP_LABELS: Record<string, string> = {
+  action: "ação",
+  challenge: "desafio",
+  verb: "verbo",
+  noun: "substantivo",
+  regular: "regulares",
+  hunger: "fome/ira",
+  pool: "pool",
+  roll: "rolagem",
+};
+
+export function groupLabel(name: string): string {
+  return GROUP_LABELS[name.toLowerCase()] ?? name;
 }
 
 /**
@@ -158,28 +173,28 @@ function optionalNumber(value: number | null | undefined): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
-export function formatGroup(group: RollGroup): string {
-  const rolls = `[${group.rolls.join(", ")}]`;
-  const mod = optionalNumber(group.modifier);
-  const modifier =
-    mod !== undefined && mod !== 0
-      ? mod > 0
-        ? ` + ${mod}`
-        : ` − ${Math.abs(mod)}`
-      : "";
-  const groupTotal = optionalNumber(group.total);
-  const total = groupTotal !== undefined ? ` = ${groupTotal}` : "";
-  return `${rolls}${modifier}${total}`;
-}
-
-// So os dados: "[4, 5] + 3 = 12". Separado do outcome porque a UI precisa
-// pintar o outcome (sucesso/falha) sem pintar os numeros junto.
+// So os dados: "[4, 5] + 3 = 12" ou "[4, 2] + 2 = 8 vs [A♥, 4♦]". Separado
+// do outcome porque a UI precisa pintar o outcome (sucesso/falha) sem pintar
+// os numeros junto.
 export function summarizeDice(result: RollResult): string {
-  // roll_type "multi" tem grupos independentes ("+" na notacao, nao "vs")
-  // — usar sempre " vs " rotulava campo que nao compete como se competisse.
+  const groups = displayGroups(result);
   const joiner = result.notation.includes(" + ") ? " + " : " vs ";
-  const groups = Object.values(result.groups).map(formatGroup).join(joiner);
-  return groups === "" ? result.notation : groups;
+  const parts = groups.map((g) => {
+    const rolls = `[${g.rolls
+      .map((r) => `${dieFaceLabel(r.value, r.fudge, r.card)}${r.symbol ?? ""}`)
+      .join(", ")}]`;
+    const mod = g.modifier;
+    const modifier =
+      mod !== undefined && mod !== 0
+        ? mod > 0
+          ? ` + ${mod}`
+          : ` − ${Math.abs(mod)}`
+        : "";
+    const total = g.total !== undefined ? ` = ${g.total}` : "";
+    return `${rolls}${modifier}${total}`;
+  });
+  const text = parts.join(joiner);
+  return text === "" ? result.notation : text;
 }
 
 // Resumo curto de uma linha: "2d6+3: [4, 5] + 3 = 12" (mais outcome, se houver).
@@ -190,48 +205,138 @@ export function summarizeResult(result: RollResult): string {
     : base;
 }
 
+import { cardFromRollValue, isRedSuit, SUIT_SYMBOL } from "./cardFormat";
+
+export interface DisplayRoll {
+  value: number;
+  sides: number | null;
+  // Dado Fudge (4dF): o valor e sinal (-1/0/+1), nao numero de face.
+  fudge?: boolean;
+  // Carta de baralho (Firelights, notacao 'c', etc).
+  card?: boolean;
+  isRed?: boolean;
+  symbol?: string;
+}
+
 // Grupo pronto pra exibicao: junta os rolls do resultado com as faces
 // parseadas da notacao (o RollGroup nao carrega o tipo do dado).
 export interface DisplayGroup {
   name: string;
-  sides: number | null;
-  rolls: number[];
+  rolls: DisplayRoll[];
   /** Descartados pelo keep/drop — exibidos apagados, sem entrar no total. */
-  dropped?: number[];
-  // Grupo de dado Fudge: o valor e sinal (-1/0/+1), nao numero de face.
-  fudge?: boolean;
+  dropped?: DisplayRoll[];
   modifier?: number;
   total?: number;
 }
 
-// Valor de um dado como o jogador le: dado Fudge vira sinal.
-export function dieFaceLabel(value: number, fudge?: boolean): string {
+// Valor de um dado ou carta como o jogador le: dado Fudge vira sinal, carta vira A/J/Q/K.
+export function dieFaceLabel(value: number, fudge?: boolean, card?: boolean): string {
+  if (card) {
+    if (value === 1) return "A";
+    if (value === 11) return "J";
+    if (value === 12) return "Q";
+    if (value === 13) return "K";
+    return String(value);
+  }
   if (!fudge) return String(value);
   return value > 0 ? "+" : value < 0 ? "−" : "0";
 }
 
 export function displayGroups(result: RollResult): DisplayGroup[] {
-  let specs: { sides: number | null; fudge: boolean }[] = [];
+  let ast;
   try {
-    specs = parseNotation(result.notation).groups.map((g) => ({
-      sides: g.dice.sides,
-      fudge: g.dice.fudge === true,
-    }));
+    ast = parseNotation(result.notation);
   } catch {
-    specs = [];
+    ast = null;
   }
-  return Object.entries(result.groups).map(([name, group], i) => {
-    const spec = specs[i];
+
+  const rawGroups = Object.entries(result.groups);
+  let totalCardCount = 0;
+
+  return rawGroups.map(([name, group], gi) => {
+    const groupSpec = ast?.groups[gi];
+    const rolls: DisplayRoll[] = [];
+    const dropped: DisplayRoll[] = [];
+
+    if (groupSpec && groupSpec.terms.length > 0) {
+      let rollCursor = 0;
+      let dropCursor = 0;
+      for (const term of groupSpec.terms) {
+        const spec = term.dice;
+        const kd = spec.keepDrop;
+        const kept = kd
+          ? kd.type === "kh" || kd.type === "kl"
+            ? kd.count
+            : spec.count - kd.count
+          : spec.count;
+        const dropCount = spec.count - kept;
+
+        const termRolls = group.rolls.slice(rollCursor, rollCursor + kept);
+        for (const v of termRolls) {
+          const item: DisplayRoll = {
+            value: v,
+            sides: spec.sides ?? null,
+            fudge: spec.fudge === true,
+            card: spec.card === true,
+          };
+          if (spec.card) {
+            const card = cardFromRollValue(v, totalCardCount++);
+            item.isRed = isRedSuit(card);
+            item.symbol = SUIT_SYMBOL[card.suit];
+          }
+          rolls.push(item);
+        }
+        rollCursor += kept;
+
+        if (group.dropped && dropCount > 0) {
+          const termDropped = group.dropped.slice(dropCursor, dropCursor + dropCount);
+          for (const v of termDropped) {
+            const item: DisplayRoll = {
+              value: v,
+              sides: spec.sides ?? null,
+              fudge: spec.fudge === true,
+              card: spec.card === true,
+            };
+            if (spec.card) {
+              const card = cardFromRollValue(v, totalCardCount++);
+              item.isRed = isRedSuit(card);
+              item.symbol = SUIT_SYMBOL[card.suit];
+            }
+            dropped.push(item);
+          }
+          dropCursor += dropCount;
+        }
+      }
+      if (rollCursor < group.rolls.length) {
+        for (let j = rollCursor; j < group.rolls.length; j++) {
+          rolls.push({
+            value: group.rolls[j]!,
+            sides: null,
+          });
+        }
+      }
+    } else {
+      for (const v of group.rolls) {
+        rolls.push({
+          value: v,
+          sides: null,
+        });
+      }
+      if (group.dropped) {
+        for (const v of group.dropped) {
+          dropped.push({
+            value: v,
+            sides: null,
+          });
+        }
+      }
+    }
+
     const display: DisplayGroup = {
       name,
-      sides: spec?.sides ?? null,
-      rolls: group.rolls,
+      rolls,
     };
-    // Rolagem inteira na tela: "4d6kh3" mostrando so 3 dados esconde
-    // metade do que aconteceu, e "10d6kh1" mostrava 1 de 10.
-    const dropped = Array.isArray(group.dropped) ? group.dropped : undefined;
-    if (dropped !== undefined && dropped.length > 0) display.dropped = dropped;
-    if (spec?.fudge) display.fudge = true;
+    if (dropped.length > 0) display.dropped = dropped;
     const modifier = optionalNumber(group.modifier);
     const total = optionalNumber(group.total);
     if (modifier !== undefined) display.modifier = modifier;

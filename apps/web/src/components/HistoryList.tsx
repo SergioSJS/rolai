@@ -1,9 +1,87 @@
-// Historico de rolagens (da sala, em ordem canonica do servidor, ou local
-// quando fora de sala).
-
 import type { HistoryEntry } from "../room/reducer";
-import { outcomeLabel, outcomeTone, summarizeDice } from "../format";
+import type { RollResult } from "@rolai/rules-engine";
+import { dieFaceLabel, displayGroups, outcomeLabel, outcomeTone } from "../format";
+import { cardLabel, deckConfigChangeLabel, isRedSuit } from "../cardFormat";
 import { PlayerTag } from "./PlayerTag";
+
+function HistoryRollResult({ result }: { result: RollResult }) {
+  const groups = displayGroups(result);
+  const joiner = result.notation.includes(" + ") ? " + " : " vs ";
+
+  return (
+    <span className="history-result">
+      {groups.map((group, gi) => (
+        <span key={`${group.name}-${gi}`}>
+          {gi > 0 && <span>{joiner}</span>}
+          <span>[</span>
+          {group.rolls.map((roll, ri) => (
+            <span key={ri}>
+              {ri > 0 && <span>, </span>}
+              {roll.card ? (
+                <span className={`history-card${roll.isRed ? " is-red" : ""}`}>
+                  {dieFaceLabel(roll.value, roll.fudge, roll.card)}{roll.symbol ?? ""}
+                </span>
+              ) : (
+                dieFaceLabel(roll.value, roll.fudge, roll.card)
+              )}
+            </span>
+          ))}
+          <span>]</span>
+          {group.modifier !== undefined && group.modifier !== 0 && (
+            <span>
+              {group.modifier > 0 ? ` + ${group.modifier}` : ` − ${Math.abs(group.modifier)}`}
+            </span>
+          )}
+          {group.total !== undefined && <span> = {group.total}</span>}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function entryDetail(entry: HistoryEntry) {
+  switch (entry.type) {
+    case "roll":
+      return (
+        <>
+          <span className="history-notation">{entry.result.notation}</span>
+          <HistoryRollResult result={entry.result} />
+          {/* Outcome separado dos numeros justamente pra poder ir vermelho
+              sem levar os dados junto. */}
+          {typeof entry.result.outcome === "string" && (
+            <span className={`history-outcome tone-${outcomeTone(entry.result.outcome)}`}>
+              {outcomeLabel(entry.result.outcome)}
+            </span>
+          )}
+          {entry.result.outcome_flags?.map((flag) =>
+            flag === entry.result.outcome ? null : (
+              <span key={flag} className={`history-flag tone-${outcomeTone(flag)}`}>
+                {outcomeLabel(flag)}
+              </span>
+            ),
+          )}
+        </>
+      );
+    case "deck_draw":
+      return (
+        <span className="history-result">
+          puxou {entry.cards.length} carta{entry.cards.length === 1 ? "" : "s"}:{" "}
+          {entry.cards.map((card, i) => (
+            <span
+              key={`${card.id}-${i}`}
+              className={`history-card${isRedSuit(card) ? " is-red" : ""}`}
+            >
+              {cardLabel(card)}
+            </span>
+          ))}
+        </span>
+      );
+    case "deck_shuffle":
+      return <span className="history-result">reembaralhou o baralho</span>;
+    case "deck_config":
+      return <span className="history-result">mudou o baralho: {deckConfigChangeLabel(entry)}</span>;
+  }
+}
 
 export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
   if (entries.length === 0) {
@@ -30,24 +108,9 @@ export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
   return (
     <ul className="history">
       {[...entries].reverse().map((entry, i) => (
-        <li key={`${entry.result.timestamp}-${i}`}>
-          <PlayerTag name={entry.player} style={entry.style} />
-          <span className="history-notation">{entry.result.notation}</span>
-          <span className="history-result">{summarizeDice(entry.result)}</span>
-          {/* Outcome separado dos numeros justamente pra poder ir vermelho
-              sem levar os dados junto. */}
-          {typeof entry.result.outcome === "string" && (
-            <span className={`history-outcome tone-${outcomeTone(entry.result.outcome)}`}>
-              {outcomeLabel(entry.result.outcome)}
-            </span>
-          )}
-          {entry.result.outcome_flags?.map((flag) =>
-            flag === entry.result.outcome ? null : (
-              <span key={flag} className={`history-flag tone-${outcomeTone(flag)}`}>
-                {outcomeLabel(flag)}
-              </span>
-            ),
-          )}
+        <li key={`${entry.type}-${i}`}>
+          <PlayerTag name={entry.player} style={entry.type === "roll" ? entry.style : undefined} />
+          {entryDetail(entry)}
         </li>
       ))}
     </ul>

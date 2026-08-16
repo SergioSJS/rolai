@@ -1,8 +1,19 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // O pacote so publica "module" no package.json (sem "main"/"exports"),
+      // e o resolvedor do Vite falha em achar a entrada sem isso — aponta
+      // direto pro arquivo ESM que ele de fato distribui.
+      "@letele/playing-cards": fileURLToPath(
+        new URL("../../node_modules/@letele/playing-cards/dist/index.esm.js", import.meta.url),
+      ),
+    },
+  },
   // Caminhos RELATIVOS no HTML gerado. O app Android serve este mesmo build
   // de dentro do APK, numa subpasta (assets/stage/) — com o padrao "/" o
   // bundle pedia "/assets/..." da raiz do host e nada carregava: o dado 3D
@@ -22,10 +33,8 @@ export default defineConfig({
       // do workbox nao cobre. Sem sala obviamente nao ha (rede e so relay).
       includeAssets: ["texture-felt.png"],
       workbox: {
-        // mp3 entra: a lib faz `throw` no initialize() se um arquivo de som
-        // faltar. Sem precache, o app offline perderia o renderer inteiro —
-        // nao so o audio.
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,webp,webmanifest,mp3,woff2}"],
+        // mp3/ogg entram: a lib e baralho precisam dos arquivos offline.
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webp,webmanifest,mp3,ogg,woff2}"],
         // config.js e resolvido em RUNTIME pelo container (entrypoint le as
         // envs); precachear congelaria a URL do backend do build.
         globIgnores: ["**/config.js"],

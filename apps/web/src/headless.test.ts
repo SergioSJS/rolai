@@ -71,6 +71,7 @@ describe("bundle headless (WebView Android)", () => {
       "d100",
       "d20",
       "fate",
+      "firelights",
       "fitd",
       "fractal",
       "infaernum",

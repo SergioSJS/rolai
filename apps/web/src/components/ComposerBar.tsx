@@ -88,13 +88,15 @@ export function ComposerBar({ notation, onChange }: ComposerBarProps) {
         {COMPOSER_DICE.map((kind) => {
           const term = base.terms.find((t) => dieKind(t) === kind);
           const label = dieKindLabel(kind);
+          const addLabel = kind === "C" ? "Adicionar uma carta" : `Adicionar um ${label}`;
+          const removeLabel = kind === "C" ? "Tirar uma carta" : `Tirar um ${label}`;
           return (
             <div key={String(kind)} className={`die-slot${term ? " active" : ""}`}>
               <button
                 type="button"
                 className="die-button"
-                aria-label={`Adicionar um ${label}`}
-                title={`Adicionar um ${label}`}
+                aria-label={addLabel}
+                title={addLabel}
                 onClick={() => apply(addDie(base, kind))}
               >
                 <DiceIcon kind={kind} />
@@ -105,8 +107,8 @@ export function ComposerBar({ notation, onChange }: ComposerBarProps) {
                 <button
                   type="button"
                   className="icon-button die-remove"
-                  aria-label={`Tirar um ${label}`}
-                  title={`Tirar um ${label}`}
+                  aria-label={removeLabel}
+                  title={removeLabel}
                   onClick={() => apply(removeDie(base, kind))}
                 >
                   <MinusIcon />

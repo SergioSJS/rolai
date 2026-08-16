@@ -12,16 +12,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RollResult } from "@rolai/rules-engine";
+import type { Card } from "@rolai/deck-engine";
 import { loadDiceStyle, loadQualityTier, loadDiceScale, isQualityTier } from "./settings";
 import { DICE_PRESETS } from "./settings";
 import type { DiceStyle } from "./settings";
 import type { RollRenderer } from "./renderers/types";
-import { exceedsAnimationCap } from "./renderers/types";
+import { exceedsAnimationCap, cardsFromResult } from "./renderers/types";
 import { createRenderer } from "./renderers";
 import { TextRenderer } from "./renderers/text";
 import { RoomClient } from "./room/client";
 import type { RoomEvent } from "./room/reducer";
 import { ResultDisplay } from "./components/ResultDisplay";
+import { CardStack } from "./components/CardStack";
+import { CardStage3D } from "./components/CardStage3D";
+import { cardLabel, isRedSuit } from "./cardFormat";
 import { useStageFloor } from "./stage/floor";
 import type { StreamOptions } from "./stream";
 
@@ -31,7 +35,11 @@ export const STREAM_RESULT_MS = 8_000;
 
 export interface StreamBridge {
   play(result: RollResult | string, style?: DiceStyle | null): void;
-  // Tira os dados da tela agora (o overlay Android chama no toque).
+  // Baralho (specs/08-baralho.md): mesmo espirito do play(), mas pra
+  // cartas — segue a mesma escada de qualidade (tier 2D usa CardStack,
+  // 3D usa CardStage3D).
+  playCard(cards: Card[] | string): void;
+  // Tira os dados/cartas da tela agora (o overlay Android chama no toque).
   clear(): void;
 }
 
@@ -123,6 +131,30 @@ export function StreamApp({ options }: { options: StreamOptions }) {
     }, STREAM_RESULT_MS);
   }, []);
 
+  // Baralho na stream: cartas puxadas aparecem no palco igual ao dado, so
+  // que sem malha 3D propria (CardFlip, ver components/CardFlip.tsx) — e
+  // um overlay PARALELO ao `shown` de dado, nao o mesmo estado, porque a
+  // limpeza de um nao deveria derrubar o outro se algum dia os dois
+  // coexistirem na tela.
+  const [shownCards, setShownCards] = useState<{ cards: Card[]; seq: number } | null>(null);
+  const cardFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleCardClear = useCallback(() => {
+    if (cardFadeTimerRef.current !== null) clearTimeout(cardFadeTimerRef.current);
+    cardFadeTimerRef.current = setTimeout(() => {
+      cardFadeTimerRef.current = null;
+      setShownCards(null);
+    }, STREAM_RESULT_MS);
+  }, []);
+
+  const animateCards = useCallback(
+    (cards: Card[]) => {
+      setShownCards((prev) => ({ cards, seq: (prev?.seq ?? 0) + 1 }));
+      scheduleCardClear();
+    },
+    [scheduleCardClear],
+  );
+
   const animate = useCallback(
     (result: RollResult, style?: DiceStyle | null, player?: string) => {
       // Dados da rolagem anterior saem antes da nova entrar: sem ninguem
@@ -135,6 +167,11 @@ export function StreamApp({ options }: { options: StreamOptions }) {
         style: style ?? null,
         seq: (prev?.seq ?? 0) + 1,
       }));
+      const cards = cardsFromResult(result);
+      if (cards.length > 0) {
+        setShownCards((prev) => ({ cards, seq: (prev?.seq ?? 0) + 1 }));
+        scheduleCardClear();
+      }
       if (!exceedsAnimationCap(result)) {
         // Depois do commit: a placa precisa estar na tela pra ser medida.
         queueRoll(() => {
@@ -145,11 +182,11 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       }
       scheduleClear();
     },
-    [scheduleClear, queueRoll],
+    [scheduleClear, scheduleCardClear, queueRoll],
   );
 
-  // Espectador: rolagem dos outros anima; qualquer erro vira mensagem
-  // minima (sala invalida nao pode derrubar a Browser Source).
+  // Espectador: rolagem/puxada dos outros anima; qualquer erro vira
+  // mensagem minima (sala invalida nao pode derrubar a Browser Source).
   useEffect(() => {
     // Sem sala nao e erro: e o modo local (overlay do Android offline), em
     // que quem manda a rolagem pro palco e o host, via window.rolaiStream.
@@ -157,6 +194,8 @@ export function StreamApp({ options }: { options: StreamOptions }) {
     const onEvent = (event: RoomEvent) => {
       if (event.type === "roll") {
         animate(event.result, event.style, event.player);
+      } else if (event.type === "deck_draw") {
+        animateCards(event.cards);
       } else if (event.type === "snapshot") {
         setStatus(null);
       } else if (event.type === "serverError") {
@@ -174,33 +213,48 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       clientRef.current = null;
       client.leave();
     };
-  }, [options.room, animate]);
+  }, [options.room, animate, animateCards]);
 
   // Ponte pro host que embute esta pagina (a WebView do overlay Android):
   // `window.rolaiStream.play(resultado)` anima uma rolagem JA CALCULADA,
   // sem rede nenhuma — e o que faz o overlay funcionar offline e sem sala.
   // Aceita o RollResult como objeto ou como JSON em string (evaluateJavascript
-  // do Android entrega string).
+  // do Android entrega string). `playCard` e o equivalente pra baralho.
   useEffect(() => {
     const bridge: StreamBridge = {
       play(result, style) {
         const parsed: unknown = typeof result === "string" ? JSON.parse(result) : result;
         animate(parsed as RollResult, style ?? null);
       },
+      playCard(cards) {
+        const parsed: unknown = typeof cards === "string" ? JSON.parse(cards) : cards;
+        animateCards(parsed as Card[]);
+      },
       clear() {
         if (fadeTimerRef.current !== null) {
           clearTimeout(fadeTimerRef.current);
           fadeTimerRef.current = null;
         }
+        if (cardFadeTimerRef.current !== null) {
+          clearTimeout(cardFadeTimerRef.current);
+          cardFadeTimerRef.current = null;
+        }
         rendererRef.current?.clear();
         setShown(null);
+        setShownCards(null);
       },
     };
     window.rolaiStream = bridge;
     return () => {
       if (window.rolaiStream === bridge) delete window.rolaiStream;
     };
-  }, [animate]);
+  }, [animate, animateCards]);
+
+  // Mesmo calculo do tier usado pro renderer do dado (useEffect acima) —
+  // aqui so pra decidir se a carta anima (CardFlip) ou fica so no texto.
+  const cardTier = isQualityTier(options.quality)
+    ? options.quality
+    : loadQualityTier(window.localStorage);
 
   return (
     <main className="stream-root">
@@ -212,6 +266,18 @@ export function StreamApp({ options }: { options: StreamOptions }) {
         />
       )}
       <div className="stage" ref={stageRef} aria-label="Palco de rolagem" />
+      {/* Carta animada fica SOLTA por cima de tudo, sem caixa — mesma
+          camada do dado caindo. A caixa (.stream-result) abaixo mostra so
+          o valor em texto. */}
+      {shownCards !== null && cardTier !== "text" && (
+        <div className="card-stage" aria-hidden>
+          {cardTier === "2d" ? (
+            <CardStack cards={shownCards.cards} />
+          ) : (
+            <CardStage3D cards={shownCards.cards} />
+          )}
+        </div>
+      )}
       <div className="stage-overlay" ref={overlayRef}>
         {shown !== null && (
           <div key={shown.seq} className="stream-result">
@@ -221,6 +287,20 @@ export function StreamApp({ options }: { options: StreamOptions }) {
               playerStyle={shown.style}
               showDismissHint={false}
             />
+          </div>
+        )}
+        {shownCards !== null && (
+          <div key={shownCards.seq} className="stream-result">
+            <div className="result-chips">
+              {shownCards.cards.map((card, i) => (
+                <span
+                  key={`${card.id}-${i}`}
+                  className={`die-chip card-chip${isRedSuit(card) ? " is-red" : ""}`}
+                >
+                  {cardLabel(card)}
+                </span>
+              ))}
+            </div>
           </div>
         )}
         {status !== null && <p className="stream-status">{status}</p>}

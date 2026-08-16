@@ -11,6 +11,8 @@
 
 import { roll, rollOverlay, rollWithProfile } from "@rolai/rules-engine";
 import type { RollOptions, RollResult } from "@rolai/rules-engine";
+import { createDeck, draw, reshuffleDeck, updateConfig } from "@rolai/deck-engine";
+import type { DeckConfig, DeckState } from "@rolai/deck-engine";
 import { availableProfiles, getProfile } from "./profiles.js";
 import { applyInputQuirks } from "./profileInputQuirks.js";
 
@@ -70,10 +72,50 @@ export interface RolaiHeadlessApi {
     callbackId: string,
     optionsJson?: string,
   ): Promise<void>;
+  /**
+   * Puxa `count` carta(s) de um baralho local ao overlay Android
+   * (specs/08-baralho.md — cada jogador tem o proprio, o app nativo NAO
+   * tem estado nenhum, so guarda o `DeckState` serializado entre chamadas
+   * e devolve pra WebView de novo aqui). `deckStateJson` null/vazio cria um
+   * baralho novo com `configJson`; presente, reusa a config JA embutida
+   * nele (`configJson` e ignorado nesse caso — mudar config de baralho em
+   * andamento e outra chamada, nao esta).
+   */
+  deckDraw(
+    deckStateJson: string | null,
+    configJson: string,
+    count: number,
+    callbackId: string,
+  ): Promise<void>;
+  /** Reembaralha o baralho serializado (recolhe descarte, reordena). */
+  deckReshuffle(deckStateJson: string, callbackId: string): Promise<void>;
+  /**
+   * Aplica mudancas de config (`removalMode`/`autoReshuffleOnEmpty`) a um
+   * baralho JA existente, EM CIMA do monte/descarte atuais — so vale pro
+   * proximo draw(). `includeJokers` muda a COMPOSICAO do monte (deck-engine
+   * nao adiciona/remove carta de um monte em andamento sozinho) — pra isso
+   * use `deckNew`, nao esta chamada.
+   */
+  deckConfig(deckStateJson: string, changesJson: string, callbackId: string): Promise<void>;
+  /** Cria um baralho do zero com a config dada — usado quando `includeJokers`
+   *  muda (a composicao do monte so pode mudar num baralho novo). */
+  deckNew(configJson: string, callbackId: string): Promise<void>;
+}
+
+interface DeckDrawPayload {
+  deck: DeckState;
+  cards: DeckState["drawPile"];
+  remaining: number;
+}
+
+interface DeckStatePayload {
+  deck: DeckState;
 }
 
 type Delivery =
   | { ok: true; result: RollResult }
+  | { ok: true; result: DeckDrawPayload }
+  | { ok: true; result: DeckStatePayload }
   | { ok: false; error: string };
 
 declare global {
@@ -86,8 +128,11 @@ declare global {
   var rolaiLastDelivery: { callbackId: string; payloadJson: string } | undefined;
 }
 
-function deliver(callbackId: string, payload: Delivery): void {
-  const payloadJson = JSON.stringify(payload);
+// `kind: "deck"` e o que deixa o Kotlin (HeadlessRoller.handlePayload) rotear
+// pro par de callbacks de baralho em vez do de rolagem, sem duas WebViews —
+// entrega de rolagem (sem `kind`) segue no formato de sempre, retrocompativel.
+function deliver(callbackId: string, payload: Delivery, kind?: "deck"): void {
+  const payloadJson = JSON.stringify(kind ? { ...payload, kind } : payload);
   const bridge = globalThis.RolaiBridge;
   if (bridge) {
     bridge.onResult(callbackId, payloadJson);
@@ -159,6 +204,51 @@ const api: RolaiHeadlessApi = {
       deliver(callbackId, { ok: true, result });
     } catch (e) {
       deliver(callbackId, toError(e));
+    }
+  },
+
+  async deckDraw(deckStateJson, configJson, count, callbackId) {
+    try {
+      const state: DeckState = deckStateJson
+        ? (JSON.parse(deckStateJson) as DeckState)
+        : createDeck(JSON.parse(configJson) as Partial<DeckConfig>);
+      const result = draw(state, count);
+      deliver(
+        callbackId,
+        { ok: true, result: { deck: state, cards: result.cards, remaining: result.remaining } },
+        "deck",
+      );
+    } catch (e) {
+      deliver(callbackId, toError(e), "deck");
+    }
+  },
+
+  async deckReshuffle(deckStateJson, callbackId) {
+    try {
+      const state = JSON.parse(deckStateJson) as DeckState;
+      reshuffleDeck(state);
+      deliver(callbackId, { ok: true, result: { deck: state } }, "deck");
+    } catch (e) {
+      deliver(callbackId, toError(e), "deck");
+    }
+  },
+
+  async deckConfig(deckStateJson, changesJson, callbackId) {
+    try {
+      const state = JSON.parse(deckStateJson) as DeckState;
+      updateConfig(state, JSON.parse(changesJson) as Partial<DeckConfig>);
+      deliver(callbackId, { ok: true, result: { deck: state } }, "deck");
+    } catch (e) {
+      deliver(callbackId, toError(e), "deck");
+    }
+  },
+
+  async deckNew(configJson, callbackId) {
+    try {
+      const state = createDeck(JSON.parse(configJson) as Partial<DeckConfig>);
+      deliver(callbackId, { ok: true, result: { deck: state } }, "deck");
+    } catch (e) {
+      deliver(callbackId, toError(e), "deck");
     }
   },
 };

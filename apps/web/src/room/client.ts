@@ -2,6 +2,7 @@
 // (backoff exponencial capado). Protocolo em services/backend/app/rooms.py.
 
 import type { RollResult } from "@rolai/rules-engine";
+import type { Card, DeckConfig } from "@rolai/deck-engine";
 import { apiBaseUrl, roomWsUrl } from "../config";
 import type { DiceStyle } from "../settings";
 import type { HistoryEntry, RoomEvent, RosterMember } from "./reducer";
@@ -44,6 +45,81 @@ function parseRoster(raw: unknown[]): RosterMember[] {
   });
 }
 
+// Historico do snapshot: cada item ja vem com "type" (roll ou deck_*) —
+// mesma forma que os eventos de broadcast, so repassa. Tolera item sem
+// "type" reconhecido (cliente novo, backend velho) descartando-o em vez de
+// quebrar o snapshot inteiro.
+function parseHistory(raw: unknown[]): HistoryEntry[] {
+  const entries: HistoryEntry[] = [];
+  for (const item of raw) {
+    const event = parseDataEvent(item);
+    if (event !== null) entries.push(event);
+  }
+  return entries;
+}
+
+// Interpreta um item que carrega dado (roll/deck_draw/deck_shuffle/
+// deck_config) — usado tanto pro historico do snapshot quanto pro broadcast
+// ao vivo, mesma forma nos dois.
+function parseDataEvent(data: unknown): HistoryEntry | null {
+  if (!isRecord(data)) return null;
+  switch (data["type"]) {
+    case "roll": {
+      const player = data["player"];
+      const result = data["result"];
+      if (typeof player !== "string" || !isRecord(result)) return null;
+      const style = data["style"];
+      const entry: HistoryEntry = {
+        type: "roll",
+        player,
+        result: result as unknown as RollResult,
+      };
+      if (isRecord(style)) entry.style = style as unknown as DiceStyle;
+      return entry;
+    }
+    case "deck_draw": {
+      const player = data["player"];
+      const cards = data["cards"];
+      const remaining = data["remaining"];
+      const timestamp = data["timestamp"];
+      if (
+        typeof player !== "string" ||
+        !Array.isArray(cards) ||
+        typeof remaining !== "number" ||
+        typeof timestamp !== "string"
+      ) {
+        return null;
+      }
+      return { type: "deck_draw", player, cards: cards as unknown as Card[], remaining, timestamp };
+    }
+    case "deck_shuffle": {
+      const player = data["player"];
+      const timestamp = data["timestamp"];
+      if (typeof player !== "string" || typeof timestamp !== "string") return null;
+      return { type: "deck_shuffle", player, timestamp };
+    }
+    case "deck_config": {
+      const player = data["player"];
+      const timestamp = data["timestamp"];
+      if (typeof player !== "string" || typeof timestamp !== "string") return null;
+      const entry: HistoryEntry = { type: "deck_config", player, timestamp };
+      const includeJokers = data["include_jokers"];
+      if (typeof includeJokers === "boolean") entry.includeJokers = includeJokers;
+      const removalMode = data["removal_mode"];
+      if (removalMode === "permanent" || removalMode === "returns") {
+        entry.removalMode = removalMode;
+      }
+      const autoReshuffleOnEmpty = data["auto_reshuffle_on_empty"];
+      if (typeof autoReshuffleOnEmpty === "boolean") {
+        entry.autoReshuffleOnEmpty = autoReshuffleOnEmpty;
+      }
+      return entry;
+    }
+    default:
+      return null;
+  }
+}
+
 // Interpreta uma mensagem do servidor. Mensagens fora do protocolo sao
 // ignoradas (retorno null) — o backend e o unico emissor, mas o parse e
 // defensivo mesmo assim.
@@ -63,26 +139,13 @@ export function parseServerMessage(raw: string): RoomEvent | null {
       return {
         type: "snapshot",
         roster: parseRoster(roster),
-        history: history as HistoryEntry[],
+        history: parseHistory(history),
       };
     }
     case "roster": {
       const roster = data["roster"];
       if (!Array.isArray(roster)) return null;
       return { type: "roster", roster: parseRoster(roster) };
-    }
-    case "roll": {
-      const player = data["player"];
-      const result = data["result"];
-      if (typeof player !== "string" || !isRecord(result)) return null;
-      const style = data["style"];
-      const event: RoomEvent = {
-        type: "roll",
-        player,
-        result: result as unknown as RollResult,
-      };
-      if (isRecord(style)) event.style = style as unknown as DiceStyle;
-      return event;
     }
     case "error": {
       const message = data["message"];
@@ -92,7 +155,7 @@ export function parseServerMessage(raw: string): RoomEvent | null {
       };
     }
     default:
-      return null;
+      return parseDataEvent(data);
   }
 }
 
@@ -139,13 +202,47 @@ export class RoomClient {
     this.open();
   }
 
-  send(result: RollResult): void {
-    // Espectador nunca rola — guarda local (o backend rejeitaria de
+  private sendEnvelope(envelope: Record<string, unknown>): void {
+    // Espectador nunca opera a mesa — guarda local (o backend rejeitaria de
     // qualquer jeito, mas nem chega a sair do cliente).
     if (this.spectator) return;
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: "roll", result }));
+      this.ws.send(JSON.stringify(envelope));
     }
+  }
+
+  send(result: RollResult): void {
+    this.sendEnvelope({ type: "roll", result });
+  }
+
+  // Baralho (specs/08-baralho.md): mesmo esquema de confianca da rolagem —
+  // o cliente ja calculou local (deck-engine), so avisa a sala pro log e
+  // pro historico. Campos em snake_case no wire (mesma convencao do resto
+  // do protocolo — ver services/backend/app/schemas.py).
+  //
+  // `timestamp` vem de FORA (App.tsx) em vez de gerado aqui: e a mesma
+  // chave usada pra dedupe do echo (room/echo.ts) — se cada chamada gerasse
+  // o proprio timestamp, o valor animado localmente nunca bateria com o
+  // que volta no broadcast, e a propria puxada animaria duas vezes.
+  sendDeckDraw(cards: Card[], remaining: number, timestamp: string): void {
+    this.sendEnvelope({ type: "deck_draw", cards, remaining, timestamp });
+  }
+
+  sendDeckShuffle(): void {
+    this.sendEnvelope({ type: "deck_shuffle", timestamp: new Date().toISOString() });
+  }
+
+  sendDeckConfig(changes: Partial<DeckConfig>): void {
+    const payload: Record<string, unknown> = {
+      type: "deck_config",
+      timestamp: new Date().toISOString(),
+    };
+    if (changes.includeJokers !== undefined) payload["include_jokers"] = changes.includeJokers;
+    if (changes.removalMode !== undefined) payload["removal_mode"] = changes.removalMode;
+    if (changes.autoReshuffleOnEmpty !== undefined) {
+      payload["auto_reshuffle_on_empty"] = changes.autoReshuffleOnEmpty;
+    }
+    this.sendEnvelope(payload);
   }
 
   leave(): void {

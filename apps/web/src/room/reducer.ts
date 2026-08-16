@@ -4,17 +4,53 @@
 // como {"type":"roll", player, result} pra TODOS, incluindo o remetente
 // (echo/ack — a deduplicacao da animacao fica em echo.ts, aqui o historico
 // segue a ordem canonica do servidor: toda rolagem entra, echo ou nao).
+//
+// Baralho (specs/08-baralho.md) segue o MESMO modelo: deck_draw/deck_shuffle/
+// deck_config tambem chegam pra todos incluindo o remetente, e so entram no
+// historico — sem re-animacao (o baralho nao anima no palco compartilhado,
+// so mostra inline no DeckPanel de quem operou).
 
 import type { RollResult } from "@rolai/rules-engine";
+import type { Card, DeckConfig } from "@rolai/deck-engine";
 import type { DiceStyle } from "../settings";
 
-export interface HistoryEntry {
+export interface RollHistoryEntry {
+  type: "roll";
   player: string;
   result: RollResult;
   // Aparencia dos dados de quem rolou (pode faltar: cliente antigo ou
   // estilo invalido) — usada pra colorir o nome e animar na cor certa.
   style?: DiceStyle | null;
 }
+
+export interface DeckDrawHistoryEntry {
+  type: "deck_draw";
+  player: string;
+  cards: Card[];
+  remaining: number;
+  timestamp: string;
+}
+
+export interface DeckShuffleHistoryEntry {
+  type: "deck_shuffle";
+  player: string;
+  timestamp: string;
+}
+
+export interface DeckConfigHistoryEntry {
+  type: "deck_config";
+  player: string;
+  includeJokers?: boolean;
+  removalMode?: DeckConfig["removalMode"];
+  autoReshuffleOnEmpty?: boolean;
+  timestamp: string;
+}
+
+export type HistoryEntry =
+  | RollHistoryEntry
+  | DeckDrawHistoryEntry
+  | DeckShuffleHistoryEntry
+  | DeckConfigHistoryEntry;
 
 export interface RosterMember {
   name: string;
@@ -40,7 +76,10 @@ export type RoomEvent =
   | { type: "joining"; code: string }
   | { type: "snapshot"; roster: RosterMember[]; history: HistoryEntry[] }
   | { type: "roster"; roster: RosterMember[] }
-  | { type: "roll"; player: string; result: RollResult; style?: DiceStyle | null }
+  | RollHistoryEntry
+  | DeckDrawHistoryEntry
+  | DeckShuffleHistoryEntry
+  | DeckConfigHistoryEntry
   | { type: "serverError"; message: string }
   // Recusa no handshake (sala inexistente, cheia, origem barrada): nunca
   // chegamos a entrar, entao o estado de sala tem que sumir — senao a UI
@@ -80,11 +119,12 @@ export function roomReducer(state: RoomState, event: RoomEvent): RoomState {
     case "roster":
       if (state.code === null) return state;
       return { ...state, roster: event.roster };
-    case "roll": {
+    case "roll":
+    case "deck_draw":
+    case "deck_shuffle":
+    case "deck_config": {
       if (state.status !== "connected") return state;
-      const entry: HistoryEntry = { player: event.player, result: event.result };
-      if (event.style) entry.style = event.style;
-      return { ...state, history: [...state.history, entry] };
+      return { ...state, history: [...state.history, event] };
     }
     case "serverError":
       return { ...state, error: event.message };

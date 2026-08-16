@@ -155,6 +155,63 @@ describe("resultado no modo stream", () => {
   });
 });
 
+// Baralho na stream (specs/08-baralho.md): mesmo bridge window.rolaiStream,
+// so que playCard em vez de play — usado tanto pelo overlay Android
+// (offline) quanto pelo broadcast deck_draw de outro jogador na sala.
+describe("baralho no modo stream", () => {
+  const CARDS = [
+    { id: "hearts-A", suit: "hearts" as const, rank: "A" as const },
+    { id: "spades-Q", suit: "spades" as const, rank: "Q" as const },
+  ];
+
+  it("playCard mostra as cartas puxadas no palco", () => {
+    const options: StreamOptions = {
+      room: "",
+      chroma: null,
+      styleId: "",
+      scrim: 0,
+      scale: 0,
+      quality: "",
+      sound: true,
+      style: null,
+    };
+    const { container } = render(<StreamApp options={options} />);
+
+    act(() => {
+      window.rolaiStream?.playCard(CARDS);
+    });
+    expect(container.querySelectorAll(".card-flip")).toHaveLength(2);
+
+    act(() => {
+      window.rolaiStream?.clear();
+    });
+    expect(container.querySelectorAll(".card-flip")).toHaveLength(0);
+  });
+
+  it("playCard aceita JSON em string (evaluateJavascript do Android entrega string)", () => {
+    const options: StreamOptions = {
+      room: "",
+      chroma: null,
+      styleId: "",
+      scrim: 0,
+      scale: 0,
+      quality: "",
+      sound: true,
+      style: null,
+    };
+    const { container } = render(<StreamApp options={options} />);
+
+    act(() => {
+      window.rolaiStream?.playCard(JSON.stringify(CARDS));
+    });
+    expect(container.querySelectorAll(".card-flip")).toHaveLength(2);
+
+    act(() => {
+      window.rolaiStream?.clear();
+    });
+  });
+});
+
 // Overlay do Android: preset de dado e veu vem pela URL (a WebView do
 // palco tem localStorage proprio, nunca ve a escolha feita no navegador).
 describe("parametros do overlay Android", () => {

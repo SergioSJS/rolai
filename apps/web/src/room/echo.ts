@@ -39,3 +39,26 @@ export class PendingRolls {
     return this.counts.size;
   }
 }
+
+// Mesmo problema do echo de rolagem, pro baralho (specs/08-baralho.md): a
+// puxada anima local na hora (App.tsx), e o echo do broadcast nao pode
+// animar de novo. Chave = player+timestamp (o timestamp e gerado uma unica
+// vez em App.tsx e usado tanto pra animar quanto pro envelope WS, entao
+// bate exatamente com o que volta no echo).
+export class PendingDeckDraws {
+  private counts = new Map<string, number>();
+
+  track(player: string, timestamp: string): void {
+    const key = `${player}${timestamp}`;
+    this.counts.set(key, (this.counts.get(key) ?? 0) + 1);
+  }
+
+  consumeEcho(player: string, timestamp: string): boolean {
+    const key = `${player}${timestamp}`;
+    const count = this.counts.get(key) ?? 0;
+    if (count === 0) return false;
+    if (count === 1) this.counts.delete(key);
+    else this.counts.set(key, count - 1);
+    return true;
+  }
+}

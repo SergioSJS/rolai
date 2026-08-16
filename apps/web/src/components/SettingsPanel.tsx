@@ -3,6 +3,7 @@
 // primeiro: e a preferencia que o jogador mais mexe.
 
 import type { SystemProfile } from "@rolai/rules-engine";
+import type { DeckConfig } from "@rolai/deck-engine";
 import type {
   DiceStyle,
   QualityTier,
@@ -22,6 +23,7 @@ import {
 } from "../settings";
 import type { DiceMaterial, DiceTexture } from "../settings";
 import { familyFor, familyMemberSystems, PROFILE_FAMILIES } from "../profileFamilies";
+import { CardsIcon, DiceSectionIcon, RenderIcon, RulesIcon, StreamIcon } from "./Glyphs";
 
 interface SettingsPanelProps {
   tier: QualityTier;
@@ -30,11 +32,13 @@ interface SettingsPanelProps {
   diceScale: number;
   system: string;
   profiles: SystemProfile[];
+  deckConfig: DeckConfig;
   onTierChange: (tier: QualityTier) => void;
   onThemeChange: (theme: ThemeName) => void;
   onDiceStyleChange: (style: DiceStyle) => void;
   onDiceScaleChange: (scale: number) => void;
   onSystemChange: (system: string) => void;
+  onDeckConfigChange: (changes: Partial<DeckConfig>) => void;
 }
 
 // Contorno do numero na previa: sombra nas 4 direcoes com a cor escolhida.
@@ -49,11 +53,13 @@ export function SettingsPanel({
   diceScale,
   system,
   profiles,
+  deckConfig,
   onTierChange,
   onThemeChange,
   onDiceStyleChange,
   onDiceScaleChange,
   onSystemChange,
+  onDeckConfigChange,
 }: SettingsPanelProps) {
   const textureFile = DICE_TEXTURE_FILES[diceStyle.texture];
   const activePreset = DICE_PRESETS.find(
@@ -74,7 +80,10 @@ export function SettingsPanel({
 
   return (
     <div className="settings-panel">
-      <h3>Sistema</h3>
+      <h3>
+        <RulesIcon />
+        Sistema
+      </h3>
       <label>
         Regras da mesa
         <select
@@ -105,7 +114,10 @@ export function SettingsPanel({
         </p>
       )}
 
-      <h3>Dados</h3>
+      <h3>
+        <DiceSectionIcon />
+        Dados
+      </h3>
       {/* Previa com as MESMAS cores e textura (o proprio .webp estampado no
           dado 3D). Mudou algo com o modal aberto? O dado de verdade tambem
           rola no palco, atras da janela. */}
@@ -264,7 +276,10 @@ export function SettingsPanel({
         reflexo). Vale só pros tiers 3D — o palco recarrega ao mudar.
       </p>
 
-      <h3>Render</h3>
+      <h3>
+        <RenderIcon />
+        Render
+      </h3>
       <div className="settings-row">
         <label>
           Qualidade
@@ -294,7 +309,57 @@ export function SettingsPanel({
         </label>
       </div>
 
-      <h3>Stream</h3>
+      <h3>
+        <CardsIcon />
+        Baralho
+      </h3>
+      <div className="settings-row">
+        <label>
+          Curingas
+          <select
+            value={deckConfig.includeJokers ? "yes" : "no"}
+            onChange={(e) =>
+              onDeckConfigChange({ includeJokers: e.target.value === "yes" })
+            }
+          >
+            <option value="no">Sem curinga</option>
+            <option value="yes">Com 2 curingas</option>
+          </select>
+        </label>
+        <label>
+          Carta puxada
+          <select
+            value={deckConfig.removalMode}
+            onChange={(e) =>
+              onDeckConfigChange({
+                removalMode: e.target.value as DeckConfig["removalMode"],
+              })
+            }
+          >
+            <option value="permanent">Some até reembaralhar</option>
+            <option value="returns">Volta na hora (leitura)</option>
+          </select>
+        </label>
+      </div>
+      {deckConfig.removalMode === "permanent" && (
+        <label>
+          Monte vazio
+          <select
+            value={deckConfig.autoReshuffleOnEmpty ? "auto" : "manual"}
+            onChange={(e) =>
+              onDeckConfigChange({ autoReshuffleOnEmpty: e.target.value === "auto" })
+            }
+          >
+            <option value="manual">Trava, espera reembaralhar</option>
+            <option value="auto">Reembaralha sozinho</option>
+          </select>
+        </label>
+      )}
+
+      <h3>
+        <StreamIcon />
+        Stream
+      </h3>
       <p className="settings-hint">
         Pro OBS, use Sala → "Copiar link pro OBS": uma URL só com os dados,
         fundo transparente (ou <code>&chroma=rrggbb</code> pra chroma key).

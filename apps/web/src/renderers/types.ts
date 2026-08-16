@@ -49,13 +49,42 @@ function keptCount(spec: {
   return spec.count - kd.count; // dh / dl
 }
 
+import type { Card } from "@rolai/deck-engine";
+import { cardFromRollValue } from "../cardFormat";
+
+// Extrai as cartas de baralho (saque de cartas / termos 'c') de um RollResult.
+export function cardsFromResult(result: RollResult): Card[] {
+  let ast;
+  try {
+    ast = parseNotation(result.notation);
+  } catch {
+    return [];
+  }
+  const groups = Object.values(result.groups);
+  const cards: Card[] = [];
+  ast.groups.forEach((groupSpec, i) => {
+    const rolled = groups[i];
+    if (!rolled) return;
+    let cursor = 0;
+    for (const term of groupSpec.terms) {
+      const count = keptCount(term.dice);
+      if (term.dice.card) {
+        const values = rolled.rolls.slice(cursor, cursor + count);
+        values.forEach((v) => {
+          cards.push(cardFromRollValue(v, cards.length));
+        });
+      }
+      cursor += count;
+    }
+  });
+  return cards;
+}
+
 // Extrai os dados (faces + valor final) de um RollResult, casando os
 // termos da notacao parseada com os rolls flat dos grupos: cada termo
 // consome `keptCount(termo)` valores na ordem (a mesma ordem em que o
-// roller concatenou). Funciona igual pra rolagem local e pra resultado
-// recebido via WS: o valor animado e sempre o do resultado, nunca
-// re-sorteado. Lanca NotationError se a notacao nao parsear — o chamador
-// deve cair pro tier de texto nesse caso.
+// roller concatenou). Termos de carta (card: true) sao pulados — cartas
+// animam no palco de cartas, nao como dados 3D na mesa.
 export function diceFromResult(result: RollResult): RenderedDie[] {
   const ast = parseNotation(result.notation);
   const groups = Object.values(result.groups);
@@ -66,10 +95,12 @@ export function diceFromResult(result: RollResult): RenderedDie[] {
     let cursor = 0;
     for (const term of groupSpec.terms) {
       const count = keptCount(term.dice);
-      for (const value of rolled.rolls.slice(cursor, cursor + count)) {
-        const die: RenderedDie = { sides: term.dice.sides, value };
-        if (term.dice.fudge) die.fudge = true;
-        dice.push(die);
+      if (!term.dice.card) {
+        for (const value of rolled.rolls.slice(cursor, cursor + count)) {
+          const die: RenderedDie = { sides: term.dice.sides, value };
+          if (term.dice.fudge) die.fudge = true;
+          dice.push(die);
+        }
       }
       cursor += count;
     }
@@ -78,7 +109,7 @@ export function diceFromResult(result: RollResult): RenderedDie[] {
     // sempre pertence a um termo unico (a gramatica nao permite espalhar),
     // entao todos saem com as faces do primeiro termo do grupo.
     const dropped = Array.isArray(rolled.dropped) ? rolled.dropped : [];
-    const primeiro = groupSpec.terms[0]?.dice;
+    const primeiro = groupSpec.terms.find((t) => !t.dice.card)?.dice;
     if (primeiro) {
       for (const value of dropped) {
         const die: RenderedDie = { sides: primeiro.sides, value };
@@ -99,7 +130,10 @@ export function faceLabel(die: RenderedDie): string {
 // Contagem de corpos fisicos que a animacao vai criar. Um d100 vira DOIS
 // dados fisicos (dezenas + unidades — ver diceBox.ts), entao conta dobrado.
 export function physicalDiceCount(dice: RenderedDie[]): number {
-  return dice.reduce((total, die) => total + (die.sides === 100 ? 2 : 1), 0);
+  return dice.reduce(
+    (total, die) => total + (die.sides === 100 || die.sides === 66 ? 2 : 1),
+    0,
+  );
 }
 
 // true se a rolagem estoura o teto de animacao. Notacao que nao parseia

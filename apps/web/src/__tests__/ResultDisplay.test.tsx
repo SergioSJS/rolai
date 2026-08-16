@@ -47,7 +47,25 @@ describe("ResultDisplay", () => {
     expect(container.querySelector(".result-headline")?.textContent).toBe(
       "sucesso completo",
     );
-    expect(container.querySelector(".result-flag")?.textContent).toBe("match!");
+    expect(container.querySelector(".result-flag")?.textContent).toBe("combinação!");
+    expect(container.textContent).toContain("ação");
+    expect(container.textContent).toContain("desafio");
+  });
+
+  it("rolagem mista (2d6+2c) renderiza chips de dados e chips de cartas com total", () => {
+    const result = roll("2d6+2c", { deterministic: [6, 6, 9, 8] });
+    const { container } = render(<ResultDisplay result={result} />);
+    expect(container.querySelector(".result-headline")?.textContent).toBe("29");
+    const chips = container.querySelectorAll(".die-chip");
+    expect(chips.length).toBe(4);
+    expect(chips[0]?.textContent).toContain("6");
+    expect(chips[0]?.textContent).toContain("d6");
+    expect(chips[1]?.textContent).toContain("6");
+    expect(chips[1]?.textContent).toContain("d6");
+    expect(chips[2]?.textContent).toContain("9");
+    expect(chips[2]?.textContent).toContain("carta");
+    expect(chips[3]?.textContent).toContain("8");
+    expect(chips[3]?.textContent).toContain("carta");
   });
 
   it("sem resultado nao desenha nada", () => {

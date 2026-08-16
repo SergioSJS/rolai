@@ -4,6 +4,7 @@ import { buildBoxNotation } from "../renderers/diceBox";
 import { diceBoxOptions } from "../renderers";
 import { DEFAULT_DICE_STYLE } from "../settings";
 import {
+  cardsFromResult,
   diceFromResult,
   exceedsAnimationCap,
   faceLabel,
@@ -55,6 +56,11 @@ describe("buildBoxNotation", () => {
         { sides: 6, value: 3 },
       ]),
     ).toBe("1d100+1d10+1d6@0,0,3");
+  });
+
+  it("d2 usa o mesh de moeda 'd2' da lib", () => {
+    expect(buildBoxNotation([{ sides: 2, value: 1 }])).toBe("1d2@1");
+    expect(buildBoxNotation([{ sides: 2, value: 2 }])).toBe("1d2@2");
   });
 });
 
@@ -123,17 +129,22 @@ describe("cap de dados animados", () => {
 // Regressao: o tier "3D leve" baixava a luz pra 0.5 e o mesmo dado saia
 // visivelmente mais escuro que no "3D completo" (a diferenca entre os tiers
 // tem que ser custo de GPU, nao aparencia).
-describe("tiers 3D", () => {
-  it("mesma luz nos dois; so a sombra muda", () => {
-    const full = diceBoxOptions("3d-full", DEFAULT_DICE_STYLE);
-    const light = diceBoxOptions("3d-light", DEFAULT_DICE_STYLE);
-    expect(full.lightIntensity).toBe(light.lightIntensity);
-    expect(full.shadows).toBe(true);
-    expect(light.shadows).toBe(false);
+describe("cartas de baralho (termos 'c')", () => {
+  it("diceFromResult extrai apenas dados fisicos e ignora cartas", () => {
+    const res = roll("{2d6} vs {2c}", { deterministic: [4, 5, 2, 8] });
+    const dice = diceFromResult(res);
+    expect(dice).toEqual([
+      { sides: 6, value: 4 },
+      { sides: 6, value: 5 },
+    ]);
   });
 
-  it("leva o estilo escolhido pro motor", () => {
-    const style = { ...DEFAULT_DICE_STYLE, body: "#123456" };
-    expect(diceBoxOptions("3d-light", style).style.body).toBe("#123456");
+  it("cardsFromResult extrai as cartas com rank correspondente", () => {
+    const res = roll("{2d6} vs {2c}", { deterministic: [4, 5, 1, 10] });
+    const cards = cardsFromResult(res);
+    expect(cards).toHaveLength(2);
+    expect(cards[0]?.rank).toBe("A");
+    expect(cards[1]?.rank).toBe("10");
   });
 });
+

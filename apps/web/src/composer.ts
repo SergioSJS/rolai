@@ -6,14 +6,15 @@
 
 import { parseNotation } from "@rolai/rules-engine";
 
-// Tipo de dado no compositor: numero de faces, ou "F" pro dado Fudge/Fate
-// (faces -1/0/+1, notacao "4dF").
-export type DieKind = number | "F";
+// Tipo de dado no compositor: numero de faces, "F" pro dado Fudge/Fate,
+// ou "C" pra puxar cartas do baralho (ex.: "2d6+2c", Firelights, etc).
+export type DieKind = number | "F" | "C";
 
 export interface ComposerTerm {
   count: number;
   sides: number;
   fudge?: true;
+  card?: true;
 }
 
 export interface ComposerState {
@@ -21,7 +22,7 @@ export interface ComposerState {
   modifier: number;
 }
 
-export const COMPOSER_DICE: readonly DieKind[] = [4, 6, 8, 10, 12, 20, 100, "F"];
+export const COMPOSER_DICE: readonly DieKind[] = [2, 3, 4, 6, 8, 10, 12, 20, 66, 100, "F", "C"];
 
 // Mesmo teto de dados do parser (MAX_DICE em parser.ts) — somado entre
 // todos os termos do pool.
@@ -39,15 +40,18 @@ export const DEFAULT_COMPOSER: ComposerState = {
 export const EMPTY_COMPOSER: ComposerState = { terms: [], modifier: 0 };
 
 export function dieKind(term: ComposerTerm): DieKind {
+  if (term.card) return "C";
   return term.fudge ? "F" : term.sides;
 }
 
-// Rotulo de um tipo de dado: "d6", "dF".
+// Rotulo de um tipo de dado: "d6", "dF", "carta".
 export function dieKindLabel(kind: DieKind): string {
+  if (kind === "C") return "carta";
   return kind === "F" ? "dF" : `d${kind}`;
 }
 
 function makeTerm(kind: DieKind, count: number): ComposerTerm {
+  if (kind === "C") return { count, sides: 0, card: true };
   // Dado Fudge tem 3 faces distintas no AST (ver parser.ts).
   return kind === "F" ? { count, sides: 3, fudge: true } : { count, sides: kind };
 }
@@ -57,6 +61,7 @@ export function totalDice(state: ComposerState): number {
 }
 
 export function termNotation(term: ComposerTerm): string {
+  if (term.card) return `${term.count}c`;
   return `${term.count}${dieKindLabel(dieKind(term))}`;
 }
 
@@ -74,10 +79,30 @@ export function toNotation(state: ComposerState): string {
 // fonte de verdade e os botoes recomeçam do zero no proximo clique.
 // String vazia e um estado valido: pool vazio.
 export function fromNotation(notation: string): ComposerState | null {
-  if (notation.trim() === "") return { terms: [], modifier: 0 };
+  const trimmed = notation.trim();
+  if (trimmed === "") return { terms: [], modifier: 0 };
+
+  // Suporte a termo de cartas: "2c", "2 cartas", "2d6+2c", "2d6+2c+1"
+  let cleanNotation = trimmed;
+  let cardCount = 0;
+  const cardMatch = cleanNotation.match(/(?:^|\+)\s*(\d+)\s*(?:c|cartas?)\b/i);
+  if (cardMatch && cardMatch[1]) {
+    cardCount = parseInt(cardMatch[1], 10);
+    cleanNotation = cleanNotation.replace(/(?:^|\+)\s*\d+\s*(?:c|cartas?)\b/i, "");
+    if (cleanNotation.startsWith("+")) cleanNotation = cleanNotation.slice(1);
+    cleanNotation = cleanNotation.trim();
+  }
+
+  if (cleanNotation === "") {
+    return {
+      terms: cardCount > 0 ? [makeTerm("C", cardCount)] : [],
+      modifier: 0,
+    };
+  }
+
   let ast;
   try {
-    ast = parseNotation(notation);
+    ast = parseNotation(cleanNotation);
   } catch {
     return null;
   }
@@ -89,6 +114,9 @@ export function fromNotation(notation: string): ComposerState | null {
     terms.push(
       makeTerm(term.dice.fudge ? "F" : term.dice.sides, term.dice.count),
     );
+  }
+  if (cardCount > 0) {
+    terms.push(makeTerm("C", cardCount));
   }
   return {
     terms,

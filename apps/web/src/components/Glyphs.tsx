@@ -94,3 +94,61 @@ export function AboutIcon() {
     </svg>
   );
 }
+
+// Icones dos titulos de secao em Preferencias — mesmo peso visual do MENU
+// acima, so pra dar ponto de referencia rapido ao rolar a lista.
+
+/** Sistema: regras da mesa — lista de itens (indice de regrinhas). */
+export function RulesIcon() {
+  return (
+    <svg {...MENU}>
+      <circle cx="4.3" cy="6" r="0.9" fill="currentColor" stroke="none" />
+      <line x1="7.8" y1="6" x2="17" y2="6" />
+      <circle cx="4.3" cy="10" r="0.9" fill="currentColor" stroke="none" />
+      <line x1="7.8" y1="10" x2="17" y2="10" />
+      <circle cx="4.3" cy="14" r="0.9" fill="currentColor" stroke="none" />
+      <line x1="7.8" y1="14" x2="13.5" y2="14" />
+    </svg>
+  );
+}
+
+/** Dados: mesmo d20 do logo (MenuBar), so reescalado pro viewBox 20x20. */
+export function DiceSectionIcon() {
+  return (
+    <svg {...MENU}>
+      <polygon points="10,2 17.3,6.1 17.3,13.9 10,18 2.7,13.9 2.7,6.1" />
+      <polygon points="10,5.5 13.7,12.9 6.3,12.9" />
+    </svg>
+  );
+}
+
+/** Render: tela — qualidade/tema e sobre COMO o resultado aparece. */
+export function RenderIcon() {
+  return (
+    <svg {...MENU}>
+      <rect x="2.5" y="4" width="15" height="10" rx="1.3" />
+      <line x1="7" y1="17" x2="13" y2="17" />
+      <line x1="10" y1="14" x2="10" y2="17" />
+    </svg>
+  );
+}
+
+/** Baralho: duas cartas em leque — mesma leitura da escada de cartas do palco. */
+export function CardsIcon() {
+  return (
+    <svg {...MENU}>
+      <rect x="3.3" y="5.4" width="8.6" height="11.6" rx="1.3" transform="rotate(-9 7.6 11.2)" />
+      <rect x="7.7" y="3.4" width="8.6" height="11.6" rx="1.3" />
+    </svg>
+  );
+}
+
+/** Stream: camera de video — corpo + lente trapezoidal. */
+export function StreamIcon() {
+  return (
+    <svg {...MENU}>
+      <rect x="2.8" y="6.8" width="10.4" height="7.6" rx="1.2" />
+      <path d="M13.2 9.3 17.2 6.8v7.6l-4-2.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
