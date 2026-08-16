@@ -149,6 +149,8 @@ export function StreamApp({ options }: { options: StreamOptions }) {
 
   const animateCards = useCallback(
     (cards: Card[]) => {
+      rendererRef.current?.clear();
+      setShown(null);
       setShownCards((prev) => ({ cards, seq: (prev?.seq ?? 0) + 1 }));
       scheduleCardClear();
     },
@@ -171,6 +173,8 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       if (cards.length > 0) {
         setShownCards((prev) => ({ cards, seq: (prev?.seq ?? 0) + 1 }));
         scheduleCardClear();
+      } else {
+        setShownCards(null);
       }
       if (!exceedsAnimationCap(result)) {
         // Depois do commit: a placa precisa estar na tela pra ser medida.
@@ -289,7 +293,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
             />
           </div>
         )}
-        {shownCards !== null && (
+        {shownCards !== null && shown === null && (
           <div key={shownCards.seq} className="stream-result">
             <div className="result-chips">
               {shownCards.cards.map((card, i) => (

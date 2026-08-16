@@ -1032,23 +1032,25 @@ class OverlayView(context: Context) {
 
             // Destaca cartas vermelhas (♥ e ♦)
             val lineEnd = ssb.length
-            val cardRedRegex = Regex("""([A-2-9]|10|[JQK])([♥♦])""")
-            for (match in cardRedRegex.findAll(ssb.substring(startLine, lineEnd))) {
-                val matchStart = startLine + match.range.first
-                val matchEnd = startLine + match.range.last + 1
-                ssb.setSpan(
-                    ForegroundColorSpan(Color.parseColor("#FF6B6B")),
-                    matchStart,
-                    matchEnd,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-                ssb.setSpan(
-                    StyleSpan(Typeface.BOLD),
-                    matchStart,
-                    matchEnd,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-            }
+            try {
+                val cardRedRegex = Regex("""(10|[A2-9JQK])([♥♦])""")
+                for (match in cardRedRegex.findAll(ssb.substring(startLine, lineEnd))) {
+                    val matchStart = startLine + match.range.first
+                    val matchEnd = startLine + match.range.last + 1
+                    ssb.setSpan(
+                        ForegroundColorSpan(Color.parseColor("#FF6B6B")),
+                        matchStart,
+                        matchEnd,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                    ssb.setSpan(
+                        StyleSpan(Typeface.BOLD),
+                        matchStart,
+                        matchEnd,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                }
+            } catch (_: Exception) {}
 
             if (i < lines.size - 1) {
                 ssb.append("\n\n")
