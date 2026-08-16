@@ -14,10 +14,12 @@ ENV VITE_API_URL=$VITE_API_URL
 
 COPY package.json package-lock.json ./
 COPY packages/rules-engine/package.json packages/rules-engine/
+COPY packages/deck-engine/package.json packages/deck-engine/
 COPY apps/web/package.json apps/web/
 RUN npm ci
 
 COPY packages/rules-engine packages/rules-engine
+COPY packages/deck-engine packages/deck-engine
 COPY apps/web apps/web
 RUN npm run build -w @rolai/web
 

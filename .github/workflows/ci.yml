@@ -21,6 +21,21 @@ jobs:
       - run: npm test
       - run: npm run typecheck
 
+  deck-engine:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/deck-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+        working-directory: .
+      - run: npm test
+      - run: npm run typecheck
+
   backend:
     runs-on: ubuntu-latest
     defaults:
