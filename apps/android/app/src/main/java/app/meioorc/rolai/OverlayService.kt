@@ -537,7 +537,7 @@ class OverlayService : Service() {
         }
 
         override fun onDeckDraw(player: String, cardsJson: String, remaining: Int) {
-            overlay.addActivityLine("$player: ${formatCards(cardsJson)}")
+            overlay.addActivityLine("$player: ${formatDeckDrawAction(cardsJson)}")
             // Mesmo empurrao direto do onRoll acima — o palco anima sem
             // depender de nenhuma WebView espectadora.
             diceStage.playCard(cardsJson)
@@ -555,7 +555,7 @@ class OverlayService : Service() {
             autoReshuffleOnEmpty: Boolean?,
         ) {
             overlay.addActivityLine(
-                "$player: ${formatDeckConfigChange(includeJokers, removalMode, autoReshuffleOnEmpty)}",
+                "$player: mudou o baralho: ${formatDeckConfigChange(includeJokers, removalMode, autoReshuffleOnEmpty)}",
             )
         }
 
@@ -920,7 +920,7 @@ class OverlayService : Service() {
         if (!entregue) {
             diceStage.playCard(cards.toString())
             stageShow()
-            overlay.addActivityLine("você: ${formatCards(cards)}")
+            overlay.addActivityLine("você: ${formatDeckDrawAction(cards)}")
         }
     }
 
@@ -1047,6 +1047,17 @@ class OverlayService : Service() {
             "spades" to "♠",
         )
 
+        private val CARD_SUITS = arrayOf("♠", "♥", "♦", "♣")
+        private val CARD_RANKS = arrayOf("A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K")
+
+        /** Mapeia 1..13 para A..K com naipe determinístico igual ao web `cardFromRollValue`. */
+        fun cardFromRollValue(value: Int, cardIndex: Int = 0): String {
+            val rankIdx = (value.coerceIn(1, 13)) - 1
+            val rank = CARD_RANKS.getOrElse(rankIdx) { "10" }
+            val suit = CARD_SUITS[(value + cardIndex * 2) % CARD_SUITS.size]
+            return "$rank$suit"
+        }
+
         /** "10♥, K♠" / "Curinga" — mesma leitura do cardLabel() da web. */
         fun formatCards(cards: JSONArray): String =
             (0 until cards.length()).joinToString(", ") { i ->
@@ -1060,6 +1071,19 @@ class OverlayService : Service() {
             formatCards(JSONArray(cardsJson))
         } catch (e: Exception) {
             cardsJson.take(80)
+        }
+
+        /** "puxou 2 cartas: 10♥, K♠" — mesma leitura do HistoryList da web. */
+        fun formatDeckDrawAction(cards: JSONArray): String {
+            val count = cards.length()
+            val prefix = if (count == 1) "puxou 1 carta:" else "puxou $count cartas:"
+            return "$prefix ${formatCards(cards)}"
+        }
+
+        fun formatDeckDrawAction(cardsJson: String): String = try {
+            formatDeckDrawAction(JSONArray(cardsJson))
+        } catch (e: Exception) {
+            "puxou cartas: ${cardsJson.take(80)}"
         }
 
         /** Resumo legivel de uma mudanca de config — mesma leitura do
@@ -1092,48 +1116,86 @@ class OverlayService : Service() {
             return if (outcome.isEmpty()) OutcomeTone.NEUTRAL else outcomeTone(outcome)
         }
 
+        /** Formata o resultado completo de rolagem, cobrindo todos os grupos
+         *  (como `{2d6+1} vs {2c}` no Firelights ou `{1d6+2} vs {2d10}` no Ironsworn),
+         *  valores de cartas e Fudge, e múltiplas flags de outcome. */
         fun formatResult(resultJson: String): String {
             return try {
                 val result = JSONObject(resultJson)
                 val notation = result.optString("notation", "?")
-                val groups = result.optJSONObject("groups")
-                val firstGroup = groups?.keys()?.asSequence()?.firstOrNull()?.let { key ->
-                    groups.optJSONObject(key)
-                }
-                val dice = firstGroup?.optJSONArray("rolls")?.let { rolls ->
-                    (0 until rolls.length()).joinToString(", ") { rolls.getInt(it).toString() }
-                } ?: ""
-                val total = firstGroup?.let { group ->
-                    if (group.has("total")) group.getInt("total")
-                    else group.optJSONArray("rolls")?.let { rolls ->
-                        (0 until rolls.length()).sumOf { rolls.getInt(it) }
+                val groupsObj = result.optJSONObject("groups")
+
+                // Sub-notações para cada grupo (ex: "{2d6+mod} vs {2c}" -> ["2d6+mod", "2c"])
+                val groupNotations = Regex("""\{([^}]+)\}""").findAll(notation)
+                    .map { it.groupValues[1] }
+                    .toList()
+
+                val joiner = if (notation.contains(" + ")) " + " else " vs "
+
+                var totalCardIndex = 0
+                val groupStrings = mutableListOf<String>()
+
+                if (groupsObj != null) {
+                    val groupKeys = groupsObj.keys().asSequence().toList()
+                    for (gi in groupKeys.indices) {
+                        val groupKey = groupKeys[gi]
+                        val group = groupsObj.optJSONObject(groupKey) ?: continue
+                        val subNotation = groupNotations.getOrNull(gi) ?: notation
+                        val isCardGroup = Regex("""\b\d*c\b""").containsMatchIn(subNotation)
+                        val isFudgeGroup = Regex("""\b\d*dF\b""").containsMatchIn(subNotation)
+
+                        val rolls = group.optJSONArray("rolls")
+                        val rollsFormatted = if (rolls != null && rolls.length() > 0) {
+                            (0 until rolls.length()).joinToString(", ") { ri ->
+                                val v = rolls.getInt(ri)
+                                when {
+                                    isCardGroup -> cardFromRollValue(v, totalCardIndex++)
+                                    isFudgeGroup -> if (v > 0) "+" else if (v < 0) "−" else "0"
+                                    else -> v.toString()
+                                }
+                            }
+                        } else ""
+
+                        val mod = if (group.has("modifier")) group.getInt("modifier") else 0
+                        val modText = if (mod > 0) " + $mod" else if (mod < 0) " − ${kotlin.math.abs(mod)}" else ""
+                        val total = if (group.has("total")) {
+                            group.getInt("total")
+                        } else if (groupKeys.size == 1 && rolls != null && rolls.length() > 1 && !isCardGroup && !isFudgeGroup) {
+                            (0 until rolls.length()).sumOf { rolls.getInt(it) }
+                        } else null
+                        val totalText = if (total != null && !isCardGroup) " = $total" else ""
+
+                        val groupStr = buildString {
+                            if (rollsFormatted.isNotEmpty()) append("[$rollsFormatted]")
+                            append(modText)
+                            append(totalText)
+                        }
+                        if (groupStr.isNotEmpty()) groupStrings.add(groupStr)
                     }
                 }
+
+                val allGroupsText = groupStrings.joinToString(joiner)
+
                 // Mais de uma flag bateu (Infaernum: "1 milagre" + "2
                 // desgraças" na mesma rolagem; Ironsworn: "strong_hit" +
-                // "match"): mostra todas, juntas — só o `outcome` (a
-                // primeira) escondia o resto sem erro nenhum.
+                // "match"): mostra todas, juntas.
                 val flags = result.optJSONArray("outcome_flags")
                 val outcome = if (flags != null && flags.length() > 1) {
                     (0 until flags.length()).joinToString(", ") { outcomeLabel(flags.getString(it)) }
                 } else {
                     result.optString("outcome", "").let { if (it.isEmpty()) it else outcomeLabel(it) }
                 }
-                // Contra o que o resultado foi medido (CD, pericia, valor
-                // testado...) — "tested" so existe quando algum input do
-                // profile aparece nas outcome_rules (ver testedInputs em
-                // rules-engine/profile.ts). Sem isto "sucesso" sozinho nao
-                // diz contra o que.
+
                 val tested = result.optJSONArray("tested")?.let { arr ->
                     (0 until arr.length()).joinToString(", ") { i ->
                         val item = arr.getJSONObject(i)
                         "${item.getString("label")}: ${item.get("value")}"
                     }
                 } ?: ""
+
                 buildString {
                     append(notation)
-                    if (dice.isNotEmpty()) append(" [$dice]")
-                    if (total != null) append(" = $total")
+                    if (allGroupsText.isNotEmpty()) append(" $allGroupsText")
                     if (outcome.isNotEmpty()) append(" — $outcome")
                     if (tested.isNotEmpty()) append(" ($tested)")
                 }

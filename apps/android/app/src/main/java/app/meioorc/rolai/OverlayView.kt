@@ -15,7 +15,11 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.text.Editable
+import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.text.TextWatcher
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -677,24 +681,20 @@ class OverlayView(context: Context) {
         }
 
         historyResultView = TextView(context).apply {
-            setTextColor(TEXT)
-            textSize = 22f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, Typeface.BOLD)
+            visibility = View.GONE
         }
 
         historyLinesView = TextView(context).apply {
-            setTextColor(MUTED)
-            textSize = 11f
-            typeface = Typeface.MONOSPACE
+            setTextColor(TEXT)
+            textSize = 12.5f
+            setLineSpacing(4.dp().toFloat(), 1.0f)
             setText(R.string.overlay_history_empty)
         }
 
         val body = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             addView(header)
-            addView(historyResultView, vParams(topMargin = 10))
-            addView(historyLinesView, vParams(topMargin = 8))
+            addView(historyLinesView, vParams(topMargin = 12))
         }
         historyScroll = scrollWrapper(context, body)
 
@@ -702,8 +702,8 @@ class OverlayView(context: Context) {
             orientation = LinearLayout.VERTICAL
             background = cardBackground()
             elevation = 12.dp().toFloat()
-            setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
-            layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
+            setPadding(16.dp(), 14.dp(), 16.dp(), 14.dp())
+            layoutParams = FrameLayout.LayoutParams(310.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
             addView(historyScroll)
         }
     }
@@ -996,12 +996,65 @@ class OverlayView(context: Context) {
     }
 
     private fun renderHistory() {
-        val lines = history.toList().takeLast(HISTORY_CARD_LINES)
-        historyLinesView.text = if (lines.isEmpty()) {
-            historyLinesView.context.getString(R.string.overlay_history_empty)
-        } else {
-            lines.joinToString("\n")
+        val lines = history.toList().reversed().take(HISTORY_CARD_LINES)
+        if (lines.isEmpty()) {
+            historyLinesView.text = historyLinesView.context.getString(R.string.overlay_history_empty)
+            return
         }
+        val ssb = SpannableStringBuilder()
+        for (i in lines.indices) {
+            val line = lines[i]
+            val colonIdx = line.indexOf(": ")
+            val startLine = ssb.length
+
+            if (colonIdx != -1) {
+                val playerName = line.substring(0, colonIdx)
+                val rest = line.substring(colonIdx + 2)
+                val nameStart = ssb.length
+                ssb.append(playerName)
+                ssb.setSpan(
+                    ForegroundColorSpan(ACCENT_BRIGHT),
+                    nameStart,
+                    ssb.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+                ssb.setSpan(
+                    StyleSpan(Typeface.BOLD),
+                    nameStart,
+                    ssb.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+                ssb.append(": ")
+                ssb.append(rest)
+            } else {
+                ssb.append(line)
+            }
+
+            // Destaca cartas vermelhas (♥ e ♦)
+            val lineEnd = ssb.length
+            val cardRedRegex = Regex("""([A-2-9]|10|[JQK])([♥♦])""")
+            for (match in cardRedRegex.findAll(ssb.substring(startLine, lineEnd))) {
+                val matchStart = startLine + match.range.first
+                val matchEnd = startLine + match.range.last + 1
+                ssb.setSpan(
+                    ForegroundColorSpan(Color.parseColor("#FF6B6B")),
+                    matchStart,
+                    matchEnd,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+                ssb.setSpan(
+                    StyleSpan(Typeface.BOLD),
+                    matchStart,
+                    matchEnd,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+
+            if (i < lines.size - 1) {
+                ssb.append("\n\n")
+            }
+        }
+        historyLinesView.text = ssb
     }
 
     // ---------- pecas compartilhadas ----------
@@ -1578,8 +1631,8 @@ class OverlayView(context: Context) {
         private val FAILURE_TEXT = Color.rgb(0xFF, 0x6B, 0x6B)
         private val PARTIAL_TEXT = Color.rgb(0xFF, 0xC6, 0x5C)
         private const val MAX_ACTIVITY_LINES = 3
-        private const val HISTORY_CARD_LINES = 10
-        private const val MAX_HISTORY = 20
+        private const val HISTORY_CARD_LINES = 20
+        private const val MAX_HISTORY = 40
 
         /** Tempo do flash de resultado na tela antes de sumir sozinho. */
         private const val RESULT_FLASH_MS = 6_000L

@@ -14,7 +14,7 @@ private val OUTCOME_LABELS: Map<String, String> = mapOf(
     "strong_hit" to "sucesso completo",
     "weak_hit" to "sucesso parcial",
     "miss" to "falha",
-    "match" to "match!",
+    "match" to "combinação!",
     "critical" to "crítico",
     "full_success" to "sucesso total",
     "partial_success" to "sucesso parcial",
