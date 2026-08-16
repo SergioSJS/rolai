@@ -1,6 +1,6 @@
 {
   "name": "@rolai/rules-engine",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Parser de notacao + profiles de sistema do rolai. Usado por apps/web e pela WebView headless de apps/android.",
   "type": "module",
   "main": "src/index.ts",

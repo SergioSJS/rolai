@@ -12,6 +12,15 @@ data class ChangelogEntry(val version: String, val date: String, val notes: List
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            "1.0.1",
+            "2026-08-16",
+            listOf(
+                "Histórico do overlay com ordenação correta (mais recentes no topo) e tags de jogadores destacadas.",
+                "Formatação rica de rolagens com múltiplos grupos e cartas (Firelights e Ironsworn) no overlay.",
+                "Correção na exibição e ciclo de fade do palco de cartas do overlay.",
+            ),
+        ),
+        ChangelogEntry(
             "1.0.0",
             "2026-08-16",
             listOf(

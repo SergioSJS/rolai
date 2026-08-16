@@ -12,6 +12,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.0.1",
+    date: "2026-08-16",
+    notes: [
+      "Histórico do overlay com ordenação correta (mais recentes no topo) e tags de jogadores destacadas.",
+      "Formatação rica de rolagens com múltiplos grupos e cartas (Firelights e Ironsworn) no overlay.",
+      "Correção na exibição e ciclo de fade do palco de cartas do overlay.",
+    ],
+  },
+  {
     version: "1.0.0",
     date: "2026-08-16",
     notes: [
