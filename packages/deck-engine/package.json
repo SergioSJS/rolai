@@ -1,0 +1,17 @@
+{
+  "name": "@rolai/deck-engine",
+  "version": "0.1.0",
+  "description": "Baralho de cartas: shuffle/draw/config. Usado por apps/web e pela WebView headless de apps/android. Ver specs/08-baralho.md.",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

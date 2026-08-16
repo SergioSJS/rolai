@@ -6,7 +6,11 @@
 # CustomProfile e filhos espelham o schema de docs/system-profiles.md — o
 # backend valida estrutura antes de persistir, sem avaliar `condition`
 # (isso e do rules-engine TS).
-from typing import Any, Literal
+# DeckCard e os eventos deck_* espelham @rolai/deck-engine (TS, ver
+# packages/deck-engine/src/types.ts) — specs/08-baralho.md. Campo de wire
+# em snake_case (mesma convencao do resto do protocolo: `outcome_flags`,
+# `compare_individually`), o cliente TS traduz pra camelCase.
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -41,6 +45,59 @@ class RollEventIn(BaseModel):
     result: RollResult
 
 
+class DeckCard(BaseModel):
+    """Uma carta — espelha Card de @rolai/deck-engine."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=32)
+    suit: Literal["hearts", "diamonds", "clubs", "spades", "joker"]
+    rank: Literal["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "joker"]
+
+
+class DeckDrawEventIn(BaseModel):
+    """Envelope client -> server pra uma puxada de baralho. Baralho e local
+    por jogador (specs/08-baralho.md) — o backend nao sabe se `remaining`
+    bate com um monte de verdade, so valida a FORMA e retransmite pro
+    historico da sala, igual a rolagem."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["deck_draw"]
+    cards: list[DeckCard] = Field(min_length=1, max_length=54)
+    remaining: int = Field(ge=0, le=54)
+    timestamp: str
+
+
+class DeckShuffleEventIn(BaseModel):
+    """Envelope client -> server: jogador reembaralhou o proprio baralho."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["deck_shuffle"]
+    timestamp: str
+
+
+class DeckConfigEventIn(BaseModel):
+    """Envelope client -> server: jogador mudou config do baralho (curinga,
+    modo de remocao, reembaralhar automatico). Todo campo opcional — so o
+    que mudou vai no evento."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["deck_config"]
+    include_jokers: bool | None = None
+    removal_mode: Literal["permanent", "returns"] | None = None
+    auto_reshuffle_on_empty: bool | None = None
+    timestamp: str
+
+
+ClientEventIn = Annotated[
+    RollEventIn | DeckDrawEventIn | DeckShuffleEventIn | DeckConfigEventIn,
+    Field(discriminator="type"),
+]
+
+
 HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
 
 
@@ -66,13 +123,50 @@ class RosterMember(BaseModel):
     style: DiceStyle | None = None
 
 
-class HistoryEntry(BaseModel):
+class RollHistoryEntry(BaseModel):
     """Entrada do historico da sala: quem rolou, o resultado e a aparencia
     dos dados de quem rolou (pra reproduzir a cor certa no replay)."""
 
+    type: Literal["roll"] = "roll"
     player: str
     result: RollResult
     style: DiceStyle | None = None
+
+
+class DeckDrawHistoryEntry(BaseModel):
+    """Log de uma puxada de baralho — quem puxou, quais cartas, quantas
+    ficaram (specs/08-baralho.md, "log de quem reembaralhar e operar")."""
+
+    type: Literal["deck_draw"] = "deck_draw"
+    player: str
+    cards: list[DeckCard]
+    remaining: int
+    timestamp: str
+
+
+class DeckShuffleHistoryEntry(BaseModel):
+    """Log de um reembaralhar — so quem e quando; a composicao nao muda."""
+
+    type: Literal["deck_shuffle"] = "deck_shuffle"
+    player: str
+    timestamp: str
+
+
+class DeckConfigHistoryEntry(BaseModel):
+    """Log de uma mudanca de config do baralho."""
+
+    type: Literal["deck_config"] = "deck_config"
+    player: str
+    include_jokers: bool | None = None
+    removal_mode: Literal["permanent", "returns"] | None = None
+    auto_reshuffle_on_empty: bool | None = None
+    timestamp: str
+
+
+HistoryEntry = Annotated[
+    RollHistoryEntry | DeckDrawHistoryEntry | DeckShuffleHistoryEntry | DeckConfigHistoryEntry,
+    Field(discriminator="type"),
+]
 
 
 # --- profiles custom (docs/system-profiles.md) ---
@@ -143,6 +237,11 @@ class RoomCreated(BaseModel):
 #   {"type": "snapshot", "roster": [RosterMember], "history": [HistoryEntry]}
 #   {"type": "roll", "player": str, "result": RollResult, "style": DiceStyle?}
 #       (broadcast, inclui remetente)
+#   {"type": "deck_draw", "player": str, "cards": [DeckCard], "remaining": int, "timestamp": str}
+#   {"type": "deck_shuffle", "player": str, "timestamp": str}
+#   {"type": "deck_config", "player": str, "include_jokers": bool?,
+#    "removal_mode": str?, "auto_reshuffle_on_empty": bool?, "timestamp": str}
+#       (os tres deck_* acima: broadcast, inclui remetente, mesmo ack/echo da rolagem)
 #   {"type": "roster", "roster": [RosterMember]}   (entrada/saida de jogador)
 #   {"type": "error", "message": str}
 ServerMessage = dict[str, Any]

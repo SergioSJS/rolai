@@ -27,6 +27,15 @@ def _room_with_history(client: TestClient) -> str:
             }
         )
         ws.receive_json()  # echo
+        ws.send_json(
+            {
+                "type": "deck_draw",
+                "cards": [{"id": "hearts-A", "suit": "hearts", "rank": "A"}],
+                "remaining": 51,
+                "timestamp": "2026-01-01T00:02:00Z",
+            }
+        )
+        ws.receive_json()  # echo
     return code
 
 
@@ -36,8 +45,10 @@ def test_export_json(client: TestClient) -> None:
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["room"] == code
-    assert len(payload["history"]) == 2
+    assert len(payload["history"]) == 3
     assert payload["history"][1]["result"]["outcome_flags"] == ["weak_hit"]
+    assert payload["history"][2]["type"] == "deck_draw"
+    assert payload["history"][2]["remaining"] == 51
 
 
 def test_export_csv(client: TestClient) -> None:
@@ -45,10 +56,11 @@ def test_export_csv(client: TestClient) -> None:
     resp = client.get(f"/rooms/{code}/export?format=csv")
     assert resp.status_code == 200
     lines = resp.text.strip().splitlines()
-    assert lines[0] == "timestamp,player,notation,profile,outcome,outcome_flags"
-    assert len(lines) == 3
+    assert lines[0] == "timestamp,player,type,notation,profile,outcome,outcome_flags,detail"
+    assert len(lines) == 4
     assert "Ana" in lines[1] and "2d6" in lines[1]
     assert "ironsworn" in lines[2] and "weak_hit" in lines[2]
+    assert "deck_draw" in lines[3] and "restam 51" in lines[3]
 
 
 def test_export_markdown(client: TestClient) -> None:
@@ -56,8 +68,9 @@ def test_export_markdown(client: TestClient) -> None:
     resp = client.get(f"/rooms/{code}/export?format=md")
     assert resp.status_code == 200
     assert resp.text.startswith(f"# Sala {code}")
-    assert "| timestamp | player | notation |" in resp.text
+    assert "| timestamp | player | type | notation |" in resp.text
     assert "ironsworn" in resp.text
+    assert "deck_draw" in resp.text
 
 
 def test_export_unknown_room_is_404(client: TestClient) -> None:

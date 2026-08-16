@@ -126,7 +126,7 @@ def test_malformed_payload_rejected_without_dropping_connection(client: TestClie
         ws.send_json({"type": "roll", "result": {"notation": "2d6"}})  # falta groups/timestamp
         error = next_event(ws)
         assert error["type"] == "error"
-        assert error["message"].startswith("invalid_roll")
+        assert error["message"].startswith("invalid_event")
 
         ws.send_json({"type": "desconhecido"})
         error = next_event(ws)

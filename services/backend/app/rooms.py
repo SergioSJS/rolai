@@ -19,9 +19,21 @@
 #     validado via Pydantic (nunca dict cru). O broadcast vai para TODOS os
 #     conectados na sala, incluindo o remetente (serve de ack/echo):
 #       {"type": "roll", "player": str, "result": <RollResult>, "style": DiceStyle|null}
-#   - Payload malformado (JSON invalido, envelope desconhecido, RollResult
-#     fora do schema) -> {"type": "error", "message": ...} de volta ao
-#     remetente, sem derrubar a conexao.
+#   - Baralho (specs/08-baralho.md) e local por jogador — o backend nao guarda
+#     estado de monte nenhum, so retransmite e loga quem operou, MESMO
+#     esquema de confianca da rolagem (relay burro, nunca valida se
+#     `remaining` bate com um monte de verdade):
+#       {"type": "deck_draw", "cards": [DeckCard], "remaining": int, "timestamp": str}
+#       {"type": "deck_shuffle", "timestamp": str}
+#       {"type": "deck_config", "include_jokers": bool?, "removal_mode": str?,
+#        "auto_reshuffle_on_empty": bool?, "timestamp": str}
+#     cada um faz broadcast igual ao roll (inclui remetente, ecoa "player"):
+#       {"type": "deck_draw", "player": str, "cards": [...], "remaining": int, "timestamp": str}
+#       {"type": "deck_shuffle", "player": str, "timestamp": str}
+#       {"type": "deck_config", "player": str, "include_jokers": ..., "timestamp": str}
+#   - Payload malformado (JSON invalido, envelope desconhecido, ou corpo fora
+#     do schema do `type` declarado) -> {"type": "error", "message": ...} de
+#     volta ao remetente, sem derrubar a conexao.
 #   - Mensagem maior que settings.max_message_bytes (4KB default) e rejeitada
 #     com erro ANTES de qualquer parse.
 #   - Rate limit por conexao (token bucket em memoria): ao estourar, o
@@ -53,14 +65,28 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from redis.asyncio import Redis
 
 from app.config import Settings
 from app.limits import client_ip, within_limit
 from app.logs import log
 from app.rate_limit import TokenBucket
-from app.schemas import DiceStyle, HistoryEntry, RollEventIn, RoomCreated, RosterMember
+from app.schemas import (
+    ClientEventIn,
+    DeckConfigEventIn,
+    DeckConfigHistoryEntry,
+    DeckDrawEventIn,
+    DeckDrawHistoryEntry,
+    DeckShuffleEventIn,
+    DeckShuffleHistoryEntry,
+    DiceStyle,
+    HistoryEntry,
+    RollEventIn,
+    RollHistoryEntry,
+    RoomCreated,
+    RosterMember,
+)
 
 if TYPE_CHECKING:
     from app.stats import StatsCollector
@@ -70,6 +96,12 @@ router = APIRouter()
 MAX_CODE_RETRIES = 10
 
 ACTIVE_ROOMS_KEY = "rooms:active"
+
+# TypeAdapter pra validar/serializar as unioes discriminadas por "type"
+# (schemas.py) — Pydantic nao oferece um .model_validate_json de classe
+# pra um Union direto, precisa de um adapter.
+_CLIENT_EVENT_ADAPTER: TypeAdapter[ClientEventIn] = TypeAdapter(ClientEventIn)
+_HISTORY_ENTRY_ADAPTER: TypeAdapter[HistoryEntry] = TypeAdapter(HistoryEntry)
 
 
 class RoomCapReached(Exception):
@@ -168,7 +200,7 @@ class RoomStore:
         members = [RosterMember.model_validate_json(v) for v in values]
         return sorted(members, key=lambda m: m.name)
 
-    async def append_roll(self, code: str, entry: HistoryEntry) -> None:
+    async def append_history(self, code: str, entry: HistoryEntry) -> None:
         key = self._key(code, ":history")
         await self._redis.rpush(key, entry.model_dump_json())
         await self._redis.ltrim(key, -self._settings.history_max_entries, -1)
@@ -176,7 +208,7 @@ class RoomStore:
 
     async def history(self, code: str) -> list[HistoryEntry]:
         raw = await self._redis.lrange(self._key(code, ":history"), 0, -1)
-        return [HistoryEntry.model_validate_json(item) for item in raw]
+        return [_HISTORY_ENTRY_ADAPTER.validate_json(item) for item in raw]
 
 
 def _settings_of(request_or_ws: Request | WebSocket) -> Settings:
@@ -267,18 +299,55 @@ async def export_room(
 
 
 def _history_row(entry: HistoryEntry) -> list[str]:
-    r = entry.result
-    return [
-        r.timestamp,
-        entry.player,
-        r.notation,
-        r.profile or "",
-        r.outcome or "",
-        "|".join(r.outcome_flags or []),
-    ]
+    if isinstance(entry, RollHistoryEntry):
+        r = entry.result
+        return [
+            r.timestamp,
+            entry.player,
+            "roll",
+            r.notation,
+            r.profile or "",
+            r.outcome or "",
+            "|".join(r.outcome_flags or []),
+            "",
+        ]
+    if isinstance(entry, DeckDrawHistoryEntry):
+        cards = " ".join(f"{c.rank}{c.suit[:1]}" for c in entry.cards)
+        return [
+            entry.timestamp,
+            entry.player,
+            "deck_draw",
+            "",
+            "",
+            "",
+            "",
+            f"{cards} (restam {entry.remaining})",
+        ]
+    if isinstance(entry, DeckShuffleHistoryEntry):
+        return [entry.timestamp, entry.player, "deck_shuffle", "", "", "", "", ""]
+    # DeckConfigHistoryEntry
+    changes = ", ".join(
+        f"{field}={value}"
+        for field, value in (
+            ("include_jokers", entry.include_jokers),
+            ("removal_mode", entry.removal_mode),
+            ("auto_reshuffle_on_empty", entry.auto_reshuffle_on_empty),
+        )
+        if value is not None
+    )
+    return [entry.timestamp, entry.player, "deck_config", "", "", "", "", changes]
 
 
-_CSV_HEADER = ["timestamp", "player", "notation", "profile", "outcome", "outcome_flags"]
+_CSV_HEADER = [
+    "timestamp",
+    "player",
+    "type",
+    "notation",
+    "profile",
+    "outcome",
+    "outcome_flags",
+    "detail",
+]
 
 
 def _history_csv(history: list[HistoryEntry]) -> str:
@@ -557,24 +626,66 @@ async def room_ws(
                 break
             if _is_pong(raw):
                 continue  # resposta ao heartbeat — nao e rolagem
-            event_in = await _parse_roll_event(websocket, raw, code, name)
+            event_in = await _parse_client_event(websocket, raw, code, name)
             if event_in is None:
                 continue  # erro ja enviado ao remetente
             if spectator:
-                # Espectador nunca rola: erro ao remetente, nada vai pro
-                # broadcast nem pro historico.
+                # Espectador nunca rola nem mexe no proprio baralho em sala:
+                # erro ao remetente, nada vai pro broadcast nem pro historico.
                 await _send_error(websocket, "spectator_cannot_roll")
                 continue
-            entry = HistoryEntry(player=name, result=event_in.result, style=dice_style)
-            # `style` acompanha a rolagem: cada cliente anima o dado de quem
-            # rolou com a cor de quem rolou, e nao com a propria.
-            event: dict[str, object] = {
-                "type": "roll",
-                "player": name,
-                "result": event_in.result.model_dump(mode="json", exclude_none=True),
-                "style": dice_style.model_dump(mode="json") if dice_style else None,
-            }
-            await store.append_roll(code, entry)
+            entry: HistoryEntry
+            event: dict[str, object]
+            if isinstance(event_in, RollEventIn):
+                # `style` acompanha a rolagem: cada cliente anima o dado de
+                # quem rolou com a cor de quem rolou, e nao com a propria.
+                entry = RollHistoryEntry(player=name, result=event_in.result, style=dice_style)
+                event = {
+                    "type": "roll",
+                    "player": name,
+                    "result": event_in.result.model_dump(mode="json", exclude_none=True),
+                    "style": dice_style.model_dump(mode="json") if dice_style else None,
+                }
+                _stats_of(websocket).rolls_relayed += 1
+            elif isinstance(event_in, DeckDrawEventIn):
+                entry = DeckDrawHistoryEntry(
+                    player=name,
+                    cards=event_in.cards,
+                    remaining=event_in.remaining,
+                    timestamp=event_in.timestamp,
+                )
+                event = {
+                    "type": "deck_draw",
+                    "player": name,
+                    "cards": [c.model_dump(mode="json") for c in event_in.cards],
+                    "remaining": event_in.remaining,
+                    "timestamp": event_in.timestamp,
+                }
+            elif isinstance(event_in, DeckShuffleEventIn):
+                entry = DeckShuffleHistoryEntry(player=name, timestamp=event_in.timestamp)
+                event = {"type": "deck_shuffle", "player": name, "timestamp": event_in.timestamp}
+            elif isinstance(event_in, DeckConfigEventIn):
+                entry = DeckConfigHistoryEntry(
+                    player=name,
+                    include_jokers=event_in.include_jokers,
+                    removal_mode=event_in.removal_mode,
+                    auto_reshuffle_on_empty=event_in.auto_reshuffle_on_empty,
+                    timestamp=event_in.timestamp,
+                )
+                event = {
+                    "type": "deck_config",
+                    "player": name,
+                    "include_jokers": event_in.include_jokers,
+                    "removal_mode": event_in.removal_mode,
+                    "auto_reshuffle_on_empty": event_in.auto_reshuffle_on_empty,
+                    "timestamp": event_in.timestamp,
+                }
+            else:
+                # Inalcancavel: ClientEventIn cobre exatamente estes 4 tipos
+                # (schemas.py). Explicito em vez de um `else` silencioso pra
+                # nao esconder um tipo novo esquecido aqui se a uniao crescer.
+                raise TypeError(f"tipo de evento nao tratado: {event_in.type}")
+            await store.append_history(code, entry)
             # Espectadores recebem o broadcast tambem — e o que alimenta a
             # animacao da Browser Source do OBS. `_room_dict` de novo aqui
             # (nao os `connections`/`spectators` capturados la em cima): esta
@@ -582,7 +693,6 @@ async def room_ws(
             # AGORA, nao o de quando ela entrou (ver docstring de _room_dict).
             await _broadcast(_room_dict(websocket.app.state.room_connections, code), event)
             await _broadcast(_room_dict(websocket.app.state.room_spectators, code), event)
-            _stats_of(websocket).rolls_relayed += 1
     except WebSocketDisconnect:
         pass
     finally:
@@ -607,7 +717,7 @@ async def room_ws(
 
 def _is_pong(raw: str) -> bool:
     """Resposta do cliente ao {"type":"ping"} do heartbeat. Sem este filtro
-    o pong cairia na validacao de RollEventIn e voltaria erro pro remetente
+    o pong cairia na validacao de ClientEventIn e voltaria erro pro remetente
     a cada heartbeat."""
     try:
         data: object = json.loads(raw)
@@ -616,12 +726,13 @@ def _is_pong(raw: str) -> bool:
     return isinstance(data, dict) and data.get("type") == "pong"
 
 
-async def _parse_roll_event(
+async def _parse_client_event(
     websocket: WebSocket, raw: str, code: str, player: str
-) -> RollEventIn | None:
-    """Valida o envelope e o RollResult via Pydantic. Erros viram mensagem
-    de erro ao remetente (sem derrubar a conexao) e retorno None. Loga so o
-    motivo — nunca o payload da rolagem (ruido)."""
+) -> ClientEventIn | None:
+    """Valida o envelope contra a uniao discriminada por "type" (roll ou
+    deck_*) via Pydantic. Erros viram mensagem de erro ao remetente (sem
+    derrubar a conexao) e retorno None. Loga so o motivo — nunca o payload
+    (ruido, e pode ser rolagem)."""
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
@@ -629,8 +740,8 @@ async def _parse_roll_event(
         await _send_error(websocket, "invalid_json")
         return None
     try:
-        return RollEventIn.model_validate(data)
+        return _CLIENT_EVENT_ADAPTER.validate_python(data)
     except ValidationError as exc:
-        log.warning("event=payload_rejected reason=invalid_roll code=%s player=%s", code, player)
-        await _send_error(websocket, f"invalid_roll: {exc.errors()[0]['msg']}")
+        log.warning("event=payload_rejected reason=invalid_event code=%s player=%s", code, player)
+        await _send_error(websocket, f"invalid_event: {exc.errors()[0]['msg']}")
         return None
