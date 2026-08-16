@@ -27,6 +27,8 @@ export interface DiceSpec {
   // (tres resultados distintos, o que mantem keep/drop e o RNG coerentes);
   // quem mapeia pro intervalo [-1, 1] e o roller.
   fudge?: true;
+  // Cartas de baralho ("2c"): valores 1..10 (ou 1..13).
+  card?: true;
 }
 
 // Um termo de dado dentro de um grupo multi-termo ("2d6+1d4-1d20").
@@ -66,8 +68,8 @@ const GROUP_PATTERN = /^\{([^{}]+)\}\s*vs\s*\{([^{}]+)\}$/i;
 // profiles — docs/system-profiles.md): "{2d10} + {2d10}". Sem "vs": os
 // grupos aqui nunca sao comparados um com o outro pela gramatica.
 const PLUS_GROUP_PATTERN = /^\{[^{}]+\}(?:\s*\+\s*\{[^{}]+\})+$/;
-// "2d6", "d20" e tambem o dado Fudge "4dF" (faces -1/0/+1).
-const DICE_HEAD = /^(\d*)d(\d+|f)/i;
+// "2d6", "d20", "4dF", "2c" (cartas de baralho).
+const DICE_HEAD = /^(\d*)(?:d(\d+|f)|c)/i;
 const NUMBER = /^(\d+)/;
 const TOKEN_PATTERNS: [RegExp, string][] = [
   [/^(kh|kl|dh|dl)(\d+)/i, "keepdrop"],
@@ -86,16 +88,18 @@ function parseHead(rest: string, expr: string): { spec: DiceSpec; rest: string }
     throw new NotationError(`expressao de dados invalida: "${expr}"`);
   }
   const count = head[1] === "" ? 1 : Number(head[1]);
-  const fudge = head[2]!.toLowerCase() === "f";
-  const sides = fudge ? 3 : Number(head[2]);
+  const isCard = head[0].toLowerCase().endsWith("c");
+  const fudge = !isCard && head[2]?.toLowerCase() === "f";
+  const sides = isCard ? 13 : fudge ? 3 : Number(head[2]);
   if (!Number.isInteger(count) || count < 1 || count > MAX_DICE) {
     throw new NotationError(`quantidade de dados invalida em "${expr}"`);
   }
-  if (!fudge && (!Number.isInteger(sides) || sides < 2 || sides > MAX_SIDES)) {
+  if (!fudge && !isCard && (!Number.isInteger(sides) || sides < 2 || sides > MAX_SIDES)) {
     throw new NotationError(`numero de faces invalido em "${expr}"`);
   }
   const spec: DiceSpec = { count, sides, modifier: 0, hasModifier: false };
   if (fudge) spec.fudge = true;
+  if (isCard) spec.card = true;
   return { spec, rest: rest.slice(head[0].length) };
 }
 

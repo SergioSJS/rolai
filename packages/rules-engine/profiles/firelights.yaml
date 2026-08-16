@@ -1,0 +1,24 @@
+system: firelights
+label: "Firelights — Ação"
+roll_type: comparison
+inputs:
+  - id: modifier
+    label: "Modificador"
+    type: number
+    default: "0"
+fields:
+  - id: action
+    dice: "2d6"
+    modifier: "{input.modifier}"
+  - id: challenge
+    dice: "2c"
+    compare_individually: true
+outcome_rules:
+  - condition: "action.total > challenge[0] and action.total > challenge[1]"
+    result: strong_hit
+  - condition: "action.total > challenge[0] xor action.total > challenge[1]"
+    result: weak_hit
+  - condition: "action.total <= challenge[0] and action.total <= challenge[1]"
+    result: miss
+  - condition: "challenge[0] == challenge[1]"
+    result: match
