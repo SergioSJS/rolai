@@ -30,6 +30,15 @@ Notação padrão Roll20 (via `dice-roller-parser` ou equivalente):
 - keep/drop funciona (`4dFkh2`); `!r` **não** se aplica (o alvo numérico do
   reroll não tem significado nessas faces) e é erro de parse.
 
+### Cartas de Baralho (`c`)
+
+`Nc` (ex: `2c`, `1c`) representa o saque de $N$ cartas de desafio do baralho
+(usado por Firelights e composições mistas com cartas):
+
+- no AST ele aparece como `sides: 13` mais a flag `card: true` (1 = Ás, 2..10, 11 = Valete, 12 = Dama, 13 = Rei);
+- em comparações individuais (como `{2d6+2} vs {2c}` do Firelights), cada
+  carta retém seu valor individual para comparação com a rolagem de ação.
+
 ## Extensão: grupos comparados
 
 Operador de agrupamento — produz **arrays separados de resultado**, não

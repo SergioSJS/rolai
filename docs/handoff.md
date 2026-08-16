@@ -410,3 +410,25 @@ Um percalço que vale lembrar: `pip install .` no CI deixa cópia do pacote em
   salas, como decidido em docs/architecture.md.
 - Offline só funciona no BUILD (preview/produção) — `npm run dev` não tem
   SW. Validar com `npm run preview -w @rolai/web` + DevTools → Offline.
+
+## Sessão 2026-08-16 (Firelights, Cartas no Motor, Novos Dados 3D e Overlay Mobile)
+
+- **Cartas integradas à notação do motor de regras (`Nc`, ex: `2c`)**:
+  - `packages/rules-engine/src/parser.ts` reconhece termos com sufixo `c` (`sides: 13, card: true`).
+  - Valores de 1 a 13 representam Ás (1), números (2..10), Valete (11 / J), Dama (12 / Q) e Rei (13 / K).
+  - Sistema **Firelights** adicionado (`packages/rules-engine/profiles/firelights.yaml`), com ação `{2d6+mod}` contra desafio de 2 cartas `{2c}`, computando acerto forte, acerto fraco, falha e combinações (*match*).
+- **Separação de renderização entre Dados 3D e Cartas**:
+  - `diceFromResult` no web e android pula termos de carta (`card: true`), evitando rolar d10s fantasmas na mesa física 3D.
+  - `cardsFromResult` extrai as cartas sorteadas com ranks e naipes, animando o arremesso de cartas 3D via `CardStage3D` enquanto os dados 2d6 rolam com física por cima delas.
+  - Cache de texturas SVG corrigido por chave única (`${rank}-${suit}`), eliminando repetição de cartas anteriores.
+- **Novos botões de dados e organização**:
+  - Adicionados botões de `d2`, `d3`, `d66` e `carta` tanto na versão Web quanto no overlay Android.
+  - O overlay Android foi completamente reorganizado em 3 abas limpas (`[ SISTEMA ] [ DADOS ] [ BARALHO ]`), com rótulos compactos (`systemShortLabel`) e botões de rolagem com destaque visual unificado.
+  - Submenu colapsável dedicado de **Qualidade e Desempenho** desacoplado da aparência dos dados na `SettingsActivity` do Android.
+- **Rolagem mista unificada (Dados + Cartas, ex: `2d6+2c`)**:
+  - `handleFreeSubmit` e `OverlayService.rollNotation` avaliam notações mistas como uma única rolagem unificada no motor, sem separar em eventos distintos.
+  - `DisplayGroup` agora usa `DisplayRoll` para que cada termo retenha seu tipo (`d6`, `carta`, `dF`, etc.), exibindo chips de dados e cartas juntos com o total e somas corretas.
+- **Internacionalização (PT-BR)**:
+  - Rótulos de grupos traduzidos (`AÇÃO`, `DESAFIO`, `VERBO`, `SUBSTANTIVO`, `REGULARES`, `FOME/IRA`) e outcomes (`combinação!`).
+  - Modal de Ajuda da Notação atualizado com exemplos de cartas (`1c`, `2c`, `{2d6+2} vs {2c}`).
+

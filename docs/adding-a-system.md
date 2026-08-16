@@ -142,7 +142,7 @@ YAML.
    que o `ResultDisplay.tsx` que você acabou de editar).
 4. **Android nativo** — isto NÃO vem de bundle, é código Kotlin duplicado à
    mão e por isso esquecido com facilidade:
-   - `OutcomeLabels.kt` e `OutcomeTone.kt` — mesmos ids que você acabou de
+   - `OutcomeLabels.kt` and `OutcomeTone.kt` — mesmos ids que você acabou de
      adicionar em `format.ts`, cópia manual dos dois mapas (label E tom).
    - `ProfileFamilies.kt` — mesma família que você registrou em
      `profileFamilies.ts` do lado web. Web e Android têm **dois arquivos
@@ -150,14 +150,13 @@ YAML.
      sem os modos.
    - Família ou sistema com input precisa aparecer no **overlay flutuante**
      (`OverlayView`/`OverlayService` — a caixa de rolar de dentro de outro
-     app), não só na `SettingsActivity`. Nesta sessão a família Infaernum
-     foi corrigida na tela de configurações e ESQUECIDA no overlay por
-     várias mensagens — são dois lugares diferentes que mostram sistema,
-     confira os dois.
-   - O botão "ROLAR" do sistema dentro do overlay precisa do MESMO estilo
-     chamativo do botão "ROLAR Nd6" do compositor livre. Um botão fraco ao
-     lado de um forte faz a pessoa tocar sempre no errado e concluir que o
-     sistema "não funciona" — não é bug de lógica, é hierarquia visual.
+     app), não só na `SettingsActivity`. O layout do overlay usa 3 abas
+     principais (`[ SISTEMA ] [ DADOS ] [ BARALHO ]`), onde a primeira aba
+     leva o nome enxuto do sistema via `systemShortLabel` (ex: "Firelights",
+     "Ironsworn", "WoD v5"), sem descrições longas.
+   - O botão "ROLAR" do sistema dentro do overlay leva o formato
+     `ROLAR ${systemShortLabel.uppercase()}` (ex: `ROLAR FIRELIGHTS`), com o
+     mesmo estilo chamativo de destaque do botão do compositor livre.
 5. **Testar no aparelho físico com o fluxo completo**, não só abrir e
    olhar: configurar valores → rolar pelo botão do sistema → minimizar com
    o "—" (não o "fechar") → reabrir → tocar na mini-bolha "rolar" do fan →

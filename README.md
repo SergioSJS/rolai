@@ -79,6 +79,16 @@ verdade — feito pra Browser Source. `&chroma=rrggbb` troca por chroma key, e
 `&style=`, `&scale=`, `&quality=` ajustam a aparência sem depender do
 localStorage do navegador (é assim que o overlay Android configura o palco).
 
+## Agradecimentos e Créditos
+
+O Rolaí é construído sobre excelentes recursos e bibliotecas abertas:
+
+- **Efeitos Sonoros de Baralho**: [Kenney.nl](https://kenney.nl) — *Casino Audio* (efeitos de manuseio e embaralhamento de cartas gravados em alta qualidade, sob licença **CC0 1.0 Universal / Domínio Público**).
+- **Cartas de Baralho Vetoriais**: [@letele/playing-cards](https://github.com/letele/playing-cards) — Baralho clássico em SVG vetorial de alta definição (licença **MIT / CC-BY**).
+- **Renderizador e Física 3D dos Dados**: Frank Ali e comunidade por [`@3d-dice/dice-box-threejs`](https://github.com/3d-dice/dice-box-threejs) (Three.js + Cannon-es, licença **MIT**).
+- **Texturas e Temas de Dados**: MajorVictory, SpencerThayer e contribuidores da comunidade tabletop 3D.
+- **Tipografia**: Fontes [*Cinzel*](https://fonts.google.com/specimen/Cinzel) (Natanael Gama) e [*Inter*](https://fonts.google.com/specimen/Inter) (Rasmus Andersson) via Google Fonts (SIL Open Font License).
+
 ## Licença
 
 MIT — veja [`LICENSE`](LICENSE).

@@ -16,11 +16,13 @@ antes de propor qualquer mudança estrutural.
 
 ```
 packages/rules-engine/   TypeScript — parser de notação + profiles de sistema
-                         (Ironsworn, PbtA, FitD, etc). Usado pelo frontend web
+                         (Ironsworn, Firelights, PbtA, FitD, etc). Usado pelo frontend web
                          E pela WebView headless do app Android. Fonte única
                          de verdade das regras — nunca duplicar em Kotlin/Python.
+packages/deck-engine/    TypeScript — motor de baralho de cartas (52/54 cartas,
+                         embaralhamento determinístico, modos de descarte/leitura).
 apps/web/                React + Vite + TypeScript. PWA. Usa dice-box /
-                         dice-box-threejs pro render 3D.
+                         dice-box-threejs pro render 3D e Three.js para cartas 3D.
 apps/android/            Kotlin. TWA envelopando apps/web + Foreground Service
                          (overlay, cliente WS, WebView headless).
 services/backend/        Python + FastAPI. Relay burro de sala (WS) + REST

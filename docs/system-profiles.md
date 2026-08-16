@@ -39,7 +39,8 @@ montada:
 
 - `simple`: exatamente 1 field. Notação crua (`"2d6+1"`).
 - `comparison`: exatamente 2 fields que competem entre si (ação vs desafio).
-  Notação `"{a} vs {b}"` — ver Ironsworn.
+  Notação `"{a} vs {b}"` — ver Ironsworn (`{1d6+mod} vs {2d10}`) e Firelights
+  (`{2d6+mod} vs {2c}`).
 - `multi`: 2 ou mais fields **independentes** (não competem). Notação
   `"{a} + {b}"` — ex: dado regular + dado de Fome/Ira do WoD5, ou o par
   verbo/substantivo do oráculo de ideias do Infaernum.
