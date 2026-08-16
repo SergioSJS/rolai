@@ -29,6 +29,12 @@ class HeadlessRoller(
     context: Context,
     private val onResult: (resultJson: String) -> Unit,
     private val onError: (message: String) -> Unit,
+    // Baralho (specs/08-baralho.md) usa o MESMO WebView/bridge da rolagem —
+    // sao chamadas diferentes (rolai.deckDraw vs rolai.roll), entao precisam
+    // de callback proprio: handlePayload roteia pelo campo "kind" do payload
+    // (ver headless.ts deliver()), nao pela chamada que originou.
+    private val onDeckResult: (resultJson: String) -> Unit = onResult,
+    private val onDeckError: (message: String) -> Unit = onError,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val callbackSeq = AtomicLong(0)
@@ -117,6 +123,48 @@ class HeadlessRoller(
         )
     }
 
+    /**
+     * Puxa `count` carta(s). `deckStateJson` null = baralho novo com
+     * `configJson`; presente, reusa o `DeckState` (config ja embutida nele
+     * — ver headless.ts). Resultado (deck+cards+remaining) chega em
+     * onDeckResult, ja pronto pra salvar de volta (o WebView e recriado a
+     * cada Service — quem persiste o estado entre chamadas e quem chama).
+     */
+    fun deckDraw(deckStateJson: String?, configJson: String, count: Int) {
+        val id = nextCallbackId()
+        val deckArg = deckStateJson?.let { JSONObject.quote(it) } ?: "null"
+        eval(
+            "rolai.deckDraw($deckArg, ${JSONObject.quote(configJson)}, $count, " +
+                "${JSONObject.quote(id)})",
+        )
+    }
+
+    /** Reembaralha o baralho serializado — recolhe descarte, reordena. */
+    fun deckReshuffle(deckStateJson: String) {
+        val id = nextCallbackId()
+        eval("rolai.deckReshuffle(${JSONObject.quote(deckStateJson)}, ${JSONObject.quote(id)})")
+    }
+
+    /**
+     * Aplica `changesJson` (`{"removalMode":...}` e/ou
+     * `{"autoReshuffleOnEmpty":...}`) a um baralho JA existente, em cima do
+     * monte/descarte atuais. NAO serve pra `includeJokers` — ver deckNew.
+     */
+    fun deckConfig(deckStateJson: String, changesJson: String) {
+        val id = nextCallbackId()
+        eval(
+            "rolai.deckConfig(${JSONObject.quote(deckStateJson)}, " +
+                "${JSONObject.quote(changesJson)}, ${JSONObject.quote(id)})",
+        )
+    }
+
+    /** Cria baralho do zero com `configJson` — usado quando `includeJokers`
+     *  muda (composicao do monte so muda num baralho novo). */
+    fun deckNew(configJson: String) {
+        val id = nextCallbackId()
+        eval("rolai.deckNew(${JSONObject.quote(configJson)}, ${JSONObject.quote(id)})")
+    }
+
     fun destroy() {
         destroyed = true
         webView.destroy()
@@ -145,11 +193,13 @@ class HeadlessRoller(
         if (destroyed) return
         try {
             val payload = JSONObject(payloadJson)
+            val deliverResult = if (payload.optString("kind") == "deck") onDeckResult else onResult
+            val deliverError = if (payload.optString("kind") == "deck") onDeckError else onError
             if (payload.optBoolean("ok")) {
                 val result = payload.optJSONObject("result")?.toString()
-                if (result != null) onResult(result) else onError("resposta sem resultado")
+                if (result != null) deliverResult(result) else deliverError("resposta sem resultado")
             } else {
-                onError(payload.optString("error", "erro desconhecido no rules-engine"))
+                deliverError(payload.optString("error", "erro desconhecido no rules-engine"))
             }
         } catch (e: Exception) {
             onError("payload invalido da WebView: ${e.message}")

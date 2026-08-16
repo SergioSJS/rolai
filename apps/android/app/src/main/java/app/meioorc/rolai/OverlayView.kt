@@ -3,8 +3,15 @@ package app.meioorc.rolai
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PixelFormat
+import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.text.Editable
@@ -31,8 +38,9 @@ import kotlin.math.abs
  *
  * Quatro estados:
  *  - COLLAPSED: so a bolha redonda, ancorada na borda, arrastavel;
- *  - FAN: a bolha abre 3 mini-bolhas — rolar (a ULTima rolagem, ou a
- *    configurada se ainda nao rolou nada), historico e compor;
+ *  - FAN: a bolha abre as mini-bolhas — rolar (a ULTima rolagem OU puxada,
+ *    o que tiver sido feito por ultimo; ou a configurada se ainda nao rolou
+ *    nada), historico, sala e compor (onde mora a secao Baralho tambem);
  *  - PANEL: o compositor (chips de dado + notacao digitavel + ROLAR),
  *    aberto pela engrenagem do fan;
  *  - HISTORY: cartao compacto com o ultimo resultado em destaque e as
@@ -116,8 +124,17 @@ class OverlayView(context: Context) {
     /** Ultimo roster recebido — exibido no painel de sala. */
     private var roster: List<String> = emptyList()
 
-    /** Mini-bolha de rolagem do fan: ultima rolagem, ou a configurada. */
+    /** Mini-bolha de rolagem do fan: ultima rolagem, ou a configurada — vale
+     *  pra dado OU carta, o que tiver sido feito por ultimo (ver
+     *  OverlayService.lastRollAction). */
     var onQuickRoll: (() -> Unit)? = null
+
+    /** Botao "puxar" da secao Baralho do painel (specs/08-baralho.md).
+     *  Recebe a quantidade escolhida no stepper. */
+    var onDrawCard: ((count: Int) -> Unit)? = null
+
+    /** Botao "reembaralhar" da secao Baralho. */
+    var onReshuffleDeck: (() -> Unit)? = null
 
     /**
      * Rolagem de sistema com os inputs preenchidos no painel (JSON pronto
@@ -166,35 +183,24 @@ class OverlayView(context: Context) {
     private val panel: LinearLayout
     private val historyPanel: LinearLayout
     private val roomPanel: LinearLayout
-    // Conteudo ROLAVEL de cada cartao (dentro do card visual, que so tem
-    // fundo/borda/padding) — ver fitToScreen: em paisagem a tela e baixa
-    // demais pro cartao inteiro caber, e sem isto o que passasse da borda
-    // simplesmente sumia, sem rolar.
     private lateinit var panelScroll: MaxHeightScrollView
     private lateinit var historyScroll: MaxHeightScrollView
     private lateinit var roomScroll: MaxHeightScrollView
-    // Sub-secao DENTRO do panel (nao um card separado): os campos do
-    // sistema ativo (CD, modificador...) ficam visiveis JUNTO dos chips de
-    // dado normais, nao escondem um ao outro. Antes eram dois cards
-    // mutuamente exclusivos (Mode.SYSTEM vs Mode.PANEL) — trocar de sistema
-    // fazia o compositor normal desaparecer por completo.
-    private lateinit var systemSection: LinearLayout
-    // Abas de modo (Infaernum: Acao/Sim ou Nao/Ideias) — so tem conteudo
-    // quando o sistema ativo pertence a uma ProfileFamily.
+
+    enum class PanelTab { SYSTEM, DICE, DECK }
+    private var currentPanelTab = PanelTab.DICE
+    private lateinit var tabSystemButton: TextView
+    private lateinit var tabDiceButton: TextView
+    private lateinit var tabDeckButton: TextView
+    private lateinit var systemContainer: LinearLayout
+    private lateinit var diceContainer: LinearLayout
+    private lateinit var deckContainer: LinearLayout
+    private lateinit var deckRemainingView: TextView
     private lateinit var familyTabsRow: LinearLayout
     private lateinit var systemTitle: TextView
     private lateinit var systemFields: LinearLayout
-    // Botao de rolar do PROFILE — so aparece pra sistema de receita fixa
-    // (rola dado proprio). Sistema "overlay" (roll_under) nao tem: quem
-    // rola e o botao do compositor mesmo, aplicando a regra do profile em
-    // cima do que os chips montarem (ver rollCurrent/onRollOverlay).
     private lateinit var profileRollButton: TextView
-    // Sistema "overlay" ativo no momento (null = nenhum, ou sistema de
-    // receita fixa) — decide o que rollCurrent() faz com o botao ROLAR.
     private var activeOverlayInfo: SystemInfo? = null
-    // Views do formulario aberto, por id de input, com o spec ao lado — sem
-    // ele nao da pra saber se um valor vazio e "Normal" (select) ou campo em
-    // branco (numero).
     private val systemInputViews = LinkedHashMap<String, Pair<ProfileInput, View>>()
     private val resultFlash: TextView
     private lateinit var dragHandle: TextView
@@ -210,18 +216,10 @@ class OverlayView(context: Context) {
     private lateinit var notationInput: EditText
     private lateinit var rollButton: TextView
     private val chips = LinkedHashMap<String, TextView>()
-
-    // rotulo do dado ("6", "F") -> quantidade, na ordem de toque
-    // (LinkedHashMap). "F" = dado Fate/Fudge: o termo vira "NdF", que o
-    // rules-engine entende (4dF e a rolagem classica do Fate).
+    private var deckCount = 1
+    private lateinit var deckCountView: TextView
     private val pool = LinkedHashMap<String, Int>()
-
-    // Notacao da rolagem rapida (das configuracoes) — rotulo do ROLAR com
-    // o campo vazio.
     private var quickNotation: String = ""
-
-    // Ultimas rolagens da sala (as nossas inclusas) — alimenta o
-    // activityView do painel (3 linhas) e o cartao de historico (10).
     private val history = ArrayDeque<String>()
 
     private val dp = context.resources.displayMetrics.density
@@ -229,8 +227,6 @@ class OverlayView(context: Context) {
     private fun Int.dp(): Int = (this * dp).toInt()
 
     init {
-        // d20 vetorial (mesma marca do apps/web) — emoji renderiza diferente
-        // em cada fabricante e desalinha dentro do circulo.
         bubble = ImageView(context).apply {
             setImageResource(R.drawable.ic_d20)
             imageTintList = ColorStateList.valueOf(Color.WHITE)
@@ -249,7 +245,7 @@ class OverlayView(context: Context) {
 
         fan = buildFan(context)
         fan.visibility = View.GONE
-        panel = buildPanel(context)
+        panel = buildPanelCard(context)
         panel.visibility = View.GONE
         historyPanel = buildHistoryPanel(context)
         historyPanel.visibility = View.GONE
@@ -338,9 +334,10 @@ class OverlayView(context: Context) {
             setOnClickListener { onClick() }
         }
 
-    // ---------- cartao de composicao (PANEL) ----------
-
-    private fun buildPanel(context: Context): LinearLayout {
+    /**
+     * Monta o cartao do compositor (painel completo).
+     */
+    private fun buildPanelCard(context: Context): LinearLayout {
         val header = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -369,10 +366,37 @@ class OverlayView(context: Context) {
             textSize = 11f
         }
 
-        // Campos do sistema ativo (CD, modificador, vantagem...), JUNTO do
-        // compositor abaixo — nao mais um cartao separado que escondia os
-        // chips de dado normais. Comeca escondida: so aparece quando um
-        // sistema com input esta configurado (ver openComposer).
+        // Abas: Sistema (quando ativo) | Dados | Baralho
+        val modeTabsRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        tabSystemButton = familyTabButton(context, "Sistema", currentPanelTab == PanelTab.SYSTEM) {
+            setPanelTab(PanelTab.SYSTEM)
+        }.apply { visibility = View.GONE }
+        tabDiceButton = familyTabButton(context, context.getString(R.string.overlay_tab_dice), currentPanelTab == PanelTab.DICE) {
+            setPanelTab(PanelTab.DICE)
+        }
+        tabDeckButton = familyTabButton(context, context.getString(R.string.overlay_tab_deck), currentPanelTab == PanelTab.DECK) {
+            setPanelTab(PanelTab.DECK)
+        }
+        modeTabsRow.addView(
+            tabSystemButton,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        modeTabsRow.addView(
+            tabDiceButton,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = 4.dp()
+            },
+        )
+        modeTabsRow.addView(
+            tabDeckButton,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = 4.dp()
+            },
+        )
+
+        // ---------- ABA 1: SISTEMA ----------
         systemTitle = TextView(context).apply {
             setTextColor(MUTED)
             textSize = 11f
@@ -381,66 +405,40 @@ class OverlayView(context: Context) {
             setTypeface(typeface, Typeface.BOLD)
         }
         systemFields = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        // Mesmo estilo do botao ROLAR do compositor (nao a pilula pequena de
-        // "limpar/config"): os dois eram visualmente iguais, so este ficava
-        // com contorno fraco — o jogador tocava sempre no botao errado (o
-        // generico, que rola so o composer) e achava que o sistema "nao
-        // funcionava".
         profileRollButton = TextView(context).apply {
             setText(R.string.roll_button)
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = 15f
+            textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
             letterSpacing = 0.04f
             isAllCaps = true
             background = rippled(
                 GradientDrawable().apply {
-                    cornerRadius = 12.dp().toFloat()
+                    cornerRadius = 10.dp().toFloat()
                     setColor(ACCENT)
                 },
             )
-            setPadding(0, 12.dp(), 0, 12.dp())
+            setPadding(0, 10.dp(), 0, 10.dp())
             setOnClickListener { onRollWithInputs?.invoke(currentInputsJson()) }
-        }
-        val systemDivider = View(context).apply {
-            setBackgroundColor(BORDER)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                1,
-            ).apply { topMargin = 10.dp() }
         }
         familyTabsRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             visibility = View.GONE
         }
-        systemSection = LinearLayout(context).apply {
+        systemContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
+            visibility = if (currentPanelTab == PanelTab.SYSTEM) View.VISIBLE else View.GONE
             addView(familyTabsRow)
             addView(systemTitle, vParams(topMargin = 2))
             addView(systemFields, vParams(topMargin = 4))
             addView(profileRollButton, vParams(topMargin = 8))
-            // SEM vParams aqui: addView(view, params) SUBSTITUI o
-            // layoutParams que systemDivider ja tem (altura 1px). Um
-            // View puro (nao ViewGroup) com WRAP_CONTENT e sem conteudo
-            // nao encolhe pra 0 — ecoa de volta o teto AT_MOST do pai, e
-            // "1px" virava a tela quase inteira (caixa vazia gigante,
-            // empurrando chips/notacao/botao pra fora da area visivel).
-            addView(systemDivider)
         }
 
-        // Chips de dado em duas fileiras (4 + 4, com o dF do Fate): toque
-        // soma ao pool e o proprio chip vira o termo ("2d6"). Espelha o
-        // compositor do apps/web — quem calcula continua sendo o
-        // rules-engine na WebView headless, nada de regra aqui.
-        val rowTop = chipRow(context, DICE_KEYS.take(4))
-        val rowBottom = chipRow(context, DICE_KEYS.drop(4))
+        // ---------- ABA 2: DADOS LIVRES ----------
+        val rowTop = chipRow(context, DICE_KEYS.take(6))
+        val rowBottom = chipRow(context, DICE_KEYS.drop(6))
 
-        // A notacao tambem pode ser digitada ("2d6+3", "4dF"). O campo e a
-        // fonte de verdade na hora de rolar: tocar em chip REESCREVE o campo
-        // com o pool (edicao manual se perde — chips e teclado sao dois
-        // jeitos de montar a rolagem, nao de misturar os dois).
         notationInput = EditText(context).apply {
             setHint(R.string.overlay_notation_hint)
             setHintTextColor(MUTED)
@@ -450,11 +448,11 @@ class OverlayView(context: Context) {
             typeface = Typeface.MONOSPACE
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
-                cornerRadius = 10.dp().toFloat()
+                cornerRadius = 8.dp().toFloat()
                 setColor(CHIP)
                 setStroke(1.dp(), BORDER)
             }
-            setPadding(8.dp(), 0, 8.dp(), 0)
+            setPadding(8.dp(), 6.dp(), 8.dp(), 6.dp())
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -462,26 +460,137 @@ class OverlayView(context: Context) {
             })
         }
 
+        val clearComposerButton = stepperGlyphButton(context, "✕", "limpar pool") { clearPool() }
+
+        val notationRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(
+                notationInput,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(
+                clearComposerButton,
+                LinearLayout.LayoutParams(32.dp(), 32.dp()).apply { marginStart = 6.dp() },
+            )
+        }
+
         rollButton = TextView(context).apply {
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = 15f
+            textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
             letterSpacing = 0.04f
             isAllCaps = true
             background = rippled(
                 GradientDrawable().apply {
-                    cornerRadius = 12.dp().toFloat()
+                    cornerRadius = 10.dp().toFloat()
                     setColor(ACCENT)
                 },
             )
-            setPadding(0, 12.dp(), 0, 12.dp())
+            setPadding(0, 10.dp(), 0, 10.dp())
             setOnClickListener { rollCurrent() }
         }
 
+        diceContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = if (currentPanelTab == PanelTab.DICE) View.VISIBLE else View.GONE
+            addView(rowTop, vParams(topMargin = 6))
+            addView(rowBottom, vParams(topMargin = 4))
+            addView(notationRow, vParams(topMargin = 6))
+            addView(rollButton, vParams(topMargin = 8))
+        }
+
+        // ---------- ABA 3: BARALHO ----------
+        deckCountView = TextView(context).apply {
+            text = deckCount.toString()
+            setTextColor(TEXT)
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        fun stepDeckCount(delta: Int) {
+            deckCount = (deckCount + delta).coerceIn(1, DECK_MAX_COUNT)
+            deckCountView.text = deckCount.toString()
+        }
+        val drawButton = TextView(context).apply {
+            setText(R.string.overlay_deck_draw)
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            letterSpacing = 0.04f
+            isAllCaps = true
+            background = rippled(
+                GradientDrawable().apply {
+                    cornerRadius = 10.dp().toFloat()
+                    setColor(ACCENT)
+                },
+            )
+            setPadding(12.dp(), 8.dp(), 12.dp(), 8.dp())
+            setOnClickListener { onDrawCard?.invoke(deckCount) }
+        }
+        val deckStepperRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(
+                stepperGlyphButton(context, "−", "menos cartas") { stepDeckCount(-1) },
+                LinearLayout.LayoutParams(32.dp(), 32.dp()),
+            )
+            addView(
+                deckCountView,
+                LinearLayout.LayoutParams(32.dp(), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    marginStart = 4.dp()
+                    marginEnd = 4.dp()
+                },
+            )
+            addView(
+                stepperGlyphButton(context, "+", "mais cartas") { stepDeckCount(1) },
+                LinearLayout.LayoutParams(32.dp(), 32.dp()),
+            )
+            addView(
+                drawButton,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginStart = 8.dp()
+                },
+            )
+        }
+
+        val reshuffleButton = actionButton(context, R.string.overlay_deck_reshuffle) {
+            onReshuffleDeck?.invoke()
+        }
+        deckRemainingView = TextView(context).apply {
+            setTextColor(MUTED)
+            textSize = 11f
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+        }
+        val deckActionRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(
+                reshuffleButton,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(
+                deckRemainingView,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginStart = 6.dp()
+                },
+            )
+        }
+
+        deckContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = if (currentPanelTab == PanelTab.DECK) View.VISIBLE else View.GONE
+            addView(deckStepperRow, vParams(topMargin = 6))
+            addView(deckActionRow, vParams(topMargin = 6))
+        }
+
+        // ---------- RESULTADO & LOG COMUM ----------
         panelResultView = TextView(context).apply {
             setTextColor(TEXT)
-            textSize = 22f
+            textSize = 20f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
         }
@@ -497,15 +606,11 @@ class OverlayView(context: Context) {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 1,
-            ).apply { topMargin = 10.dp() }
+            ).apply { topMargin = 8.dp() }
         }
 
         val actionRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(
-                actionButton(context, R.string.overlay_action_clear) { clearPool() },
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
-            )
             addView(
                 actionButton(context, R.string.overlay_action_settings) {
                     onOpenSettings?.invoke()
@@ -518,9 +623,6 @@ class OverlayView(context: Context) {
                 },
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
             )
-            // Fechar aqui: desligar o botao exigia abrir as configuracoes e
-            // achar o toggle — caminho longo demais pra uma acao que se quer
-            // fazer no meio de outro app.
             addView(
                 actionButton(context, R.string.overlay_action_close) {
                     onCloseOverlay?.invoke()
@@ -535,15 +637,14 @@ class OverlayView(context: Context) {
             orientation = LinearLayout.VERTICAL
             addView(header)
             addView(statusView, vParams(topMargin = 2))
-            addView(systemSection, vParams(topMargin = 10))
-            addView(rowTop, vParams(topMargin = 12))
-            addView(rowBottom, vParams(topMargin = 6))
-            addView(notationInput, vParams(topMargin = 8))
-            addView(rollButton, vParams(topMargin = 10))
-            addView(panelResultView, vParams(topMargin = 12))
-            addView(activityView, vParams(topMargin = 6))
+            addView(modeTabsRow, vParams(topMargin = 6))
+            addView(systemContainer, vParams(topMargin = 4))
+            addView(diceContainer, vParams(topMargin = 4))
+            addView(deckContainer, vParams(topMargin = 4))
+            addView(panelResultView, vParams(topMargin = 6))
+            addView(activityView, vParams(topMargin = 4))
             addView(divider)
-            addView(actionRow, vParams(topMargin = 2))
+            addView(actionRow, vParams(topMargin = 4))
         }
         panelScroll = scrollWrapper(context, body)
 
@@ -551,7 +652,7 @@ class OverlayView(context: Context) {
             orientation = LinearLayout.VERTICAL
             background = cardBackground()
             elevation = 12.dp().toFloat()
-            setPadding(16.dp(), 14.dp(), 16.dp(), 12.dp())
+            setPadding(14.dp(), 12.dp(), 14.dp(), 10.dp())
             layoutParams = FrameLayout.LayoutParams(300.dp(), FrameLayout.LayoutParams.WRAP_CONTENT)
             addView(panelScroll)
         }
@@ -687,6 +788,28 @@ class OverlayView(context: Context) {
 
     // ---------- campos do sistema ativo (dentro do PANEL) ----------
 
+    private fun systemShortLabel(info: SystemInfo?): String {
+        if (info == null) return "Sistema"
+        val family = ProfileFamilies.familyFor(info.system)
+        if (family != null) return family.label
+        return when (info.system) {
+            "roll_under" -> "Roll Under"
+            "wod5" -> "WoD v5"
+            "pbta", "pbta2d10" -> "PbtA"
+            "pool_d6" -> "Pool d6"
+            "fate" -> "Fate / Fudge"
+            else -> {
+                val raw = info.label
+                when {
+                    raw.contains(" — ") -> raw.substringBefore(" — ").trim()
+                    raw.contains(" - ") -> raw.substringBefore(" - ").trim()
+                    raw.contains(" (") -> raw.substringBefore(" (").trim()
+                    else -> raw
+                }
+            }
+        }
+    }
+
     /**
      * Abre o compositor (chips + notacao) com os campos do sistema ativo
      * visiveis JUNTO, se houver — `info` null (ou sem input) esconde a
@@ -703,19 +826,23 @@ class OverlayView(context: Context) {
     fun openComposer(info: SystemInfo?, saved: Map<String, String>) {
         activeOverlayInfo = info?.takeIf { it.isOverlay }
         val family = info?.let { ProfileFamilies.familyFor(it.system) }
-        // Membro de familia mostra a secao mesmo sem input proprio (ex.
-        // Infaernum "Acao"/"Ideias" nao pedem nada) — e onde moram as abas
-        // de modo, senao Sim ou Nao/Ideias ficam inalcancaveis do overlay.
-        if (info == null || (!info.needsForm && family == null)) {
-            systemSection.visibility = View.GONE
+        val hasSystem = info != null && (info.needsForm || family != null)
+        if (!hasSystem) {
+            tabSystemButton.visibility = View.GONE
+            systemContainer.visibility = View.GONE
             systemInputViews.clear()
+            if (currentPanelTab == PanelTab.SYSTEM) {
+                setPanelTab(PanelTab.DICE)
+            }
         } else {
+            tabSystemButton.visibility = View.VISIBLE
+            tabSystemButton.text = systemShortLabel(info)
             val context = systemFields.context
             familyTabsRow.removeAllViews()
             if (family != null) {
                 familyTabsRow.visibility = View.VISIBLE
                 for ((i, member) in family.members.withIndex()) {
-                    val isActive = member.system == info.system
+                    val isActive = member.system == info?.system
                     familyTabsRow.addView(
                         familyTabButton(context, member.subLabel, isActive) {
                             onSelectFamilyMember?.invoke(member.system)
@@ -728,84 +855,123 @@ class OverlayView(context: Context) {
             } else {
                 familyTabsRow.visibility = View.GONE
             }
-            systemTitle.text = info.label
+            systemTitle.visibility = if (family != null) View.GONE else View.VISIBLE
+            systemTitle.text = info?.label
             systemFields.removeAllViews()
             systemInputViews.clear()
-            for (input in info.inputs) {
-                systemFields.addView(
-                    TextView(context).apply {
-                        text = input.label
-                        setTextColor(MUTED)
-                        textSize = 11f
-                    },
-                    vParams(topMargin = 8),
-                )
-                if (input.isSelect) {
-                    val view = Spinner(context).apply {
-                        // O adapter padrao (simple_spinner_dropdown_item) pega
-                        // cor de texto do tema AMBIENTE — aqui o contexto e o
-                        // do WindowManager do overlay, nao uma Activity com
-                        // Theme.Rolai, entao o popup saia com texto escuro (as
-                        // vezes ilegivel) por padrao do sistema. Cor e fundo
-                        // do dropdown fixados na mao, nao emprestados de tema
-                        // nenhum.
-                        adapter = object : ArrayAdapter<String>(
-                            context,
-                            android.R.layout.simple_spinner_item,
-                            input.options.map { it.label },
-                        ) {
-                            override fun getView(
-                                position: Int,
-                                convertView: View?,
-                                parent: ViewGroup,
-                            ): View = (super.getView(position, convertView, parent) as TextView)
-                                .apply { setTextColor(TEXT) }
 
-                            override fun getDropDownView(
-                                position: Int,
-                                convertView: View?,
-                                parent: ViewGroup,
-                            ): View = (super.getDropDownView(position, convertView, parent) as TextView)
-                                .apply {
-                                    setTextColor(TEXT)
-                                    setBackgroundColor(PANEL)
-                                    setPadding(16.dp(), 12.dp(), 16.dp(), 12.dp())
-                                }
-                        }.apply {
-                            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                        }
-                        setSelection(
-                            input.options.indexOfFirst { it.value == saved[input.id] }
-                                .coerceAtLeast(0),
-                        )
+            val inputs = info?.inputs.orEmpty()
+            var i = 0
+            while (i < inputs.size) {
+                val input1 = inputs[i]
+                val input2 = if (i + 1 < inputs.size) inputs[i + 1] else null
+
+                if (input2 != null) {
+                    val row = LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
                     }
-                    systemInputViews[input.id] = input to view
-                    systemFields.addView(view, vParams(topMargin = 2))
+                    val col1 = buildInputFieldColumn(context, input1, saved)
+                    val col2 = buildInputFieldColumn(context, input2, saved)
+                    row.addView(col1, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    row.addView(col2, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        marginStart = 8.dp()
+                    })
+                    systemFields.addView(row, vParams(topMargin = if (i == 0) 2 else 6))
+                    i += 2
                 } else {
-                    val editText = EditText(context).apply {
-                        // numberSigned: modificador negativo e comum, e o
-                        // teclado numerico puro nao tem sinal.
-                        inputType = android.text.InputType.TYPE_CLASS_NUMBER or
-                            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
-                        setTextColor(TEXT)
-                        textSize = 15f
-                        gravity = Gravity.CENTER
-                        // Hint de UI do profile (ex. modificador "0") so
-                        // quando nao ha valor salvo ainda — nao sobrescreve
-                        // o que o jogador digitou numa rolagem anterior.
-                        setText(saved[input.id] ?: input.default.orEmpty())
-                    }
-                    systemInputViews[input.id] = input to editText
-                    systemFields.addView(numberFieldRow(context, editText, input.required), vParams(topMargin = 2))
+                    val col = buildInputFieldColumn(context, input1, saved)
+                    systemFields.addView(col, vParams(topMargin = if (i == 0) 2 else 6))
+                    i += 1
                 }
             }
-            // Overlay (roll_under): quem rola e o botao do compositor,
-            // aplicando a regra sobre a notacao dos chips — nao ha dado
-            // proprio pra um botao separado rolar.
-            profileRollButton.visibility = if (info.isOverlay) View.GONE else View.VISIBLE
-            systemSection.visibility = View.VISIBLE
+
+            profileRollButton.text = "ROLAR ${systemShortLabel(info).uppercase()}"
+            profileRollButton.visibility = if (info?.isOverlay == true) View.GONE else View.VISIBLE
+            setPanelTab(PanelTab.SYSTEM)
         }
         setMode(Mode.PANEL)
+    }
+
+    private fun buildInputFieldColumn(
+        context: Context,
+        input: ProfileInput,
+        saved: Map<String, String>,
+    ): LinearLayout {
+        val col = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val labelView = TextView(context).apply {
+            text = input.label
+            setTextColor(MUTED)
+            textSize = 11f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        col.addView(labelView)
+
+        if (input.isSelect) {
+            val spinner = Spinner(context).apply {
+                adapter = object : ArrayAdapter<String>(
+                    context,
+                    android.R.layout.simple_spinner_item,
+                    input.options.map { it.label },
+                ) {
+                    override fun getView(
+                        position: Int,
+                        convertView: View?,
+                        parent: ViewGroup,
+                    ): View = (super.getView(position, convertView, parent) as TextView)
+                        .apply {
+                            setTextColor(TEXT)
+                            textSize = 13f
+                        }
+
+                    override fun getDropDownView(
+                        position: Int,
+                        convertView: View?,
+                        parent: ViewGroup,
+                    ): View = (super.getDropDownView(position, convertView, parent) as TextView)
+                        .apply {
+                            setTextColor(TEXT)
+                            setBackgroundColor(PANEL)
+                            setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
+                        }
+                }.apply {
+                    setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                }
+                background = GradientDrawable().apply {
+                    cornerRadius = 8.dp().toFloat()
+                    setColor(CHIP)
+                    setStroke(1.dp(), BORDER)
+                }
+                setPadding(6.dp(), 6.dp(), 6.dp(), 6.dp())
+                setSelection(
+                    input.options.indexOfFirst { it.value == saved[input.id] }.coerceAtLeast(0),
+                )
+            }
+            systemInputViews[input.id] = input to spinner
+            col.addView(spinner, vParams(topMargin = 3))
+        } else {
+            val editText = EditText(context).apply {
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                    android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+                setTextColor(TEXT)
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setSingleLine()
+                background = GradientDrawable().apply {
+                    cornerRadius = 8.dp().toFloat()
+                    setColor(CHIP)
+                    setStroke(1.dp(), BORDER)
+                }
+                setPadding(4.dp(), 4.dp(), 4.dp(), 4.dp())
+                setText(saved[input.id] ?: input.default.orEmpty())
+            }
+            systemInputViews[input.id] = input to editText
+            val stepper = numberFieldRow(context, editText, input.required)
+            col.addView(stepper, vParams(topMargin = 3))
+        }
+        return col
     }
 
     private fun currentInputsJson(): String {
@@ -881,27 +1047,29 @@ class OverlayView(context: Context) {
 
     private fun chipRow(context: Context, keys: List<String>): LinearLayout {
         val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        val density = context.resources.displayMetrics.density
         for (key in keys) {
+            val label = if (key == "C") "carta" else if (key == "F") "dF" else "d$key"
             val chip = TextView(context).apply {
-                text = "d$key"
+                text = label
                 setTextColor(TEXT)
-                textSize = 12f
+                textSize = if (key == "C" || key == "100") 13.5f else 15f
                 maxLines = 1
-                setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+                setTypeface(Typeface.DEFAULT_BOLD)
                 gravity = Gravity.CENTER
                 background = chipBackground(active = false)
-                setPadding(0, 9.dp(), 0, 9.dp())
+                setPadding(0, 7.dp(), 0, 7.dp())
+                val iconDrawable = DieIconDrawable(key, MUTED, density)
+                setCompoundDrawablesWithIntrinsicBounds(null, iconDrawable, null, null)
+                compoundDrawablePadding = 4.dp()
                 setOnClickListener { addDie(key) }
-                // Segurar tira um do pool — antes so existia "Limpar" (zera
-                // tudo), entao trocar de 3d6 pra 2d6 exigia remontar o pool
-                // inteiro. Espelha o "−" do die-slot da web (ComposerBar.tsx).
                 setOnLongClickListener { removeDie(key); true }
             }
             chips[key] = chip
             row.addView(
                 chip,
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    marginStart = if (key == keys.first()) 0 else 6.dp()
+                    marginStart = if (key == keys.first()) 0 else 4.dp()
                 },
             )
         }
@@ -911,7 +1079,7 @@ class OverlayView(context: Context) {
     private fun chipBackground(active: Boolean): RippleDrawable =
         rippled(
             GradientDrawable().apply {
-                cornerRadius = 10.dp().toFloat()
+                cornerRadius = 8.dp().toFloat()
                 setColor(CHIP)
                 setStroke(1.dp(), if (active) ACCENT else BORDER)
             },
@@ -1067,17 +1235,29 @@ class OverlayView(context: Context) {
         renderPool()
     }
 
-    /** "2d6+1d20" / "4dF" — mesma gramatica multi-termo do rules-engine. */
+    /** "2d6+1d20" / "4dF" / "2c" — mesma gramatica multi-termo do rules-engine. */
     private fun poolNotation(): String =
-        pool.entries.joinToString("+") { (key, count) -> "${count}d$key" }
+        pool.entries.joinToString("+") { (key, count) ->
+            if (key == "C") "${count}c" else if (key == "F") "${count}dF" else "${count}d$key"
+        }
 
     private fun renderPool() {
         val notation = poolNotation()
+        val density = root.context.resources.displayMetrics.density
         for ((key, chip) in chips) {
             val count = pool[key] ?: 0
-            chip.text = if (count > 0) "${count}d$key" else "d$key"
-            chip.setTextColor(if (count > 0) ACCENT_BRIGHT else TEXT)
-            chip.background = chipBackground(active = count > 0)
+            val label = if (key == "C") "carta" else if (key == "F") "dF" else "d$key"
+            chip.text = if (count > 0) {
+                if (key == "C") "${count}c" else "${count}$label"
+            } else {
+                label
+            }
+            val active = count > 0
+            chip.setTextColor(if (active) ACCENT_BRIGHT else TEXT)
+            val iconColor = if (active) ACCENT_BRIGHT else MUTED
+            val iconDrawable = DieIconDrawable(key, iconColor, density)
+            chip.setCompoundDrawablesWithIntrinsicBounds(null, iconDrawable, null, null)
+            chip.background = chipBackground(active = active)
         }
         // Dispara o TextWatcher, que atualiza o rotulo do ROLAR.
         notationInput.setText(notation)
@@ -1130,6 +1310,39 @@ class OverlayView(context: Context) {
         setMode(if (expanded) Mode.PANEL else Mode.COLLAPSED)
     }
 
+    /** Alterna entre as abas Sistema, Dados e Baralho no painel do overlay. */
+    fun setPanelTab(tab: PanelTab) {
+        currentPanelTab = tab
+        if (!::systemContainer.isInitialized || !::diceContainer.isInitialized || !::deckContainer.isInitialized) return
+        systemContainer.visibility = if (tab == PanelTab.SYSTEM) View.VISIBLE else View.GONE
+        diceContainer.visibility = if (tab == PanelTab.DICE) View.VISIBLE else View.GONE
+        deckContainer.visibility = if (tab == PanelTab.DECK) View.VISIBLE else View.GONE
+        if (::tabSystemButton.isInitialized) styleTabChip(tabSystemButton, tab == PanelTab.SYSTEM)
+        if (::tabDiceButton.isInitialized) styleTabChip(tabDiceButton, tab == PanelTab.DICE)
+        if (::tabDeckButton.isInitialized) styleTabChip(tabDeckButton, tab == PanelTab.DECK)
+    }
+
+    /** Atualiza o contador de cartas restantes no monte do baralho. */
+    fun setDeckRemaining(remaining: Int) {
+        if (!::deckRemainingView.isInitialized) return
+        deckRemainingView.text = root.context.getString(R.string.overlay_deck_remaining, remaining)
+        deckRemainingView.visibility = View.VISIBLE
+    }
+
+    /** Mesmo visual de familyTabButton (ativo preenchido, inativo so
+     *  contorno), reaplicavel depois de criado — familyTabButton so pinta
+     *  uma vez, na criacao. */
+    private fun styleTabChip(chip: TextView, active: Boolean) {
+        chip.setTextColor(if (active) Color.WHITE else MUTED)
+        chip.background = rippled(
+            GradientDrawable().apply {
+                cornerRadius = 8.dp().toFloat()
+                setColor(if (active) ACCENT else Color.TRANSPARENT)
+                setStroke(1.dp(), if (active) ACCENT else BORDER)
+            },
+        )
+    }
+
     private val hideResultRunnable = Runnable {
         if (mode == Mode.RESULT) setMode(Mode.COLLAPSED)
     }
@@ -1155,7 +1368,7 @@ class OverlayView(context: Context) {
             // Fechar o painel com o sistema aberto agora conta como "eu
             // configurei isto", igual a tela de configuracoes ja faz a cada
             // toque.
-            if (systemSection.visibility == View.VISIBLE) {
+            if (::systemContainer.isInitialized && systemContainer.visibility == View.VISIBLE) {
                 val overlayNotation = if (activeOverlayInfo != null) composto else null
                 onPersistSystemInputs?.invoke(currentInputsJson(), overlayNotation)
             }
@@ -1371,8 +1584,180 @@ class OverlayView(context: Context) {
         /** Tempo do flash de resultado na tela antes de sumir sozinho. */
         private const val RESULT_FLASH_MS = 6_000L
 
-        // Rotulos de dado dos chips ("F" = dado Fate/Fudge — "4dF").
-        private val DICE_KEYS = listOf("4", "6", "8", "10", "12", "20", "100", "F")
+        // Rotulos de dado dos chips ("F" = dado Fate/Fudge, "C" = Carta de baralho).
+        private val DICE_KEYS = listOf("2", "3", "4", "6", "8", "10", "12", "20", "66", "100", "F", "C")
         private const val TOUCH_SLOP_DP = 8
+
+        // Teto do stepper de cartas — o baralho padrao tem 52 (+2 curinga).
+        private const val DECK_MAX_COUNT = 20
     }
+}
+
+/**
+ * Desenha os icones geometricos dos dados (e carta de baralho) em Canvas/Vector.
+ * Espelha as silhuetas SVG de DiceIcon.tsx da web.
+ */
+class DieIconDrawable(
+    private val key: String,
+    private val strokeColor: Int,
+    private val density: Float,
+) : Drawable() {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = strokeColor
+        style = Paint.Style.STROKE
+        strokeWidth = 1.4f * density
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = strokeColor
+        style = Paint.Style.FILL
+    }
+    private val path = Path()
+
+    override fun draw(canvas: Canvas) {
+        val b = bounds
+        val w = b.width().toFloat()
+        val h = b.height().toFloat()
+        if (w <= 0 || h <= 0) return
+
+        val cx = b.left + w / 2f
+        val cy = b.top + h / 2f
+        val s = minOf(w, h) * 0.76f
+
+        path.reset()
+        when (key) {
+            "2" -> {
+                // Moeda: circulo com divisoria vertical
+                canvas.drawCircle(cx, cy, s * 0.44f, paint)
+                canvas.drawLine(cx, cy - s * 0.32f, cx, cy + s * 0.32f, paint)
+            }
+            "3" -> {
+                // Prisma: triangulo com aresta central
+                path.moveTo(cx, cy - s * 0.44f)
+                path.lineTo(cx + s * 0.44f, cy + s * 0.4f)
+                path.lineTo(cx - s * 0.44f, cy + s * 0.4f)
+                path.close()
+                canvas.drawPath(path, paint)
+                canvas.drawLine(cx, cy - s * 0.44f, cx, cy + s * 0.4f, paint)
+            }
+            "4" -> {
+                // Triangulo (d4)
+                path.moveTo(cx, cy - s * 0.44f)
+                path.lineTo(cx + s * 0.44f, cy + s * 0.4f)
+                path.lineTo(cx - s * 0.44f, cy + s * 0.4f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "6" -> {
+                // Quadrado / Cubo (d6)
+                val r = s * 0.40f
+                val rect = RectF(cx - r, cy - r, cx + r, cy + r)
+                canvas.drawRoundRect(rect, 2.5f * density, 2.5f * density, paint)
+            }
+            "8" -> {
+                // Losango / Octaedro (d8)
+                path.moveTo(cx, cy - s * 0.46f)
+                path.lineTo(cx + s * 0.44f, cy)
+                path.lineTo(cx, cy + s * 0.46f)
+                path.lineTo(cx - s * 0.44f, cy)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "10" -> {
+                // Pipa / Kite (d10)
+                path.moveTo(cx, cy - s * 0.46f)
+                path.lineTo(cx + s * 0.42f, cy - s * 0.12f)
+                path.lineTo(cx, cy + s * 0.46f)
+                path.lineTo(cx - s * 0.42f, cy - s * 0.12f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "12" -> {
+                // Pentagono / Dodecaedro (d12)
+                for (i in 0 until 5) {
+                    val angle = Math.toRadians((i * 72 - 90).toDouble())
+                    val px = cx + (s * 0.44f * Math.cos(angle)).toFloat()
+                    val py = cy + (s * 0.44f * Math.sin(angle)).toFloat()
+                    if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+                }
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "20" -> {
+                // Hexagono / Icosaedro (d20)
+                for (i in 0 until 6) {
+                    val angle = Math.toRadians((i * 60 - 30).toDouble())
+                    val px = cx + (s * 0.44f * Math.cos(angle)).toFloat()
+                    val py = cy + (s * 0.44f * Math.sin(angle)).toFloat()
+                    if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+                }
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "66" -> {
+                // Par de d6 (d66: dezena e unidade)
+                val rect1 = RectF(cx - s * 0.44f, cy - s * 0.42f, cx + s * 0.04f, cy + s * 0.06f)
+                val rect2 = RectF(cx - s * 0.04f, cy - s * 0.06f, cx + s * 0.44f, cy + s * 0.42f)
+                canvas.drawRoundRect(rect1, 2f * density, 2f * density, paint)
+                canvas.drawRoundRect(rect2, 2f * density, 2f * density, paint)
+            }
+            "100" -> {
+                // Par de percentis (d100)
+                val r1 = s * 0.26f
+                val ox1 = cx - s * 0.22f
+                val oy1 = cy - s * 0.10f
+                path.moveTo(ox1, oy1 - r1)
+                path.lineTo(ox1 + r1 * 0.8f, oy1)
+                path.lineTo(ox1, oy1 + r1)
+                path.lineTo(ox1 - r1 * 0.8f, oy1)
+                path.close()
+                val ox2 = cx + s * 0.22f
+                val oy2 = cy + s * 0.10f
+                path.moveTo(ox2, oy2 - r1)
+                path.lineTo(ox2 + r1 * 0.8f, oy2)
+                path.lineTo(ox2, oy2 + r1)
+                path.lineTo(ox2 - r1 * 0.8f, oy2)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "F" -> {
+                // Cubo com + e - (dF)
+                val r = s * 0.40f
+                val rect = RectF(cx - r, cy - r, cx + r, cy + r)
+                canvas.drawRoundRect(rect, 2.5f * density, 2.5f * density, paint)
+                canvas.drawLine(cx - s * 0.20f, cy - s * 0.12f, cx - s * 0.08f, cy - s * 0.12f, paint)
+                canvas.drawLine(cx - s * 0.14f, cy - s * 0.18f, cx - s * 0.14f, cy - s * 0.06f, paint)
+                canvas.drawLine(cx + s * 0.08f, cy + s * 0.12f, cx + s * 0.20f, cy + s * 0.12f, paint)
+            }
+            "C" -> {
+                // Carta de baralho
+                val rw = s * 0.36f
+                val rh = s * 0.46f
+                val rect = RectF(cx - rw, cy - rh, cx + rw, cy + rh)
+                canvas.drawRoundRect(rect, 2.5f * density, 2.5f * density, paint)
+                val cr = s * 0.13f
+                path.moveTo(cx, cy - cr)
+                path.lineTo(cx + cr * 0.8f, cy)
+                path.lineTo(cx, cy + cr)
+                path.lineTo(cx - cr * 0.8f, cy)
+                path.close()
+                canvas.drawPath(path, fillPaint)
+            }
+        }
+    }
+
+    override fun setAlpha(alpha: Int) {
+        paint.alpha = alpha
+        fillPaint.alpha = alpha
+    }
+
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        paint.colorFilter = colorFilter
+        fillPaint.colorFilter = colorFilter
+    }
+
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+    override fun getIntrinsicWidth(): Int = (22 * density).toInt()
+    override fun getIntrinsicHeight(): Int = (22 * density).toInt()
 }

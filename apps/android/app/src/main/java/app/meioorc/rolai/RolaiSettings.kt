@@ -35,6 +35,10 @@ data class RolaiSettings(
     val diceOutline: String,
     val diceTexture: String,
     val diceMaterial: String,
+    // Config do baralho (espelha DeckConfig de @rolai/deck-engine).
+    val deckIncludeJokers: Boolean = false,
+    val deckRemovalMode: String = "permanent",
+    val deckAutoReshuffle: Boolean = false,
 ) {
     companion object {
         const val PREFS_NAME = "rolai_settings"
@@ -237,6 +241,9 @@ data class RolaiSettings(
                     .let { if (it in TEXTURE_IDS) it!! else DEFAULT_TEXTURE },
                 diceMaterial = prefs.getString("dice_material", DEFAULT_MATERIAL)
                     .let { if (it in MATERIAL_IDS) it!! else DEFAULT_MATERIAL },
+                deckIncludeJokers = prefs.getBoolean("deck_include_jokers", false),
+                deckRemovalMode = prefs.getString("deck_removal_mode", "permanent") ?: "permanent",
+                deckAutoReshuffle = prefs.getBoolean("deck_auto_reshuffle", false),
             )
         }
 
@@ -257,6 +264,9 @@ data class RolaiSettings(
                 .putString("dice_outline", settings.diceOutline)
                 .putString("dice_texture", settings.diceTexture)
                 .putString("dice_material", settings.diceMaterial)
+                .putBoolean("deck_include_jokers", settings.deckIncludeJokers)
+                .putString("deck_removal_mode", settings.deckRemovalMode)
+                .putBoolean("deck_auto_reshuffle", settings.deckAutoReshuffle)
                 .apply()
         }
 

@@ -237,6 +237,26 @@ class DiceStageWindow(private val context: Context) {
         )
     }
 
+    /**
+     * Empurra cartas JA puxadas pro palco (window.rolaiStream.playCard) —
+     * mesmo papel do play() acima, so que pro baralho (specs/08-baralho.md).
+     * `cardsJson` e um array JSON de Card (`[{"id":...,"suit":...,"rank":...}]`).
+     */
+    fun playCard(cardsJson: String) {
+        val view = webView ?: return
+        if (stageLoadFailed) {
+            stageLoadFailed = false
+            stageUrl?.let { view.loadUrl(it) }
+        }
+        // Igual play() acima: manda a STRING JSON crua — o bridge (StreamApp.tsx)
+        // aceita Card[] ou string e faz o parse dele mesmo.
+        val escaped = org.json.JSONObject.quote(cardsJson)
+        view.evaluateJavascript(
+            "window.rolaiStream && window.rolaiStream.playCard($escaped)",
+            null,
+        )
+    }
+
     /** Tira os dados da tela agora (ponte window.rolaiStream.clear). */
     fun clearDice() {
         webView?.evaluateJavascript(

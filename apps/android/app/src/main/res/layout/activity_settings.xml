@@ -146,6 +146,55 @@
                 android:textColor="#E8ECF0" />
         </LinearLayout>
 
+        <!-- ===== Baralho de cartas ===== -->
+
+        <LinearLayout
+            android:id="@+id/header_deck"
+            style="@style/Rolai.SectionGroupHeader">
+
+            <TextView
+                style="@style/Rolai.SectionHeader.Inline"
+                android:text="@string/section_deck" />
+
+            <TextView
+                android:id="@+id/chevron_deck"
+                style="@style/Rolai.Chevron" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/group_deck"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <Switch
+                android:id="@+id/switch_deck_jokers"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/deck_include_jokers"
+                android:textColor="#E8ECF0"
+                android:textSize="15sp" />
+
+            <Switch
+                android:id="@+id/switch_deck_removal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/deck_removal_mode"
+                android:textColor="#E8ECF0"
+                android:textSize="15sp" />
+
+            <Switch
+                android:id="@+id/switch_deck_auto"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/deck_auto_reshuffle"
+                android:textColor="#E8ECF0"
+                android:textSize="15sp" />
+        </LinearLayout>
+
         <!-- ===== Aparencia do dado ===== -->
 
         <LinearLayout
@@ -295,6 +344,28 @@
                 android:layout_marginTop="8dp"
                 android:min="70"
                 android:max="160" />
+        </LinearLayout>
+
+        <!-- ===== Qualidade e desempenho ===== -->
+
+        <LinearLayout
+            android:id="@+id/header_quality"
+            style="@style/Rolai.SectionGroupHeader">
+
+            <TextView
+                style="@style/Rolai.SectionHeader.Inline"
+                android:text="@string/section_quality" />
+
+            <TextView
+                android:id="@+id/chevron_quality"
+                style="@style/Rolai.Chevron" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/group_quality"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
             <TextView
                 style="@style/Rolai.FieldLabel"
@@ -305,6 +376,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/label_quality_explain"
+                android:textColor="#8B95A1"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <!-- ===== Sala ===== -->

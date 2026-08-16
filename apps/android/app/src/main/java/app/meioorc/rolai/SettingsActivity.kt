@@ -46,6 +46,9 @@ class SettingsActivity : Activity() {
     private lateinit var spinnerTexture: Spinner
     private lateinit var spinnerMaterial: Spinner
     private lateinit var switchHarmony: Switch
+    private lateinit var switchDeckJokers: Switch
+    private lateinit var switchDeckRemoval: Switch
+    private lateinit var switchDeckAuto: Switch
     private lateinit var previewFrame: android.widget.FrameLayout
     private lateinit var txtPreview: TextView
 
@@ -168,6 +171,15 @@ class SettingsActivity : Activity() {
                 android.R.layout.simple_spinner_dropdown_item,
                 RolaiSettings.QUALITY_LABELS,
             )
+        }
+        switchDeckJokers = findViewById<Switch>(R.id.switch_deck_jokers).apply {
+            setOnCheckedChangeListener { _, _ -> saveFromViews() }
+        }
+        switchDeckRemoval = findViewById<Switch>(R.id.switch_deck_removal).apply {
+            setOnCheckedChangeListener { _, _ -> saveFromViews() }
+        }
+        switchDeckAuto = findViewById<Switch>(R.id.switch_deck_auto).apply {
+            setOnCheckedChangeListener { _, _ -> saveFromViews() }
         }
         inputsForm = findViewById(R.id.inputs_form)
         editServer = findViewById(R.id.edit_server)
@@ -320,6 +332,8 @@ class SettingsActivity : Activity() {
         if (RolaiSettings.isOverlayEnabled(this) && !Settings.canDrawOverlays(this)) {
             RolaiSettings.setOverlayEnabled(this, false)
             setSwitchChecked(false)
+        } else if (RolaiSettings.isOverlayEnabled(this) && Settings.canDrawOverlays(this)) {
+            enableOverlay()
         }
     }
 
@@ -444,6 +458,9 @@ class SettingsActivity : Activity() {
         spinnerQuality.setSelection(
             RolaiSettings.QUALITY_IDS.indexOf(settings.quality).coerceAtLeast(0),
         )
+        switchDeckJokers.isChecked = settings.deckIncludeJokers
+        switchDeckRemoval.isChecked = settings.deckRemovalMode == "returns"
+        switchDeckAuto.isChecked = settings.deckAutoReshuffle
         setSwitchChecked(RolaiSettings.isOverlayEnabled(this))
     }
 
@@ -545,7 +562,13 @@ class SettingsActivity : Activity() {
             prefs, "quickroll", R.id.header_quickroll, R.id.chevron_quickroll, R.id.group_quickroll,
         )
         setupCollapsible(
+            prefs, "deck", R.id.header_deck, R.id.chevron_deck, R.id.group_deck,
+        )
+        setupCollapsible(
             prefs, "appearance", R.id.header_appearance, R.id.chevron_appearance, R.id.group_appearance,
+        )
+        setupCollapsible(
+            prefs, "quality", R.id.header_quality, R.id.chevron_quality, R.id.group_quality,
         )
         setupCollapsible(prefs, "room", R.id.header_room, R.id.chevron_room, R.id.group_room)
         setupCollapsible(prefs, "about", R.id.header_about, R.id.chevron_about, R.id.group_about)
@@ -652,6 +675,9 @@ class SettingsActivity : Activity() {
                     spinnerQuality.selectedItemPosition
                         .coerceIn(0, RolaiSettings.QUALITY_IDS.size - 1)
                 ],
+                deckIncludeJokers = switchDeckJokers.isChecked,
+                deckRemovalMode = if (switchDeckRemoval.isChecked) "returns" else "permanent",
+                deckAutoReshuffle = switchDeckAuto.isChecked,
             ),
         )
         // Toda mudanca vale na hora: sem isto so tinha efeito depois de

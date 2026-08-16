@@ -7,6 +7,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -32,6 +33,22 @@ class RoomClient(private val listener: Listener) {
          * o palco anima com a cor de quem rolou, nao com a nossa.
          */
         fun onRoll(player: String, resultJson: String, styleJson: String?)
+        /**
+         * Broadcast de puxada de baralho (specs/08-baralho.md), inclusive
+         * eco da nossa: `cardsJson` e um array JSON de Card.
+         */
+        fun onDeckDraw(player: String, cardsJson: String, remaining: Int)
+        /** Broadcast de reembaralhada (specs/08-baralho.md — log de quem
+         *  operou o baralho), inclusive eco da nossa. */
+        fun onDeckShuffle(player: String)
+        /** Broadcast de mudanca de config do baralho — so os campos que
+         *  mudaram vem preenchidos, igual o envelope de saida. */
+        fun onDeckConfig(
+            player: String,
+            includeJokers: Boolean?,
+            removalMode: String?,
+            autoReshuffleOnEmpty: Boolean?,
+        )
         /** Roster atual (snapshot inicial ou evento de entrada/saida). */
         fun onRoster(memberNames: List<String>)
         /** Erro de protocolo vindo do servidor, ou "room_not_found" local. */
@@ -84,6 +101,65 @@ class RoomClient(private val listener: Listener) {
         return webSocket?.send(envelope) ?: false
     }
 
+    /**
+     * Envia o envelope {"type":"deck_draw","cards":[...],"remaining":N,
+     * "timestamp":...} — mesmo esquema de confianca do sendRoll: o cliente
+     * ja puxou local (HeadlessRoller.deckDraw), isto so avisa a sala pro
+     * log e historico (specs/08-baralho.md). `cardsJson` e um array JSON
+     * de Card pronto (vem do "cards" do deliver de headless.ts).
+     */
+    fun sendDeckDraw(cardsJson: String, remaining: Int, timestamp: String): Boolean {
+        val envelope = try {
+            JSONObject()
+                .put("type", "deck_draw")
+                .put("cards", JSONArray(cardsJson))
+                .put("remaining", remaining)
+                .put("timestamp", timestamp)
+                .toString()
+        } catch (e: JSONException) {
+            return false
+        }
+        return webSocket?.send(envelope) ?: false
+    }
+
+    /** Envia o envelope {"type":"deck_shuffle","timestamp":...}. */
+    fun sendDeckShuffle(timestamp: String): Boolean {
+        val envelope = try {
+            JSONObject()
+                .put("type", "deck_shuffle")
+                .put("timestamp", timestamp)
+                .toString()
+        } catch (e: JSONException) {
+            return false
+        }
+        return webSocket?.send(envelope) ?: false
+    }
+
+    /**
+     * Envia {"type":"deck_config", [campo mudado], "timestamp":...} — so o
+     * campo que de fato mudou entra, igual RoomClient.ts (sendDeckConfig).
+     * Passe null pros dois nao mudados.
+     */
+    fun sendDeckConfig(
+        includeJokers: Boolean?,
+        removalMode: String?,
+        autoReshuffleOnEmpty: Boolean?,
+        timestamp: String,
+    ): Boolean {
+        val envelope = try {
+            JSONObject().apply {
+                put("type", "deck_config")
+                if (includeJokers != null) put("include_jokers", includeJokers)
+                if (removalMode != null) put("removal_mode", removalMode)
+                if (autoReshuffleOnEmpty != null) put("auto_reshuffle_on_empty", autoReshuffleOnEmpty)
+                put("timestamp", timestamp)
+            }.toString()
+        } catch (e: JSONException) {
+            return false
+        }
+        return webSocket?.send(envelope) ?: false
+    }
+
     private fun open() {
         if (stopped) return
         val target = url ?: return
@@ -126,6 +202,33 @@ class RoomClient(private val listener: Listener) {
                     val result = message.optJSONObject("result")?.toString() ?: return
                     val style = message.optJSONObject("style")?.toString()
                     handler.post { listener.onRoll(player, result, style) }
+                }
+                "deck_draw" -> {
+                    val player = message.optString("player", "?")
+                    val cards = message.optJSONArray("cards")?.toString() ?: return
+                    val remaining = message.optInt("remaining", 0)
+                    handler.post { listener.onDeckDraw(player, cards, remaining) }
+                }
+                "deck_shuffle" -> {
+                    val player = message.optString("player", "?")
+                    handler.post { listener.onDeckShuffle(player) }
+                }
+                "deck_config" -> {
+                    val player = message.optString("player", "?")
+                    val includeJokers = if (message.has("include_jokers")) {
+                        message.optBoolean("include_jokers")
+                    } else {
+                        null
+                    }
+                    val removalMode = message.optString("removal_mode", "").ifEmpty { null }
+                    val autoReshuffleOnEmpty = if (message.has("auto_reshuffle_on_empty")) {
+                        message.optBoolean("auto_reshuffle_on_empty")
+                    } else {
+                        null
+                    }
+                    handler.post {
+                        listener.onDeckConfig(player, includeJokers, removalMode, autoReshuffleOnEmpty)
+                    }
                 }
                 "error" -> {
                     val error = message.optString("message", "erro do servidor")

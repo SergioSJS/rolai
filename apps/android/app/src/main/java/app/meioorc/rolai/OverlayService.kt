@@ -19,6 +19,7 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -48,6 +49,23 @@ class OverlayService : Service() {
     private val stageHandler = Handler(Looper.getMainLooper())
     private val stageHideRunnable = Runnable { diceStage.setInteractive(false) }
     private var roomClient: RoomClient? = null
+
+    /**
+     * Baralho local ao aparelho (specs/08-baralho.md), serializado — a
+     * HeadlessRoller e recriada a cada Service, entao quem persiste o
+     * `DeckState` entre chamadas e este campo, salvo em SharedPreferences a
+     * cada puxada/reembaralhada/config (ver KEY_DECK_STATE) pra sobreviver a
+     * um restart do processo, igual lastRollAction/KEY_LAST_ROLL.
+     */
+    private var deckStateJson: String? = null
+
+    // Config do baralho — persistida junto do deckStateJson (KEY_DECK_*).
+    // includeJokers muda a COMPOSICAO do monte (deck-engine so aplica isso
+    // criando baralho novo, ver headless.ts deckNew), as outras duas so
+    // valem pro proximo draw() (deckConfig, em cima do monte atual).
+    private var deckIncludeJokers = false
+    private var deckRemovalMode = "permanent"
+    private var deckAutoReshuffleOnEmpty = false
 
     // Assinatura do que ja esta montado: se a config nova gera a mesma URL,
     // nao ha nada pra refazer (ver applySettings).
@@ -136,9 +154,21 @@ class OverlayService : Service() {
             this,
             onResult = ::onRollCalculated,
             onError = { message -> overlay.showResult("erro: $message") },
+            onDeckResult = ::onDeckCalculated,
+            onDeckError = { message -> overlay.showResult("erro: $message") },
         )
+        deckStateJson = loadDeckState()
+        loadDeckConfig()
+        deckStateJson?.let {
+            runCatching {
+                val remaining = JSONObject(it).optJSONArray("drawPile")?.length()
+                if (remaining != null) overlay.setDeckRemaining(remaining)
+            }
+        }
         overlay.onRollClicked = ::rollNow
         overlay.onQuickRoll = { (lastRollAction ?: ::rollNow).invoke() }
+        overlay.onDrawCard = { count -> drawCard(count) }
+        overlay.onReshuffleDeck = ::reshuffleDeck
         overlay.onRollNotation = { notation -> rollNotation(notation) }
         overlay.onRollWithInputs = ::rollWithInputs
         overlay.onRollOverlay = ::rollOverlayNow
@@ -391,6 +421,31 @@ class OverlayService : Service() {
                 .apply()
         }
 
+        val oldJokers = deckIncludeJokers
+        val oldRemoval = deckRemovalMode
+        val oldAuto = deckAutoReshuffleOnEmpty
+        loadDeckConfig()
+        if (oldJokers != deckIncludeJokers) {
+            headlessRoller.deckNew(buildDeckConfigJson())
+            broadcastDeckConfigChange(includeJokers = deckIncludeJokers)
+        } else {
+            if (oldRemoval != deckRemovalMode) {
+                deckStateJson?.let {
+                    headlessRoller.deckConfig(it, JSONObject().put("removalMode", deckRemovalMode).toString())
+                }
+                broadcastDeckConfigChange(removalMode = deckRemovalMode)
+            }
+            if (oldAuto != deckAutoReshuffleOnEmpty) {
+                deckStateJson?.let {
+                    headlessRoller.deckConfig(
+                        it,
+                        JSONObject().put("autoReshuffleOnEmpty", deckAutoReshuffleOnEmpty).toString(),
+                    )
+                }
+                broadcastDeckConfigChange(autoReshuffleOnEmpty = deckAutoReshuffleOnEmpty)
+            }
+        }
+
         // So remonta o que de fato mudou. Trocar de sistema ou de notacao
         // nao tem nada a ver com o palco nem com a sala — reabrir conexao
         // por isso e desperdicio, e desperdicio aqui custa cota de conexao
@@ -481,6 +536,29 @@ class OverlayService : Service() {
             stageShow()
         }
 
+        override fun onDeckDraw(player: String, cardsJson: String, remaining: Int) {
+            overlay.addActivityLine("$player: ${formatCards(cardsJson)}")
+            // Mesmo empurrao direto do onRoll acima — o palco anima sem
+            // depender de nenhuma WebView espectadora.
+            diceStage.playCard(cardsJson)
+            stageShow()
+        }
+
+        override fun onDeckShuffle(player: String) {
+            overlay.addActivityLine("$player: reembaralhou o baralho")
+        }
+
+        override fun onDeckConfig(
+            player: String,
+            includeJokers: Boolean?,
+            removalMode: String?,
+            autoReshuffleOnEmpty: Boolean?,
+        ) {
+            overlay.addActivityLine(
+                "$player: ${formatDeckConfigChange(includeJokers, removalMode, autoReshuffleOnEmpty)}",
+            )
+        }
+
         override fun onRoster(memberNames: List<String>) {
             overlay.setRoster(memberNames)
             // Snapshot chegou: agora sim esta na sala.
@@ -521,12 +599,12 @@ class OverlayService : Service() {
         )
     }
 
-    /** Rolagem por notacao (chips/digitada no painel): vira a "ultima
-     *  rolagem" que a mini-bolha do fan repete. Persistida — ver
-     *  loadLastRoll. */
     private fun rollNotation(notation: String) {
-        headlessRoller.roll(notation)
-        lastRollAction = { headlessRoller.roll(notation) }
+        val trimmed = notation.trim()
+        if (trimmed.isEmpty()) return
+
+        headlessRoller.roll(trimmed)
+        lastRollAction = { rollNotation(notation) }
         getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_LAST_ROLL, notation)
@@ -587,6 +665,65 @@ class OverlayService : Service() {
             return
         }
         headlessRoller.rollWithProfile(settings.system, settings.inputsJson)
+    }
+
+    /** Secao Baralho do painel: puxa `count` carta(s) do baralho local a
+     *  este aparelho (specs/08-baralho.md), com a config atual. */
+    private fun drawCard(count: Int) {
+        headlessRoller.deckDraw(deckStateJson, buildDeckConfigJson(), count)
+    }
+
+    /** Botao "reembaralhar" — sem baralho ainda, cria um novo na hora (o
+     *  resultado pratico e o mesmo: um monte cheio pronto pra puxar). */
+    private fun reshuffleDeck() {
+        val state = deckStateJson
+        if (state != null) headlessRoller.deckReshuffle(state) else headlessRoller.deckNew(buildDeckConfigJson())
+        overlay.showResult("baralho reembaralhado")
+        val timestamp = java.time.Instant.now().toString()
+        val entregue = roomState == RoomState.CONNECTED &&
+            roomClient?.sendDeckShuffle(timestamp) == true
+        if (!entregue) overlay.addActivityLine("você: reembaralhou o baralho")
+    }
+
+    /** Log local (fallback) ou eco de sala — mesmo par entregue/local dos
+     *  outros eventos de baralho, so os campos passados entram no envelope. */
+    private fun broadcastDeckConfigChange(
+        includeJokers: Boolean? = null,
+        removalMode: String? = null,
+        autoReshuffleOnEmpty: Boolean? = null,
+    ) {
+        val label = formatDeckConfigChange(includeJokers, removalMode, autoReshuffleOnEmpty)
+        val timestamp = java.time.Instant.now().toString()
+        val entregue = roomState == RoomState.CONNECTED &&
+            roomClient?.sendDeckConfig(includeJokers, removalMode, autoReshuffleOnEmpty, timestamp) == true
+        if (!entregue) overlay.addActivityLine("você: $label")
+    }
+
+    private fun buildDeckConfigJson(): String =
+        JSONObject()
+            .put("includeJokers", deckIncludeJokers)
+            .put("removalMode", deckRemovalMode)
+            .put("autoReshuffleOnEmpty", deckAutoReshuffleOnEmpty)
+            .toString()
+
+    /** Ultimo DeckState salvo, ou null se nunca puxou carta neste aparelho. */
+    private fun loadDeckState(): String? =
+        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_DECK_STATE, null)
+
+    private fun saveDeckState(json: String) {
+        deckStateJson = json
+        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_DECK_STATE, json)
+            .apply()
+    }
+
+    private fun loadDeckConfig() {
+        val settings = RolaiSettings.load(this)
+        deckIncludeJokers = settings.deckIncludeJokers
+        deckRemovalMode = settings.deckRemovalMode
+        deckAutoReshuffleOnEmpty = settings.deckAutoReshuffle
     }
 
     /**
@@ -758,6 +895,35 @@ class OverlayService : Service() {
         }
     }
 
+    /**
+     * Resultado de rolai.deckDraw (headless.ts): `{deck, cards, remaining}`.
+     * `deck` e o DeckState inteiro ja atualizado — salva de volta pra
+     * proxima puxada continuar de onde parou (ver deckStateJson).
+     */
+    private fun onDeckCalculated(resultJson: String) {
+        val payload = JSONObject(resultJson)
+        val deck = payload.optJSONObject("deck") ?: return
+        saveDeckState(deck.toString())
+        val remaining = payload.optInt("remaining", deck.optJSONArray("drawPile")?.length() ?: 0)
+        overlay.setDeckRemaining(remaining)
+        val cards = payload.optJSONArray("cards") ?: return
+        overlay.showResult(formatCards(cards))
+        // Mini-bolha "rolar" repete ISTO agora, nao a ultima rolagem de dado
+        // — mesma logica de rollNotation/rollWithInputs, so que pra carta.
+        // Sem KEY_LAST_ROLL: aquele campo so sabe repetir via
+        // headlessRoller.roll(notation) cru, formato que nao serve aqui.
+        val count = cards.length()
+        lastRollAction = { drawCard(count) }
+        val timestamp = java.time.Instant.now().toString()
+        val entregue = roomState == RoomState.CONNECTED &&
+            roomClient?.sendDeckDraw(cards.toString(), remaining, timestamp) == true
+        if (!entregue) {
+            diceStage.playCard(cards.toString())
+            stageShow()
+            overlay.addActivityLine("você: ${formatCards(cards)}")
+        }
+    }
+
     companion object {
         /** Espera por colisoes antes de cair no som generico. */
         private const val SOUND_FALLBACK_MS = 600L
@@ -777,6 +943,15 @@ class OverlayService : Service() {
 
         /** SharedPrefs: ultima rolagem por notacao (a da mini-bolha do fan). */
         private const val KEY_LAST_ROLL = "last_roll"
+
+        /** SharedPrefs: DeckState serializado do baralho local (ver drawCard). */
+        private const val KEY_DECK_STATE = "deck_state"
+
+        /** SharedPrefs: config do baralho (curinga/remocao/auto), serializada
+         *  igual buildDeckConfigJson() — camelCase, vai direto pro
+         *  createDeck()/updateConfig() do lado TS (headless.ts), nao pro wire
+         *  snake_case do backend (esse so entra em sendDeckConfig). */
+        private const val KEY_DECK_CONFIG = "deck_config"
 
         /** Config mudou: remonta palco e sala sem religar o botao. */
         const val ACTION_RELOAD = "app.meioorc.rolai.action.RELOAD"
@@ -862,6 +1037,53 @@ class OverlayService : Service() {
             }
             total.coerceAtLeast(1)
         }.getOrDefault(1)
+
+        // Simbolo do naipe (mesmo mapa de apps/web/src/cardFormat.ts —
+        // SUIT_SYMBOL) pro texto nativo do overlay.
+        private val SUIT_SYMBOL = mapOf(
+            "hearts" to "♥",
+            "diamonds" to "♦",
+            "clubs" to "♣",
+            "spades" to "♠",
+        )
+
+        /** "10♥, K♠" / "Curinga" — mesma leitura do cardLabel() da web. */
+        fun formatCards(cards: JSONArray): String =
+            (0 until cards.length()).joinToString(", ") { i ->
+                val card = cards.getJSONObject(i)
+                val suit = card.optString("suit")
+                if (suit == "joker") "Curinga" else "${card.optString("rank")}${SUIT_SYMBOL[suit] ?: ""}"
+            }
+
+        /** Sobrecarga pra quando as cartas chegam como JSON em string (eco da sala). */
+        fun formatCards(cardsJson: String): String = try {
+            formatCards(JSONArray(cardsJson))
+        } catch (e: Exception) {
+            cardsJson.take(80)
+        }
+
+        /** Resumo legivel de uma mudanca de config — mesma leitura do
+         *  deckConfigChangeLabel() da web (cardFormat.ts). So os campos
+         *  presentes (nao-null) entram, igual o evento deck_config em si. */
+        fun formatDeckConfigChange(
+            includeJokers: Boolean?,
+            removalMode: String?,
+            autoReshuffleOnEmpty: Boolean?,
+        ): String {
+            val parts = mutableListOf<String>()
+            if (includeJokers != null) parts.add(if (includeJokers) "com curinga" else "sem curinga")
+            if (removalMode != null) {
+                parts.add(
+                    if (removalMode == "returns") "carta volta na hora" else "carta some até reembaralhar",
+                )
+            }
+            if (autoReshuffleOnEmpty != null) {
+                parts.add(
+                    if (autoReshuffleOnEmpty) "reembaralha sozinho quando vazio" else "trava quando vazio",
+                )
+            }
+            return parts.joinToString(", ")
+        }
 
         fun toneOf(resultJson: String): OutcomeTone {
             val outcome = runCatching {

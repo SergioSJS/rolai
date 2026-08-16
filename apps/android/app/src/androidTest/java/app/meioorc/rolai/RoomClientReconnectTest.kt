@@ -63,6 +63,14 @@ class RoomClientReconnectTest {
             }
 
             override fun onRoll(player: String, resultJson: String, styleJson: String?) = Unit
+            override fun onDeckDraw(player: String, cardsJson: String, remaining: Int) = Unit
+            override fun onDeckShuffle(player: String) = Unit
+            override fun onDeckConfig(
+                player: String,
+                includeJokers: Boolean?,
+                removalMode: String?,
+                autoReshuffleOnEmpty: Boolean?,
+            ) = Unit
             override fun onRoster(memberNames: List<String>) = Unit
             override fun onError(message: String) = Unit
 
@@ -107,6 +115,14 @@ class RoomClientReconnectTest {
         val client = RoomClient(object : RoomClient.Listener {
             override fun onConnected() = Unit
             override fun onRoll(player: String, resultJson: String, styleJson: String?) = Unit
+            override fun onDeckDraw(player: String, cardsJson: String, remaining: Int) = Unit
+            override fun onDeckShuffle(player: String) = Unit
+            override fun onDeckConfig(
+                player: String,
+                includeJokers: Boolean?,
+                removalMode: String?,
+                autoReshuffleOnEmpty: Boolean?,
+            ) = Unit
             override fun onRoster(memberNames: List<String>) = Unit
             override fun onError(message: String) = Unit
 

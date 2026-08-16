@@ -49,6 +49,7 @@
     <string name="overlay_action_settings">config</string>
     <string name="overlay_action_open_app">abrir app</string>
     <string name="overlay_action_close">fechar</string>
+    <string name="overlay_deck_reshuffle">reembaralhar</string>
     <string name="overlay_room_title">Sala</string>
     <string name="overlay_room_empty">ninguém na sala ainda</string>
     <string name="overlay_room_create">criar sala</string>
@@ -59,6 +60,14 @@
     <string name="section_general">Botão flutuante</string>
     <string name="section_room">Sala</string>
     <string name="section_quickroll">Padrão de rolagem</string>
+    <string name="section_deck">Baralho de cartas</string>
+    <string name="deck_include_jokers">Incluir curingas (54 cartas)</string>
+    <string name="deck_removal_mode">Modo de leitura (carta volta ao monte)</string>
+    <string name="deck_auto_reshuffle">Reembaralhar quando o monte esvaziar</string>
+    <string name="overlay_tab_dice">Dados</string>
+    <string name="overlay_tab_deck">Baralho</string>
+    <string name="overlay_deck_draw">Puxar</string>
+    <string name="overlay_deck_remaining">%d cartas no monte</string>
     <string name="section_appearance">Aparência do dado</string>
     <string name="section_about">Versão</string>
     <string name="about_contact">Sérgio Sousa · @sergiosjs · meioorc.com · sergiosjs@pm.me</string>
@@ -71,7 +80,9 @@
     <!-- %1$s = versão nova encontrada nas Releases do GitHub. -->
     <string name="version_update_available">Versão %1$s disponível — toque para baixar</string>
     <string name="label_dice_scale">Tamanho do dado</string>
-    <string name="label_quality">Qualidade do 3D</string>
+    <string name="section_quality">Qualidade e desempenho</string>
+    <string name="label_quality">Nível visual (3D / 2D)</string>
+    <string name="label_quality_explain">Ajusta o nível visual e o desempenho 3D tanto para os dados quanto para o baralho de cartas.</string>
     <string name="settings_subtitle">configurações</string>
     <string name="label_color_body">Cor do corpo</string>
     <string name="label_color_number">Cor do número</string>
