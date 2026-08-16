@@ -7,7 +7,7 @@ packages = ["app"]
 
 [project]
 name = "rolai-backend"
-version = "0.1.0"
+version = "1.0.0"
 description = "Relay de sala do rolai. Nao valida rolagens, so retransmite (ver docs/security.md)."
 requires-python = ">=3.12"
 dependencies = [

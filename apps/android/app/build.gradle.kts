@@ -16,8 +16,8 @@ android {
         applicationId = "app.meioorc.rolai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
-        versionName = "0.13.8"
+        versionCode = 32
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

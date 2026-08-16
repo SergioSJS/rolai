@@ -12,6 +12,18 @@ data class ChangelogEntry(val version: String, val date: String, val notes: List
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            "1.0.0",
+            "2026-08-16",
+            listOf(
+                "Motor de baralho de cartas com embaralhamento determinístico, saques, modos de descarte e sincronização em sala.",
+                "Palco de cartas 3D (Three.js) com física e modo 2D leve com efeito flip de cartas.",
+                "Efeitos sonoros reais gravados de manuseio e embaralhamento de cartas (Kenney Casino Audio — CC0).",
+                "Suporte ao sistema Firelights ({2d6+mod} vs {2c}) e rolagens com termos de cartas (notação livre).",
+                "Teclado de dados com d2 (moedinha 3D), d3, d66 e cartas; nova aba dedicada de Baralho no painel flutuante.",
+                "Seção independente de Desempenho e Qualidade Gráfica nas configurações.",
+            ),
+        ),
+        ChangelogEntry(
             "0.13.8",
             "2026-08-15",
             listOf(

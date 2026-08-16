@@ -12,6 +12,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.0.0",
+    date: "2026-08-16",
+    notes: [
+      "Motor de baralho de cartas com embaralhamento determinístico, saques, modos de descarte e sincronização em sala.",
+      "Palco de cartas 3D (Three.js) com física e modo 2D leve com efeito flip de cartas.",
+      "Efeitos sonoros reais gravados de manuseio e embaralhamento de cartas (Kenney Casino Audio — CC0).",
+      "Suporte ao sistema Firelights ({2d6+mod} vs {2c}) e rolagens com termos de cartas (notação livre).",
+      "Teclado de dados com d2 (moedinha 3D), d3, d66 e cartas; nova aba dedicada de Baralho no painel flutuante.",
+      "Seção independente de Desempenho e Qualidade Gráfica nas configurações.",
+    ],
+  },
+  {
     version: "0.13.8",
     date: "2026-08-15",
     notes: [
