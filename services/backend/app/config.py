@@ -6,9 +6,18 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     postgres_dsn: str = "postgresql+asyncpg://rolai:rolai@localhost:5432/rolai"
-    # Dev local: origem do `npm run dev` do apps/web. Em producao, sobrescrever
+    # Dev local: origens do `npm run dev` do apps/web. Em producao, sobrescrever
     # via env CORS_ORIGINS com o dominio do frontend — nunca "*" (docs/security.md).
-    cors_origins: list[str] = ["http://localhost:5273"]
+    cors_origins: list[str] = [
+        "http://localhost:5273",
+        "http://localhost:5274",
+        "http://localhost:5275",
+        "http://localhost:5173",
+        "http://127.0.0.1:5273",
+        "http://127.0.0.1:5274",
+        "http://127.0.0.1:5275",
+        "http://127.0.0.1:5173",
+    ]
     room_ttl_seconds: int = 6 * 60 * 60
     rate_limit_per_minute: int = 60
     max_message_bytes: int = 4 * 1024  # docs/security.md: rejeitar antes de parsear
