@@ -14,8 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { RollResult } from "@rolai/rules-engine";
-import type { Card, DeckConfig, DeckState, DrawResult } from "@rolai/deck-engine";
-import { createDeck, draw } from "@rolai/deck-engine";
+import type { Card, DeckConfig, DrawResult } from "@rolai/deck-engine";
 import { playCardDraw } from "./deckSound";
 import { availableProfiles } from "./profiles";
 import { familyFor } from "./profileFamilies";
@@ -534,24 +533,6 @@ export function App() {
   const inRoom = room.code !== null;
   const online = useOnline();
 
-  const sharedDeckRef = useRef<DeckState | null>(null);
-
-  const handleComposerCardDraw = useCallback(
-    (count: number) => {
-      if (!sharedDeckRef.current) {
-        sharedDeckRef.current = createDeck(deckConfig);
-      }
-      try {
-        const result = draw(sharedDeckRef.current, count);
-        playCardDraw();
-        handleDeckDraw(result, new Date().toISOString());
-      } catch (err) {
-        console.error("Erro ao puxar cartas:", err);
-      }
-    },
-    [deckConfig, handleDeckDraw],
-  );
-
   return (
     <main className="app">
       {/* Abrir qualquer modal tira os dados da tela: o menu e uso da UI,
@@ -610,7 +591,6 @@ export function App() {
               family={familyFor(system)}
               onSelectFamilyMember={handleSystemChange}
               onRoll={handleRoll}
-              onDrawCards={handleComposerCardDraw}
             />
           ) : (
             <DeckPanel

@@ -2,7 +2,7 @@
 // de texto puro). Sem logica de regras — so apresentacao do RollResult.
 
 import { parseNotation } from "@rolai/rules-engine";
-import type { RollGroup, RollResult } from "@rolai/rules-engine";
+import type { RollResult } from "@rolai/rules-engine";
 
 // Labels pt-BR pros outcomes conhecidos dos profiles versionados
 // (packages/rules-engine/profiles/*.yaml). Outcome desconhecido (profile

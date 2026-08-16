@@ -17,7 +17,6 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import type { RollResult, SystemProfile } from "@rolai/rules-engine";
 import { rollFromNotation, rollFromOverlay, rollFromProfile } from "../roll";
-import { fromNotation, toNotation } from "../composer";
 import type { ProfileFamily } from "../profileFamilies";
 import { ComposerBar } from "./ComposerBar";
 import { StepperInput } from "./StepperInput";
@@ -31,7 +30,6 @@ interface RollPanelProps {
   family?: ProfileFamily | undefined;
   onSelectFamilyMember?: (system: string) => void;
   onRoll: (result: RollResult) => void;
-  onDrawCards?: (count: number) => void;
   disabled?: boolean;
 }
 
@@ -105,7 +103,6 @@ export function RollPanel({
   family,
   onSelectFamilyMember,
   onRoll,
-  onDrawCards,
   disabled,
 }: RollPanelProps) {
   const isOverlay = profile?.rollType === "overlay";

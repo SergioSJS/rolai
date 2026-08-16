@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { roll } from "@rolai/rules-engine";
 import { buildBoxNotation } from "../renderers/diceBox";
-import { diceBoxOptions } from "../renderers";
-import { DEFAULT_DICE_STYLE } from "../settings";
 import {
   cardsFromResult,
   diceFromResult,
