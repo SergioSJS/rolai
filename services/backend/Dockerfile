@@ -11,4 +11,5 @@ EXPOSE 8000
 # --limit-concurrency: teto de conexoes simultaneas (WS conta) — evita
 #   exaustao de socket/memoria num flood.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--ws-max-size", "16384", "--limit-concurrency", "256"]
+     "--ws-max-size", "16384", "--limit-concurrency", "2048"]
+

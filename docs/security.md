@@ -71,7 +71,7 @@ por socket.
 | Reconectar pra zerar o rate limit por socket | `WS_CONNECT_LIMIT_PER_MINUTE` (30/IP) |
 | Amplificação N-para-N (broadcast) numa sala lotada | `MAX_MEMBERS_PER_ROOM` (20) |
 | Conexões espectadoras (modo stream/OBS) numa sala | `MAX_SPECTATORS_PER_ROOM` (5) — teto separado, espectador não conta como membro e nunca rola |
-| Exaustão de socket/memória | `--limit-concurrency 256` no uvicorn + `mem_limit` em todos os containers |
+| Exaustão de socket/memória | `--limit-concurrency 2048` no uvicorn + `mem_limit` em todos os containers |
 | N bots com N IPs criando salas abaixo do limite por IP | `MAX_ACTIVE_ROOMS` (1000, global): `POST /rooms` devolve **503** quando o teto é atingido. Contagem no set Redis `rooms:active`, prunado a cada criação (sala cujo marcador expirou sai do set e deixa de contar) |
 | Profiles custom acumulando pra sempre no Postgres | Profile custom é **efêmero**: `PROFILE_TTL_DAYS` (30) + expurgo periódico (`PROFILE_PURGE_INTERVAL_SECONDS`, diário; roda também no boot) |
 | Ataque em andamento invisível | Log estruturado no logger `rolai` (ver abaixo) |

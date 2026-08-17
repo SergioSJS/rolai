@@ -695,7 +695,7 @@ wheels = [
 
 [[package]]
 name = "rolai-backend"
-version = "0.1.0"
+version = "1.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "asyncpg" },

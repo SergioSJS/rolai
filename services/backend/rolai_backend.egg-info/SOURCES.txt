@@ -2,6 +2,7 @@ pyproject.toml
 app/__init__.py
 app/config.py
 app/db.py
+app/dev.py
 app/limits.py
 app/logs.py
 app/main.py
@@ -16,8 +17,10 @@ rolai_backend.egg-info/SOURCES.txt
 rolai_backend.egg-info/dependency_links.txt
 rolai_backend.egg-info/requires.txt
 rolai_backend.egg-info/top_level.txt
+tests/test_deck_events.py
 tests/test_export.py
 tests/test_global_caps.py
+tests/test_heartbeat.py
 tests/test_limits.py
 tests/test_profiles.py
 tests/test_rooms.py
