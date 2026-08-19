@@ -33,6 +33,16 @@ data class ProfileInput(
     val required: Boolean,
 ) {
     val isSelect: Boolean get() = type == "select" && options.isNotEmpty()
+
+    /**
+     * Escrituracao do Forçar (id "push_*"): os "1s travados" do Forbidden
+     * Lands. Quem preenche e o botao Forçar, nunca a mao — no overlay, que
+     * ja e apertado, eles so somariam dois campos entre o jogador e o botao
+     * de rolar. Ficam fora do formulario; a rolagem normal sai sem eles, e e
+     * isso que faz um Rolar depois de um Forçar comecar cadeia nova em vez
+     * de arrastar dano de uma rolagem que nem foi forcada.
+     */
+    val isPushBookkeeping: Boolean get() = id.startsWith("push_")
 }
 
 data class SystemInfo(
@@ -41,8 +51,11 @@ data class SystemInfo(
     val inputs: List<ProfileInput>,
     val rollType: String,
 ) {
+    /** Inputs que aparecem no formulario — sem a escrituracao do Forçar. */
+    val formInputs: List<ProfileInput> get() = inputs.filterNot { it.isPushBookkeeping }
+
     /** Sistema sem input nenhum rola direto — nao ha o que perguntar. */
-    val needsForm: Boolean get() = inputs.isNotEmpty()
+    val needsForm: Boolean get() = formInputs.isNotEmpty()
 
     /**
      * "overlay" (ex.: roll_under): sem dado proprio — a rolagem vem do

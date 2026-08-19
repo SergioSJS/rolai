@@ -1,0 +1,39 @@
+system: yze
+label: "YZ — Pool genérico"
+roll_type: simple
+inputs:
+  - id: pool_size
+    label: "Dados no pool"
+    type: number
+    default: "1"
+  - id: sucessos_anteriores
+    label: "Sucesso garantido"
+    type: number
+    default: "0"
+  - id: dificuldade
+    label: "Dificuldade"
+    type: number
+    required: false
+    default: "1"
+fields:
+  - id: pool
+    dice: "{input.pool_size}d6"
+    modifier: "{input.sucessos_anteriores}"
+    compare_individually: true
+    success_rule: ">=6"
+# Base de toda a linha Year Zero (Coriolis, Tales from the Loop, Vaesen,
+# Mutant simplificado): pool de d6, cada 6 e um sucesso, sem bane. Empurrar
+# (push) rerrola tudo que NAO deu 6 — os 6s ficam na mesa, e e por isso que
+# existe "sucessos travados": o motor e stateless, entao o que sobrou da
+# rolagem anterior volta como modificador da CONTAGEM (ver o comentario do
+# success_rule em src/profile.ts). "[6, 3, 4] + 2 = 3" e uma rolagem
+# empurrada com 2 sucessos vindos de antes.
+# "dificuldade" e opcional (default 1, o normal na linha): em branco, so a
+# contagem aparece, sem sucesso/falha. Pool 0 e legitimo aqui (forcar sem
+# nenhum dado sobrando) — a notacao "0d6" existe justamente pra isso, e o
+# palco nao anima dado nenhum.
+outcome_rules:
+  - condition: "pool.total >= {input.dificuldade}"
+    result: success
+  - condition: "pool.total < {input.dificuldade}"
+    result: fail

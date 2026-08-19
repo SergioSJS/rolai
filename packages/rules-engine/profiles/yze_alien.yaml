@@ -1,0 +1,48 @@
+system: yze_alien
+label: "YZ — Alien"
+roll_type: multi
+inputs:
+  - id: base
+    label: "Base"
+    type: number
+    default: "1"
+  - id: estresse
+    label: "Estresse"
+    type: number
+    default: "0"
+  - id: sucessos_anteriores
+    label: "Sucesso garantido"
+    type: number
+    default: "0"
+  - id: dificuldade
+    label: "Dificuldade"
+    type: number
+    required: false
+    default: "1"
+fields:
+  - id: base
+    dice: "{input.base}d6"
+    modifier: "{input.sucessos_anteriores}"
+    compare_individually: true
+    success_rule: ">=6"
+  - id: estresse
+    dice: "{input.estresse}d6"
+    compare_individually: true
+    success_rule: ">=6"
+# Pool base + dados de Estresse, ambos d6, 6 e sucesso nos dois. O que muda
+# e o 1: no dado de Estresse ele dispara PANICO, e ao contrario do bane do
+# Forbidden Lands isso vale em QUALQUER rolagem, empurrada ou nao — por
+# isso a regra do panico nao depende de nenhum input opcional pra ser
+# avaliada.
+#
+# Forçar rerrola tudo que nao deu 6 (inclusive os 1s, que aqui nao travam)
+# e ACRESCENTA um dado de Estresse — quem soma esse +1 e o botao Forçar da
+# UI, nao o profile. Estresse 0 e o estado inicial normal do personagem —
+# "0d6" da conta disso sozinho, sem dado fantasma no palco.
+outcome_rules:
+  - condition: "base.total + estresse.total >= {input.dificuldade}"
+    result: success
+  - condition: "base.total + estresse.total < {input.dificuldade}"
+    result: fail
+  - condition: "count(estresse, '==1') >= 1"
+    result: yze_panico

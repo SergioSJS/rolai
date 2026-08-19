@@ -135,4 +135,41 @@ describe("ResultDisplay — quem rolou", () => {
     const { container } = render(<ResultDisplay result={result} />);
     expect(container.querySelector(".result-player")).toBeNull();
   });
+  // Year Zero de varios pools: os sucessos ficam espalhados num "= N" por
+  // grupo. A soma e o numero que a mesa usa — sem ela, o sistema que ganhou
+  // success_rule pra ninguem contar dado na mao volta a exigir conta de
+  // cabeca.
+  it("year zero multi-pool: mostra a soma dos sucessos dos pools", () => {
+    const result: RollResult = {
+      notation: "{3d6+1} + {2d6} + {1d6}",
+      groups: {
+        base: { rolls: [6, 1, 3], modifier: 1, total: 2 },
+        pericia: { rolls: [6, 4], total: 1 },
+        equipamento: { rolls: [2], total: 0 },
+      },
+      profile: "yze_fbl",
+      outcome: "success",
+      outcome_flags: ["success", "yze_dano_atributo_x1"],
+      timestamp: "2026-08-19T12:00:00.000Z",
+    };
+    const { container } = render(<ResultDisplay result={result} />);
+    expect(container.querySelector(".result-headline")?.textContent).toBe("sucesso");
+    expect(container.querySelector(".result-yze-total")?.textContent).toBe("3 sucessos");
+    // O dano continua como flag paralela, sem roubar o headline.
+    expect(container.textContent).toContain("1 dano de atributo");
+  });
+
+  it("year zero de pool unico nao repete o total: o do proprio grupo ja e a resposta", () => {
+    const result: RollResult = {
+      notation: "3d6+2",
+      groups: { pool: { rolls: [6, 4, 2], modifier: 2, total: 3 } },
+      profile: "yze",
+      outcome: "success",
+      outcome_flags: ["success"],
+      timestamp: "2026-08-19T12:00:00.000Z",
+    };
+    const { container } = render(<ResultDisplay result={result} />);
+    expect(container.querySelector(".result-yze-total")).toBeNull();
+    expect(container.querySelector(".result-group-total")?.textContent).toBe("= 3");
+  });
 });

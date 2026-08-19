@@ -9,7 +9,17 @@ package app.meioorc.rolai
  */
 data class ProfileFamilyMember(val system: String, val subLabel: String)
 
-data class ProfileFamily(val key: String, val label: String, val members: List<ProfileFamilyMember>)
+data class ProfileFamily(
+    val key: String,
+    val label: String,
+    val members: List<ProfileFamilyMember>,
+    /**
+     * Nome enxuto pra aba e pro botao do overlay ("ROLAR YZ"). Sem ele,
+     * "Year Zero" com quatro modos ja empurrava a aba pra fora do painel de
+     * 300dp. Default = o proprio label.
+     */
+    val shortLabel: String = label,
+)
 
 object ProfileFamilies {
     val ALL = listOf(
@@ -20,6 +30,20 @@ object ProfileFamilies {
                 ProfileFamilyMember("infaernum", "Ação (3d6)"),
                 ProfileFamilyMember("infaernum_sim_ou_nao", "Sim ou Não"),
                 ProfileFamilyMember("infaernum_ideias", "Ideias"),
+            ),
+        ),
+        // Year Zero: mesma base (pool de d6, 6 = sucesso) com pools e banes
+        // diferentes por linha. Espelha PROFILE_FAMILIES de
+        // apps/web/src/profileFamilies.ts.
+        ProfileFamily(
+            key = "yze",
+            label = "Year Zero",
+            shortLabel = "YZ",
+            members = listOf(
+                ProfileFamilyMember("yze", "Genérico"),
+                ProfileFamilyMember("yze_fbl", "Forbidden"),
+                ProfileFamilyMember("yze_alien", "Alien"),
+                ProfileFamilyMember("yze_wdu", "Walking Dead"),
             ),
         ),
     )

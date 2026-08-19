@@ -146,3 +146,21 @@ describe("cartas de baralho (termos 'c')", () => {
   });
 });
 
+// Regressao: pool zerado do Year Zero (Forçar sem dado sobrando, ou
+// personagem sem equipamento). Antes o profile rolava "1d6dl1" pra ter
+// notacao valida, e o palco ANIMA descartado de proposito (10d6kh1 tem que
+// mostrar os 10) — resultado: tres pools zerados jogavam 3d6 na tela.
+describe("pool vazio (0dX)", () => {
+  it("nao coloca dado nenhum no palco", () => {
+    const dice = diceFromResult(roll("{0d6} + {0d6} + {0d6}"));
+    expect(dice).toEqual([]);
+  });
+
+  it("pool vazio no meio nao desalinha os dados dos outros grupos", () => {
+    const dice = diceFromResult(
+      roll("{2d6} + {0d6} + {3d6}", { deterministic: [1, 2, 3, 4, 5] }),
+    );
+    expect(dice.map((d) => d.value)).toEqual([1, 2, 3, 4, 5]);
+  });
+});
+

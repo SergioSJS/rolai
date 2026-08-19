@@ -7,9 +7,10 @@ interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  size?: "md" | "lg" | "xl";
 }
 
-export function Modal({ title, onClose, children }: ModalProps) {
+export function Modal({ title, onClose, children, size }: ModalProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -25,7 +26,12 @@ export function Modal({ title, onClose, children }: ModalProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div
+        className={`modal${size ? ` modal-${size}` : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <div className="modal-header">
           <h2>{title}</h2>
           <button

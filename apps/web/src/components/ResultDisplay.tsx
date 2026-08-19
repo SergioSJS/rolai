@@ -6,6 +6,7 @@
 import type { RollResult } from "@rolai/rules-engine";
 import type { DiceStyle } from "../settings";
 import { dieFaceLabel, displayGroups, groupLabel, outcomeLabel, outcomeTone } from "../format";
+import { isYzeSystem } from "../yzePush";
 import { PlayerTag } from "./PlayerTag";
 
 export function ResultDisplay({
@@ -41,6 +42,15 @@ export function ResultDisplay({
       ? (single.total ??
         single.rolls.reduce((sum, r) => sum + r.value, 0) + (single.modifier ?? 0))
       : undefined;
+  // Year Zero de varios pools (Base/Perícia/Equipamento, Base/Estresse): os
+  // sucessos estao espalhados em "= 1" por grupo e o numero que a mesa usa
+  // e a SOMA — sem esta linha o jogador soma de cabeca justo no sistema que
+  // ganhou success_rule pra nao ter que contar dado na mao. Pool unico nao
+  // precisa: o total do proprio grupo ja e a resposta.
+  const yzeSuccesses =
+    isYzeSystem(result.profile) && groups.length > 1
+      ? groups.reduce((sum, g) => sum + (g.total ?? 0), 0)
+      : null;
   const headline =
     typeof result.outcome === "string"
       ? outcomeLabel(result.outcome)
@@ -94,6 +104,11 @@ export function ResultDisplay({
           >
             {headline}
           </div>
+          {yzeSuccesses !== null && (
+            <div className="result-yze-total">
+              {yzeSuccesses} {yzeSuccesses === 1 ? "sucesso" : "sucessos"}
+            </div>
+          )}
           {result.outcome_flags
             ?.filter((flag) => flag !== result.outcome)
             .map((flag) => (
@@ -122,6 +137,13 @@ export function ResultDisplay({
               <span className="result-group-name">{groupLabel(group.name)}</span>
             )}
             <span className="result-chips">
+              {/* Pool de zero dados (o Forçar do Year Zero pode zerar um
+                  deles): o motor precisa de uma notacao valida e usa o
+                  zero_dice_fallback, que rola um dado e descarta. Mostrar
+                  esse dado seria mostrar um dado que nao esta na mesa. */}
+              {group.rolls.length === 0 && (
+                <span className="result-empty">sem dados</span>
+              )}
               {group.rolls.map((roll, i) => (
                 <span
                   key={i}
@@ -138,7 +160,8 @@ export function ResultDisplay({
               ))}
               {/* Descartados: mesma cara, apagados. A ordem (mantidos
                   primeiro) mantem o total facil de conferir. */}
-              {group.dropped?.map((roll, i) => (
+              {group.rolls.length > 0 &&
+                group.dropped?.map((roll, i) => (
                 <span
                   key={`d${i}`}
                   className={`die-chip is-dropped${roll.card ? ` card-chip${roll.isRed ? " is-red" : ""}` : ""}`}

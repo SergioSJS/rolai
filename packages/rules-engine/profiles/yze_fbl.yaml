@@ -1,0 +1,86 @@
+system: yze_fbl
+label: "YZ — Forbidden Lands / Mutant"
+roll_type: multi
+inputs:
+  - id: base
+    label: "Base"
+    type: number
+    default: "1"
+  - id: pericia
+    label: "Perícia"
+    type: number
+    default: "0"
+  - id: equipamento
+    label: "Equipamento"
+    type: number
+    default: "0"
+  - id: sucessos_anteriores
+    label: "Sucesso garantido"
+    type: number
+    default: "0"
+  - id: dificuldade
+    label: "Dificuldade"
+    type: number
+    required: false
+    default: "1"
+  - id: push_banes_base
+    label: "1s Base"
+    type: number
+    required: false
+  - id: push_banes_equip
+    label: "1s Equip."
+    type: number
+    required: false
+fields:
+  - id: base
+    dice: "{input.base}d6"
+    modifier: "{input.sucessos_anteriores}"
+    compare_individually: true
+    success_rule: ">=6"
+  - id: pericia
+    dice: "{input.pericia}d6"
+    compare_individually: true
+    success_rule: ">=6"
+  - id: equipamento
+    dice: "{input.equipamento}d6"
+    compare_individually: true
+    success_rule: ">=6"
+# Tres pools de d6 INDEPENDENTES (nao competem — por isso multi): Base
+# (atributo), Perícia e Equipamento. 6 e sucesso em qualquer um dos tres, e
+# os sucessos somam.
+#
+# Bane (1) so machuca no dado de Base (dano de atributo) e no de
+# Equipamento (dano no item) — 1 em Perícia nunca conta.
+#
+# E so conta se a rolagem foi FORCADA. O motor nao sabe se foi: quem marca
+# isso sao os dois inputs "push_*", OPCIONAIS de proposito — em branco
+# (rolagem normal) toda outcome_rule que os referencia e pulada
+# (evaluateOutcomeRules/referencesAny) e nenhum dano aparece; preenchidos,
+# mesmo com 0, os 1s desta rolagem contam. O botao Forçar preenche os dois
+# sempre, com os 1s que ficaram travados na rolagem anterior — no push do
+# FBL os 6s E os 1s ficam na mesa, so o meio rerrola.
+#
+# O prefixo "push_" no id nao e enfeite: e o que faz o formulario da web
+# dobrar esses campos numa secao recolhida (RollPanel.tsx). Sao escrituracao
+# do Forçar, nao coisa que se preenche na mao numa rolagem normal.
+#
+# Pool 0 e legitimo em qualquer um dos tres (sem equipamento, sem pericia,
+# ou forcada sem dado sobrando) — "0d6" e notacao valida e o palco nao
+# anima dado nenhum por ele.
+outcome_rules:
+  - condition: "base.total + pericia.total + equipamento.total >= {input.dificuldade}"
+    result: success
+  - condition: "base.total + pericia.total + equipamento.total < {input.dificuldade}"
+    result: fail
+  - condition: "count(base, '==1') + {input.push_banes_base} >= 3"
+    result: yze_dano_atributo_x3
+  - condition: "count(base, '==1') + {input.push_banes_base} == 2"
+    result: yze_dano_atributo_x2
+  - condition: "count(base, '==1') + {input.push_banes_base} == 1"
+    result: yze_dano_atributo_x1
+  - condition: "count(equipamento, '==1') + {input.push_banes_equip} >= 3"
+    result: yze_dano_equipamento_x3
+  - condition: "count(equipamento, '==1') + {input.push_banes_equip} == 2"
+    result: yze_dano_equipamento_x2
+  - condition: "count(equipamento, '==1') + {input.push_banes_equip} == 1"
+    result: yze_dano_equipamento_x1

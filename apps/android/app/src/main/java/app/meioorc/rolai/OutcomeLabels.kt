@@ -63,6 +63,17 @@ private val OUTCOME_LABELS: Map<String, String> = mapOf(
     "ruptura_x2" to "ruptura: 2 fatos quebrados",
     "ruptura_x3" to "ruptura: 3 fatos quebrados",
     "ruptura_x4" to "ruptura: 4 fatos quebrados",
+    // year zero (yze/yze_fbl/yze_alien/yze_wdu) — success/fail reusam os do
+    // fate, ja mapeados acima. Dano e evento PARALELO ao sucesso (o 1 conta
+    // na rolagem forcada mesmo quando ela acerta), e o x3 e "3 ou mais".
+    "yze_dano_atributo_x1" to "1 dano de atributo",
+    "yze_dano_atributo_x2" to "2 danos de atributo",
+    "yze_dano_atributo_x3" to "3+ danos de atributo",
+    "yze_dano_equipamento_x1" to "1 dano de equipamento",
+    "yze_dano_equipamento_x2" to "2 danos de equipamento",
+    "yze_dano_equipamento_x3" to "3+ danos de equipamento",
+    "yze_panico" to "pânico!",
+    "yze_descontrole" to "descontrole!",
 )
 
 fun outcomeLabel(outcome: String): String = OUTCOME_LABELS[outcome] ?: outcome

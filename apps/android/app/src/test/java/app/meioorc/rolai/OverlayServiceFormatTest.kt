@@ -1,6 +1,8 @@
 package app.meioorc.rolai
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -38,7 +40,7 @@ class OverlayServiceFormatTest {
             "challenge":{"rolls":[5,5]}},
             "outcome":"strong_hit","outcome_flags":["strong_hit","match"]}"""
         assertEquals(
-            "{1d6+2} vs {2d10} [4] + 2 = 6 vs [5, 5] — sucesso completo, combinação!",
+            "{1d6+2} vs {2d10} ação [4] + 2 = 6 vs desafio [5, 5] — sucesso completo, combinação!",
             OverlayService.formatResult(json),
         )
     }
@@ -51,7 +53,7 @@ class OverlayServiceFormatTest {
             "challenge":{"rolls":[11,4]}},
             "outcome":"weak_hit","outcome_flags":["weak_hit"]}"""
         assertEquals(
-            "{2d6+1} vs {2c} [6, 4] + 1 = 11 vs [J♣, 4♦] — sucesso parcial",
+            "{2d6+1} vs {2c} ação [6, 4] + 1 = 11 vs desafio [J♣, 4♦] — sucesso parcial",
             OverlayService.formatResult(json),
         )
     }
@@ -84,5 +86,74 @@ class OverlayServiceFormatTest {
     @Test
     fun `json quebrado nao derruba, so mostra o texto cru`() {
         assertEquals("nao e json", OverlayService.formatResult("nao e json"))
+    }
+
+    /**
+     * Year Zero / Forbidden Lands: tres pools de d6 iguais. Sem o nome do
+     * grupo, eram tres listas anonimas e nao dava pra saber qual "= 1" veio
+     * de onde. O pool vazio ("0d6", forcada sem dado sobrando) sai como "—"
+     * — o "[]" de antes parecia bug.
+     */
+    @Test
+    fun `year zero mostra o nome de cada pool e marca o pool vazio`() {
+        val json = """{"notation":"{2d6+1} + {0d6} + {1d6}",
+            "groups":{"base":{"rolls":[6,2],"modifier":1,"total":2},
+            "pericia":{"rolls":[],"total":0},
+            "equipamento":{"rolls":[1],"total":0}},
+            "outcome":"success","outcome_flags":["success","yze_dano_equipamento_x1"]}"""
+        assertEquals(
+            "{2d6+1} + {0d6} + {1d6} base [6, 2] + 1 = 2 + perícia — = 0 + " +
+                "equipamento [1] = 0 — sucesso, 1 dano de equipamento",
+            OverlayService.formatResult(json),
+        )
+    }
+
+    /** Dano do Year Zero e preju, mesmo numa rolagem que acertou: o tom da
+     *  LINHA continua vindo do outcome principal, mas o label do dano tem que
+     *  existir (sem ele, "yze_dano_atributo_x2" cru ia pra tela). */
+    @Test
+    fun `labels do year zero traduzem dano, panico e descontrole`() {
+        assertEquals("2 danos de atributo", outcomeLabel("yze_dano_atributo_x2"))
+        assertEquals("3+ danos de equipamento", outcomeLabel("yze_dano_equipamento_x3"))
+        assertEquals("pânico!", outcomeLabel("yze_panico"))
+        assertEquals("descontrole!", outcomeLabel("yze_descontrole"))
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("yze_dano_atributo_x1"))
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("yze_panico"))
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("yze_descontrole"))
+    }
+
+    /**
+     * Minimizar o painel depois de um Forçar nao pode invalidar o "repetir
+     * ultima rolagem": o formulario volta SEM os campos "push_*" (eles nao
+     * aparecem na tela), e comparar cru dizia "o jogador mexeu nos campos".
+     */
+    @Test
+    fun `escrituracao do forcar sobrevive ao fechar o painel`() {
+        val form = """{"base":5,"pericia":0,"equipamento":0,"sucessos_anteriores":2,"dificuldade":1}"""
+        val salvo = """{"base":5,"pericia":0,"equipamento":0,"sucessos_anteriores":2,
+            "dificuldade":1,"push_banes_base":1,"push_banes_equip":0}"""
+        val merged = OverlayService.mergePushBookkeeping(form, salvo)
+        assertTrue(OverlayService.sameInputs(merged, salvo))
+    }
+
+    /** Mexer num campo de verdade continua contando como mudanca. */
+    @Test
+    fun `campo editado ainda conta como mudanca`() {
+        val form = """{"base":3,"pericia":0,"equipamento":0,"sucessos_anteriores":2,"dificuldade":1}"""
+        val salvo = """{"base":5,"pericia":0,"equipamento":0,"sucessos_anteriores":2,
+            "dificuldade":1,"push_banes_base":1}"""
+        val merged = OverlayService.mergePushBookkeeping(form, salvo)
+        assertFalse(OverlayService.sameInputs(merged, salvo))
+    }
+
+    /** Ordem de chave em JSON nao e conteudo diferente. */
+    @Test
+    fun `mesma coisa em outra ordem nao e mudanca`() {
+        assertTrue(
+            OverlayService.sameInputs(
+                """{"base":5,"dificuldade":1}""",
+                """{"dificuldade":1,"base":5}""",
+            ),
+        )
     }
 }

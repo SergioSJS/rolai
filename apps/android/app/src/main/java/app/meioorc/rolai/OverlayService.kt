@@ -77,6 +77,17 @@ class OverlayService : Service() {
      *  rolagem rapida configurada. */
     private var lastRollAction: (() -> Unit)? = null
 
+    /**
+     * Ultima rolagem PROPRIA (nao o eco da sala) — base do Forçar do Year
+     * Zero. Nao sobrevive ao processo de proposito: forcar uma rolagem que
+     * o jogador nem lembra de ter feito seria pior que nao oferecer.
+     *
+     * "Ter sistema Year Zero configurado" nao e "ter rolagem pra forcar" —
+     * por isso o botao so aparece quando ISTO existe e e do sistema atual
+     * (AGENTS.md, a armadilha de sempre).
+     */
+    private var lastOwnResultJson: String? = null
+
     /** Notacao usada na ultima rolagem "overlay" (roll_under) de fato
      *  executada — pra saber se o campo de notacao mudou desde entao (ver
      *  persistSystemInputs). Sistema "receita fixa" nao usa isto: quem
@@ -156,6 +167,7 @@ class OverlayService : Service() {
             onError = { message -> overlay.showResult("erro: $message") },
             onDeckResult = ::onDeckCalculated,
             onDeckError = { message -> overlay.showResult("erro: $message") },
+            onPushInputs = ::onPushInputsUsed,
         )
         deckStateJson = loadDeckState()
         loadDeckConfig()
@@ -173,7 +185,7 @@ class OverlayService : Service() {
         overlay.onRollWithInputs = ::rollWithInputs
         overlay.onRollOverlay = ::rollOverlayNow
         overlay.onOpenComposer = ::openComposer
-        overlay.onSelectFamilyMember = ::selectFamilyMember
+        overlay.onForcePush = ::forcePush
         overlay.onPersistSystemInputs = ::persistSystemInputs
         overlay.onComposedNotation = { notation ->
             // Compor e minimizar SEM rolar nao mudava nada: o botao recolhido
@@ -656,12 +668,10 @@ class OverlayService : Service() {
         // rolar, ja preenchido com os ultimos valores. Antes esses valores so
         // podiam ser mudados na tela de configuracoes, escritos como JSON —
         // trocar a CD de um teste custava sair do jogo.
-        // Membro de familia (Infaernum) abre a caixa mesmo sem input — e ali
-        // que moram as abas de modo (Acao/Sim ou Nao/Ideias); rolar direto
-        // tornava os outros dois modos inalcancaveis pelo toque na bolha.
         val info = systems[settings.system]
-        if (info != null && (info.needsForm || ProfileFamilies.familyFor(info.system) != null)) {
+        if (info != null && info.needsForm) {
             overlay.openComposer(info, ProfileForm.fromJson(settings.inputsJson))
+            updatePushAvailability()
             return
         }
         headlessRoller.rollWithProfile(settings.system, settings.inputsJson)
@@ -737,26 +747,9 @@ class OverlayService : Service() {
         overlay.setQuickNotation(settings.notation)
         val info = systems[settings.system]
         overlay.openComposer(info, ProfileForm.fromJson(settings.inputsJson))
+        updatePushAvailability()
     }
 
-    /**
-     * Aba de modo tocada dentro da caixa (Infaernum: Acao/Sim ou Nao/Ideias)
-     * — troca o sistema ativo pra outro membro da MESMA familia e reabre o
-     * compositor ja com os campos do novo modo. Antes, o unico jeito de
-     * mudar isso era ir em configuracoes e usar o spinner "Modo", saindo do
-     * jogo pra cada troca.
-     */
-    private fun selectFamilyMember(system: String) {
-        val settings = RolaiSettings.load(this)
-        RolaiSettings.save(this, settings.copy(system = system, inputsJson = "{}"))
-        lastRollAction = null
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
-        val info = systems[system]
-        overlay.openComposer(info, ProfileForm.fromJson("{}"))
-    }
 
     /**
      * Painel do sistema fechado (o "—", nao o "fechar" que desliga tudo) sem
@@ -778,10 +771,14 @@ class OverlayService : Service() {
     private fun persistSystemInputs(inputsJson: String, notation: String?) {
         val settings = RolaiSettings.load(this)
         if (settings.system.isEmpty()) return
-        val inputsChanged = inputsJson != settings.inputsJson
+        // O formulario nunca traz os campos "push_*" (eles nao aparecem na
+        // tela) — sem repor os salvos, fechar o painel depois de um Forçar
+        // parecia edicao e derrubava o "repetir".
+        val merged = mergePushBookkeeping(inputsJson, settings.inputsJson)
+        val inputsChanged = !sameInputs(merged, settings.inputsJson)
         val notationChanged = notation != null && notation != lastOverlayNotation
         if (!inputsChanged && !notationChanged) return
-        RolaiSettings.save(this, settings.copy(inputsJson = inputsJson))
+        RolaiSettings.save(this, settings.copy(inputsJson = merged))
         lastRollAction = null
         getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -804,6 +801,67 @@ class OverlayService : Service() {
         stageHandler.postDelayed({
             if (impactsThisRoll == 0) diceSounds?.playFallback(dados)
         }, SOUND_FALLBACK_MS)
+    }
+
+    /**
+     * Forçar (push do Year Zero): pega a rolagem anterior, recalcula quantos
+     * dados sobraram e quantos sucessos travaram, e rola — tudo num toque.
+     *
+     * A conta vive em `yzePush.ts` e roda na WebView headless: reescrever
+     * "quem trava o que" em Kotlin seria a duplicata de regra que o
+     * AGENTS.md proibe, e cada linha da familia trava coisa diferente.
+     *
+     * `inputsJson` e o formulario AGORA (o jogador pode ter mexido no pool
+     * antes de forcar). A escrituracao do Forçar nao esta la — ela nao e
+     * campo de tela — entao vem do que ficou salvo, senao os 1s travados da
+     * rolagem anterior sumiriam no meio de uma cadeia de pushes.
+     */
+    private fun forcePush(inputsJson: String) {
+        val settings = RolaiSettings.load(this)
+        if (settings.system.isEmpty()) return
+        val previous = lastOwnResultJson
+        if (previous == null) {
+            overlay.showResult("role uma vez antes de forçar")
+            return
+        }
+        headlessRoller.rollPush(
+            settings.system,
+            previous,
+            mergePushBookkeeping(inputsJson, settings.inputsJson),
+        )
+    }
+
+    /**
+     * Inputs que o Forçar acabou de usar (vem do motor junto do resultado).
+     * Salva, repoe no formulario e vira o "repetir": a mini-bolha tem que
+     * repetir a rolagem FORCADA, com o pool novo — repetir a de antes dela
+     * seria o mesmo bug de valor velho que ja voltou disfarcado varias vezes
+     * (docs/adding-a-system.md).
+     */
+    private fun onPushInputsUsed(inputsJson: String) {
+        val settings = RolaiSettings.load(this)
+        if (settings.system.isEmpty()) return
+        RolaiSettings.save(this, settings.copy(inputsJson = inputsJson))
+        overlay.updateSystemInputs(ProfileForm.fromJson(inputsJson))
+        val system = settings.system
+        lastRollAction = { headlessRoller.rollWithProfile(system, inputsJson) }
+        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_LAST_ROLL)
+            .apply()
+    }
+
+    /**
+     * O FORÇAR so aparece com uma rolagem propria DO SISTEMA ATUAL na
+     * memoria, e so pros sistemas da familia Year Zero (a unica com push).
+     */
+    private fun updatePushAvailability() {
+        val system = RolaiSettings.load(this).system
+        val isYze = ProfileFamilies.familyFor(system)?.key == "yze"
+        val sameSystem = runCatching {
+            lastOwnResultJson?.let { JSONObject(it).optString("profile") } == system
+        }.getOrDefault(false)
+        overlay.setPushAvailable(isYze && sameSystem)
     }
 
     /** Rola com o que foi preenchido no painel e guarda como novo padrao. */
@@ -874,6 +932,8 @@ class OverlayService : Service() {
     }
 
     private fun onRollCalculated(resultJson: String) {
+        lastOwnResultJson = resultJson
+        updatePushAvailability()
         overlay.showResult(formatResult(resultJson), toneOf(resultJson))
         // Propaga o resultado JA calculado (relay burro — o backend nao
         // recalcula, ver docs/architecture.md). Em sala, quem anima e o eco
@@ -1109,6 +1169,70 @@ class OverlayService : Service() {
             return parts.joinToString(", ")
         }
 
+        /**
+         * Grupos na ordem em que aparecem no JSON, nao na ordem que o
+         * `JSONObject` devolver.
+         *
+         * O pareamento grupo <-> sub-notacao aqui e por INDICE ("{2d6+1} +
+         * {0d6}" -> primeiro grupo usa "2d6+1"), e `keys()` nao promete
+         * ordem nenhuma: no org.json do JVM ela sai embaralhada, e o pool de
+         * pericia acabava rotulado com a notacao da base — inclusive a
+         * deteccao de carta/Fudge, que sai justamente dali. Na WebView do
+         * aparelho a ordem costuma bater por acaso (LinkedHashMap), que e a
+         * pior versao do bug: passa no aparelho e falha em teste, ou vice
+         * versa.
+         */
+        private fun orderedGroupKeys(resultJson: String, groups: JSONObject): List<String> =
+            groups.keys().asSequence().toList().sortedBy { key ->
+                resultJson.indexOf("\"$key\"").let { if (it < 0) Int.MAX_VALUE else it }
+            }
+
+        /**
+         * Nome do grupo em pt-BR. Espelha `GROUP_LABELS` de
+         * `apps/web/src/format.ts` — id desconhecido cai nele mesmo, igual
+         * na web.
+         */
+        private fun groupLabel(name: String): String = when (name.lowercase()) {
+            "action" -> "ação"
+            "challenge" -> "desafio"
+            "verb" -> "verbo"
+            "noun" -> "substantivo"
+            "regular" -> "regulares"
+            "hunger" -> "fome/ira"
+            "pool" -> "pool"
+            "roll" -> "rolagem"
+            // year zero
+            "base" -> "base"
+            "pericia" -> "perícia"
+            "equipamento" -> "equipamento"
+            "estresse" -> "estresse"
+            else -> name
+        }
+
+        /**
+         * Campos "push_*" do JSON salvo em cima do que veio do formulario.
+         *
+         * A escrituracao do Forçar nao e campo de tela (ver
+         * ProfileInput.isPushBookkeeping), entao o formulario SEMPRE volta
+         * sem ela. Sem esta juncao, minimizar o painel depois de forcar
+         * parecia "mudei os campos": o `lastRollAction` era invalidado e a
+         * mini-bolha voltava a abrir o formulario em vez de repetir a
+         * rolagem — o bug de sempre, so que entrando por uma porta nova.
+         */
+        fun mergePushBookkeeping(formJson: String, savedJson: String): String =
+            runCatching {
+                val merged = JSONObject(formJson)
+                val saved = JSONObject(savedJson)
+                for (key in saved.keys()) {
+                    if (key.startsWith("push_")) merged.put(key, saved.get(key))
+                }
+                merged.toString()
+            }.getOrDefault(formJson)
+
+        /** Mesmos pares chave/valor, independente da ordem das chaves. */
+        fun sameInputs(a: String, b: String): Boolean =
+            ProfileForm.fromJson(a) == ProfileForm.fromJson(b)
+
         fun toneOf(resultJson: String): OutcomeTone {
             val outcome = runCatching {
                 JSONObject(resultJson).optString("outcome", "")
@@ -1136,7 +1260,7 @@ class OverlayService : Service() {
                 val groupStrings = mutableListOf<String>()
 
                 if (groupsObj != null) {
-                    val groupKeys = groupsObj.keys().asSequence().toList()
+                    val groupKeys = orderedGroupKeys(resultJson, groupsObj)
                     for (gi in groupKeys.indices) {
                         val groupKey = groupKeys[gi]
                         val group = groupsObj.optJSONObject(groupKey) ?: continue
@@ -1166,7 +1290,17 @@ class OverlayService : Service() {
                         val totalText = if (total != null && !isCardGroup) " = $total" else ""
 
                         val groupStr = buildString {
-                            if (rollsFormatted.isNotEmpty()) append("[$rollsFormatted]")
+                            // Tres pools de d6 iguais (Forbidden Lands) viravam
+                            // tres listas anonimas na mesma linha — sem o nome
+                            // nao da pra saber qual "= 1" veio de onde.
+                            if (groupKeys.size > 1) append("${groupLabel(groupKey)} ")
+                            if (rollsFormatted.isNotEmpty()) {
+                                append("[$rollsFormatted]")
+                            } else {
+                                // Pool de zero dados ("0d6"): existe, mas nao
+                                // rolou nada. "[]" parecia bug.
+                                append("—")
+                            }
                             append(modText)
                             append(totalText)
                         }

@@ -63,6 +63,17 @@ const OUTCOME_LABELS: Record<string, string> = {
   ruptura_x2: "ruptura: 2 fatos quebrados",
   ruptura_x3: "ruptura: 3 fatos quebrados",
   ruptura_x4: "ruptura: 4 fatos quebrados",
+  // year zero (yze/yze_fbl/yze_alien/yze_wdu) — success/fail reusam os do
+  // fate, ja mapeados acima. Dano e evento PARALELO ao sucesso (o 1 conta
+  // na rolagem empurrada mesmo quando ela acerta), e o x3 e "3 ou mais".
+  yze_dano_atributo_x1: "1 dano de atributo",
+  yze_dano_atributo_x2: "2 danos de atributo",
+  yze_dano_atributo_x3: "3+ danos de atributo",
+  yze_dano_equipamento_x1: "1 dano de equipamento",
+  yze_dano_equipamento_x2: "2 danos de equipamento",
+  yze_dano_equipamento_x3: "3+ danos de equipamento",
+  yze_panico: "pânico!",
+  yze_descontrole: "descontrole!",
 };
 
 export function outcomeLabel(outcome: string): string {
@@ -78,6 +89,11 @@ const GROUP_LABELS: Record<string, string> = {
   hunger: "fome/ira",
   pool: "pool",
   roll: "rolagem",
+  // year zero
+  base: "base",
+  pericia: "perícia",
+  equipamento: "equipamento",
+  estresse: "estresse",
 };
 
 export function groupLabel(name: string): string {
@@ -161,6 +177,19 @@ const OUTCOME_TONES: Record<string, OutcomeTone> = {
   ruptura_x2: "neutral",
   ruptura_x3: "neutral",
   ruptura_x4: "neutral",
+  // year zero: dano, panico e descontrole sao paralelos ao sucesso/falha,
+  // mas nenhum deles e ambiguo do jeito que o "match" do Ironsworn e — sao
+  // preju, ponto. Neutro os pintava com a cor de acento (verde neste tema)
+  // e um "2 danos de atributo" tinha a mesma cara de um acerto. Vermelho,
+  // mesmo quando a rolagem em si deu sucesso.
+  yze_dano_atributo_x1: "failure",
+  yze_dano_atributo_x2: "failure",
+  yze_dano_atributo_x3: "failure",
+  yze_dano_equipamento_x1: "failure",
+  yze_dano_equipamento_x2: "failure",
+  yze_dano_equipamento_x3: "failure",
+  yze_panico: "failure",
+  yze_descontrole: "failure",
 };
 
 export function outcomeTone(outcome: string): OutcomeTone {
@@ -180,9 +209,15 @@ export function summarizeDice(result: RollResult): string {
   const groups = displayGroups(result);
   const joiner = result.notation.includes(" + ") ? " + " : " vs ";
   const parts = groups.map((g) => {
-    const rolls = `[${g.rolls
-      .map((r) => `${dieFaceLabel(r.value, r.fudge, r.card)}${r.symbol ?? ""}`)
-      .join(", ")}]`;
+    // Pool de zero dados (Forçar do Year Zero pode zerar um deles): o motor
+    // rola e descarta um dado so pra ter notacao valida — "[]" no historico
+    // fica com cara de bug, e mostrar o dado descartado seria pior ainda.
+    const rolls =
+      g.rolls.length === 0
+        ? "—"
+        : `[${g.rolls
+            .map((r) => `${dieFaceLabel(r.value, r.fudge, r.card)}${r.symbol ?? ""}`)
+            .join(", ")}]`;
     const mod = g.modifier;
     const modifier =
       mod !== undefined && mod !== 0

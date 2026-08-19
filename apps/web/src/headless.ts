@@ -15,6 +15,7 @@ import { createDeck, draw, reshuffleDeck, updateConfig } from "@rolai/deck-engin
 import type { DeckConfig, DeckState } from "@rolai/deck-engine";
 import { availableProfiles, getProfile } from "./profiles.js";
 import { applyInputQuirks } from "./profileInputQuirks.js";
+import { planYzePush } from "./yzePush.js";
 
 // Bridge injetado pelo Kotlin via addJavascriptInterface("RolaiBridge").
 // Em ambiente de teste (node/jsdom) pode nao existir — nesse caso o
@@ -100,6 +101,23 @@ export interface RolaiHeadlessApi {
   /** Cria um baralho do zero com a config dada — usado quando `includeJokers`
    *  muda (a composicao do monte so pode mudar num baralho novo). */
   deckNew(configJson: string, callbackId: string): Promise<void>;
+  /**
+   * Forçar (o push do Year Zero): recalcula o pool a partir da rolagem
+   * ANTERIOR (quantos dados sobraram, quantos sucessos travaram) e rola
+   * de novo. A conta e a mesma da web (`yzePush.ts`) de proposito — o
+   * Kotlin nao reimplementa nada (AGENTS.md).
+   *
+   * A entrega leva, alem do resultado, os `pushInputs` usados: quem chamou
+   * precisa deles pra mostrar no formulario e pra "repetir a ultima
+   * rolagem" repetir a rolagem forcada, nao a de antes dela.
+   */
+  rollPush(
+    system: string,
+    previousResultJson: string,
+    inputsJson: string,
+    callbackId: string,
+    optionsJson?: string,
+  ): Promise<void>;
 }
 
 interface DeckDrawPayload {
@@ -113,7 +131,7 @@ interface DeckStatePayload {
 }
 
 type Delivery =
-  | { ok: true; result: RollResult }
+  | { ok: true; result: RollResult; pushInputs?: Record<string, string> }
   | { ok: true; result: DeckDrawPayload }
   | { ok: true; result: DeckStatePayload }
   | { ok: false; error: string };
@@ -240,6 +258,35 @@ const api: RolaiHeadlessApi = {
       deliver(callbackId, { ok: true, result: { deck: state } }, "deck");
     } catch (e) {
       deliver(callbackId, toError(e), "deck");
+    }
+  },
+
+  async rollPush(system, previousResultJson, inputsJson, callbackId, optionsJson) {
+    try {
+      const profile = getProfile(system);
+      if (!profile) throw new Error(`sistema desconhecido: "${system}"`);
+      const previous = JSON.parse(previousResultJson) as RollResult;
+      const current = inputsJson
+        ? (JSON.parse(inputsJson) as Record<string, string | number>)
+        : {};
+      const raw: Record<string, string> = {};
+      for (const [k, v] of Object.entries(current)) raw[k] = String(v);
+      const plan = planYzePush(system, previous, raw);
+      if (plan === null) throw new Error("essa rolagem nao da pra forcar");
+      const inputs: Record<string, number | string> = {};
+      for (const [k, v] of Object.entries(plan.inputs)) {
+        if (v === "") continue;
+        const n = Number(v);
+        inputs[k] = Number.isFinite(n) ? n : v;
+      }
+      const result = await rollWithProfile(
+        profile,
+        applyInputQuirks(profile, inputs),
+        parseOptions(optionsJson),
+      );
+      deliver(callbackId, { ok: true, result, pushInputs: plan.inputs });
+    } catch (e) {
+      deliver(callbackId, toError(e));
     }
   },
 

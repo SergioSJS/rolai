@@ -32,6 +32,18 @@ private val FAILURE = setOf(
     "desgraca_x3",
     // Infaernum — oraculo sim ou não.
     "nao",
+    // year zero: dano, panico e descontrole vem JUNTO do sucesso/falha, mas
+    // nenhum e ambiguo do jeito que o "match" do Ironsworn e — sao preju,
+    // ponto. Neutro os deixava com a cor de acento (verde), e "2 danos de
+    // atributo" ficava com a mesma cara de um acerto.
+    "yze_dano_atributo_x1",
+    "yze_dano_atributo_x2",
+    "yze_dano_atributo_x3",
+    "yze_dano_equipamento_x1",
+    "yze_dano_equipamento_x2",
+    "yze_dano_equipamento_x3",
+    "yze_panico",
+    "yze_descontrole",
 )
 
 private val PARTIAL = setOf(

@@ -223,6 +223,28 @@ outcome_rules:
     result: fail
 ```
 
+### `zero_dice_fallback` só quando zero dado significa OUTRA rolagem
+
+Pool que pode chegar a zero **não** precisa de `zero_dice_fallback`: `0d6`
+é notação válida (docs/roll-notation.md) e sai sem dado nenhum, inclusive
+no palco 3D. O `fallback` é pra regra que troca a rolagem quando o pool
+zera — FitD rola `2d6kl1` (dois dados, fica com o pior), Fractal rola
+`1d6`. Usá-lo como "jeito de representar pool vazio" faz o palco animar um
+dado que não está na mesa, porque dado descartado anima de propósito.
+
+### `success_rule` + `modifier`: sucessos que vieram de antes
+
+Quando o field tem `success_rule` **e** `modifier`, o modificador soma na
+CONTAGEM, não nos valores dos dados: `[6, 3, 4] + 2 = 3` são um seis novo
+mais dois sucessos que já estavam na mesa, não `6+3+4+2`.
+
+É o que sustenta o *push* do Year Zero (`yze*.yaml`) sem estado no motor —
+a rolagem empurrada rerrola menos dados e carrega os sucessos travados
+como modificador (`modifier: "{input.sucessos_anteriores}"`). Um input
+usado assim precisa ser `required` com `default: "0"`: field interpola
+antes de qualquer outcome_rule, e input opcional em branco no `dice`/
+`modifier` é erro (`input ausente`), não regra pulada.
+
 `success_rule` usa a mesma minilinguagem do 2º argumento de `count()`, mas
 **sem** as aspas internas (aqui é a string toda, não um literal embutido
 numa expressão maior: `">=5"`, não `"'>=5'"`). Quando setado, `total` do

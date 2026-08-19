@@ -347,8 +347,18 @@ function fieldSpec(
         `field "${field.id}": modifier "${raw}" nao e um numero inteiro`,
       );
     }
-    modifier = n;
-    modifierSuffix = n >= 0 ? `+${n}` : `${n}`;
+    // Campo de CONTAGEM (success_rule) com modificador zero nao ganha
+    // "+0" na notacao: ali o modificador sao sucessos que vieram de uma
+    // rolagem forcada, e "sem nenhum" e o caso normal — "{4d6+0} + {3d6+0}"
+    // no historico so polui. O total nao depende disso (success_rule
+    // sempre calcula), ao contrario de um "2d6+0" do PbtA, onde o
+    // modificador zero e o que garante que o total exista.
+    if (field.successRule !== null && n === 0) {
+      modifierSuffix = "";
+    } else {
+      modifier = n;
+      modifierSuffix = n >= 0 ? `+${n}` : `${n}`;
+    }
   }
   const ast = parseNotation(dice + modifierSuffix);
   const group = ast.groups[0];
@@ -481,7 +491,15 @@ export async function rollWithProfile(
       // Sucessos: CONTAGEM de dados que batem a regra, nao a soma —
       // "[2, 5, 6, 1] = 2" em vez do jogador ter que contar na mao
       // (pool_d6/Shadowrun).
-      group.total = group.rolls.filter((v) => matchesCondition(v, field.successRule!)).length;
+      //
+      // O modificador, quando existe, SOMA na contagem em vez de somar nos
+      // valores dos dados: sao "sucessos que ja estavam na mesa", nao um
+      // dado a mais. E o que permite o push do Year Zero mostrar
+      // "[6, 3, 4] + 2 = 3" (2 sucessos travados na rolagem anterior) em
+      // vez de obrigar o jogador a somar de cabeca com o chip do lado.
+      group.total =
+        group.rolls.filter((v) => matchesCondition(v, field.successRule!)).length +
+        (group.modifier ?? 0);
     } else if (!field.compareIndividually && group.total === undefined) {
       // compare_individually: false (default) = soma — garante total mesmo
       // sem modificador; true mantem o array pra comparacao elemento a

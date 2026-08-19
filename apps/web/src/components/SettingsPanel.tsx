@@ -84,35 +84,44 @@ export function SettingsPanel({
         <RulesIcon />
         Sistema
       </h3>
-      <label>
-        Regras da mesa
-        <select
-          value={activeFamily?.key ?? system}
-          onChange={(e) => {
-            const family = PROFILE_FAMILIES.find((f) => f.key === e.target.value);
-            onSystemChange(family ? family.members[0]!.system : e.target.value);
-          }}
-        >
-          <option value="">Notação livre</option>
-          {standalone.map((p) => (
-            <option key={p.system} value={p.system}>
-              {p.label}
-            </option>
-          ))}
-          {PROFILE_FAMILIES.map((family) => (
-            <option key={family.key} value={family.key}>
-              {family.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {activeFamily && (
-        <p className="settings-hint">
-          {activeFamily.label}: escolha o modo ({activeFamily.members
-            .map((m) => m.subLabel)
-            .join(" / ")}) direto na caixa de rolagem.
-        </p>
-      )}
+      <div className="settings-row">
+        <label>
+          Regras da mesa
+          <select
+            value={activeFamily?.key ?? system}
+            onChange={(e) => {
+              const family = PROFILE_FAMILIES.find((f) => f.key === e.target.value);
+              onSystemChange(family ? family.members[0]!.system : e.target.value);
+            }}
+          >
+            <option value="">Notação livre</option>
+            {standalone.map((p) => (
+              <option key={p.system} value={p.system}>
+                {p.label}
+              </option>
+            ))}
+            {PROFILE_FAMILIES.map((family) => (
+              <option key={family.key} value={family.key}>
+                {family.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* Sub-modo da familia (Year Zero: Genérico/Forbidden Lands/Alien/
+            Walking Dead; Infaernum: acao/sim-ou-nao/ideias). */}
+        {activeFamily && (
+          <label>
+            Modo
+            <select value={system} onChange={(e) => onSystemChange(e.target.value)}>
+              {activeFamily.members.map((member) => (
+                <option key={member.system} value={member.system}>
+                  {member.subLabel}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
 
       <h3>
         <DiceSectionIcon />

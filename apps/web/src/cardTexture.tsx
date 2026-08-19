@@ -66,7 +66,7 @@ function rasterize(Component: CardSvgComponent): Promise<THREE.CanvasTexture> {
       // canvas (Chrome desktop x WebView Android) interpreta compositing.
       // Alfa (i+3) fica intocado — a moldura ja e opaca, a arte clipada
       // tambem, entao isto so escurece cor, nunca abre transparencia nova.
-      const CARD_DIM_FACTOR = 0.72;
+      const CARD_DIM_FACTOR = cardDimFactor();
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const pixels = imageData.data;
       for (let i = 0; i < pixels.length; i += 4) {
@@ -88,14 +88,36 @@ function rasterize(Component: CardSvgComponent): Promise<THREE.CanvasTexture> {
   });
 }
 
+/**
+ * Quanto escurecer a arte da carta, lido do token `--card-dim` (styles.css).
+ *
+ * O numero vive no CSS e nao aqui porque a versao 2D (`.card-flip-face`,
+ * um `filter: brightness()`) e esta, do palco 3D, precisam do MESMO valor —
+ * duplicar dava carta 2D e 3D com brilhos diferentes. E ele muda por tema:
+ * no claro vale 1 (a arte e branca e o fundo tambem, nao ha o que estourar);
+ * escurecer ali deixava a carta cinza suja.
+ */
+function cardDimFactor(): number {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue("--card-dim")
+    .trim();
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0.72;
+}
+
 // `key` identifica a face (card.id, ou "back" pro verso) — chama de novo
 // com a mesma key devolve a MESMA textura (cache), nunca rasteriza duas
 // vezes a carta identica.
+//
+// O fator de escurecimento entra na chave: sem isso, trocar de tema com uma
+// carta ja rasterizada devolvia a textura ANTIGA (a do outro tema) — cache
+// que "existe" tratado como cache que "serve".
 export function cardTexture(key: string, Component: CardSvgComponent): Promise<THREE.CanvasTexture> {
-  let cached = cache.get(key);
+  const cacheKey = `${key}@${cardDimFactor()}`;
+  let cached = cache.get(cacheKey);
   if (!cached) {
     cached = rasterize(Component);
-    cache.set(key, cached);
+    cache.set(cacheKey, cached);
   }
   return cached;
 }

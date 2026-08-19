@@ -1,6 +1,6 @@
 import type { HistoryEntry } from "../room/reducer";
 import type { RollResult } from "@rolai/rules-engine";
-import { dieFaceLabel, displayGroups, outcomeLabel, outcomeTone } from "../format";
+import { dieFaceLabel, displayGroups, groupLabel, outcomeLabel, outcomeTone } from "../format";
 import { cardLabel, deckConfigChangeLabel, isRedSuit } from "../cardFormat";
 import { PlayerTag } from "./PlayerTag";
 
@@ -13,20 +13,34 @@ function HistoryRollResult({ result }: { result: RollResult }) {
       {groups.map((group, gi) => (
         <span key={`${group.name}-${gi}`}>
           {gi > 0 && <span>{joiner}</span>}
-          <span>[</span>
-          {group.rolls.map((roll, ri) => (
-            <span key={ri}>
-              {ri > 0 && <span>, </span>}
-              {roll.card ? (
-                <span className={`history-card${roll.isRed ? " is-red" : ""}`}>
-                  {dieFaceLabel(roll.value, roll.fudge, roll.card)}{roll.symbol ?? ""}
+          {/* Tres pools de d6 iguais (Forbidden Lands) viravam tres arrays
+              anonimos na linha do historico — sem o nome nao da pra saber
+              qual "= 1" veio de onde. Grupo unico continua sem rotulo. */}
+          {groups.length > 1 && (
+            <span className="history-group-name">{groupLabel(group.name)} </span>
+          )}
+          {group.rolls.length === 0 ? (
+            // Pool zerado: o motor rola e descarta um dado so pra ter
+            // notacao valida (zero_dice_fallback) — "[]" parece bug.
+            <span>—</span>
+          ) : (
+            <>
+              <span>[</span>
+              {group.rolls.map((roll, ri) => (
+                <span key={ri}>
+                  {ri > 0 && <span>, </span>}
+                  {roll.card ? (
+                    <span className={`history-card${roll.isRed ? " is-red" : ""}`}>
+                      {dieFaceLabel(roll.value, roll.fudge, roll.card)}{roll.symbol ?? ""}
+                    </span>
+                  ) : (
+                    dieFaceLabel(roll.value, roll.fudge, roll.card)
+                  )}
                 </span>
-              ) : (
-                dieFaceLabel(roll.value, roll.fudge, roll.card)
-              )}
-            </span>
-          ))}
-          <span>]</span>
+              ))}
+              <span>]</span>
+            </>
+          )}
           {group.modifier !== undefined && group.modifier !== 0 && (
             <span>
               {group.modifier > 0 ? ` + ${group.modifier}` : ` − ${Math.abs(group.modifier)}`}

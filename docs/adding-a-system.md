@@ -95,8 +95,12 @@ YAML.
    `outcome`/`outcome_flags` novo precisa de entrada em
    `OUTCOME_LABELS` **e** `OUTCOME_TONES` (`apps/web/src/format.ts`) — sem
    isso a UI mostra o id cru (`FACANHA_X3`) em vez do texto. Se o sistema
-   tem sub-modos (tipo Infaernum), registrar a família em
-   `apps/web/src/profileFamilies.ts`. Testar no navegador ponta a ponta
+   tem sub-modos (tipo Infaernum ou Year Zero), registrar a família em
+   `apps/web/src/profileFamilies.ts` — a família vira UMA entrada em
+   "Regras da mesa" e os modos aparecem no select "Modo" logo abaixo, na
+   própria tela de Preferências (`SettingsPanel.tsx`). Não volte a
+   espalhar os modos como botões dentro da caixa de rolagem: com 4 modos
+   a fileira estoura a largura do painel. Testar no navegador ponta a ponta
    ANTES de tocar no Android — é onde o risco técnico é mais barato de
    validar (mesma lógica do `AGENTS.md` sobre a ordem rules-engine → web →
    Android). Detalhes que passam batido dentro desse passo:
@@ -122,7 +126,11 @@ YAML.
      encontra dois e o teste (ou o leitor de tela) fica ambíguo — dê
      `aria-label` distinto pros dois quando coexistirem na mesma tela
      (`RollPanel.tsx`/`ComposerBar.tsx` já fazem isso pra outros campos,
-     copie o padrão).
+     copie o padrão). Cuidado que o outro lado da colisão nem sempre é
+     outro campo: o `label` "Dados" do primeiro profile do Year Zero
+     batia com o `role="group" aria-label="Dados"` da bandeja de dados do
+     `ComposerBar` — virou "Dados no pool". Um `grep` por `aria-label` em
+     `ComposerBar.tsx` antes de batizar o input evita a viagem.
    - **Mudou o schema, não só o profile?** Ver a seção "A mecânica encaixa
      nos `roll_type` que já existem?" no topo deste documento — schema
      novo toca motor, backend, as DUAS bridges (web `headless.ts` e
@@ -147,13 +155,27 @@ YAML.
    - `ProfileFamilies.kt` — mesma família que você registrou em
      `profileFamilies.ts` do lado web. Web e Android têm **dois arquivos
      separados** para a mesma família; um sem o outro deixa metade da UI
-     sem os modos.
-   - Família ou sistema com input precisa aparecer no **overlay flutuante**
+     sem os modos. Família com nome longo leva `shortLabel` (Year Zero ->
+     "YZ"): é ele que vai pra aba e pro botão do overlay.
+   - **O modo da família é escolhido em Preferências, nos dois lados.** Já
+     foi fileira de botões dentro da caixa de rolagem (web e overlay); com
+     os quatro modos do Year Zero a fileira comia a largura toda e ainda
+     quebrava rótulo no meio da palavra, e o app ficou com duas
+     experiências diferentes pra mesma escolha. A caixa de rolagem mostra
+     só o sistema ATIVO.
+   - Sistema com input precisa aparecer no **overlay flutuante**
      (`OverlayView`/`OverlayService` — a caixa de rolar de dentro de outro
      app), não só na `SettingsActivity`. O layout do overlay usa 3 abas
      principais (`[ SISTEMA ] [ DADOS ] [ BARALHO ]`), onde a primeira aba
      leva o nome enxuto do sistema via `systemShortLabel` (ex: "Firelights",
-     "Ironsworn", "WoD v5"), sem descrições longas.
+     "Ironsworn", "WoD v5", "YZ"), sem descrições longas.
+   - **Modo salvo que não é o primeiro da família some sozinho** se
+     `SettingsActivity` não souber traduzir o id do member pra posição do
+     spinner: a família entra no spinner com o PRIMEIRO member como valor,
+     `indexOf("yze_fbl")` dá -1, o fallback é "Notação livre" e o
+     `saveFromViews` do próprio spinner grava isso por cima. Ver
+     `resolveSystemIndex` — bug que existia desde o Infaernum e só apareceu
+     quando o modo virou a única forma de escolher a linha do Year Zero.
    - O botão "ROLAR" do sistema dentro do overlay leva o formato
      `ROLAR ${systemShortLabel.uppercase()}` (ex: `ROLAR FIRELIGHTS`), com o
      mesmo estilo chamativo de destaque do botão do compositor livre.
@@ -165,6 +187,23 @@ YAML.
    que reabre o formulário com o valor novo em vez de rolar em silêncio o
    valor antigo. Os dois fluxos têm que passar — só testar um dos dois foi
    exatamente como o bug desta sessão sobreviveu disfarçado de corrigido.
+
+## Campo que a UI preenche sozinha (escrituração)
+
+Se o sistema tem número que só um botão preenche (os "1s travados" do
+Forbidden Lands, que o **Forçar** acumula), dê a ele um id `push_*`: web
+(`RollPanel.tsx`) dobra esses campos numa seção recolhida e o overlay
+Android (`ProfileInput.isPushBookkeeping`) não os mostra. Duas consequências
+que economizam uma sessão inteira de caça:
+
+- O formulário do Android **nunca** devolve esses campos. Ao comparar o que
+  está na tela com o que está salvo (`persistSystemInputs`), reponha os
+  salvos antes (`mergePushBookkeeping`) — sem isso, minimizar o painel
+  depois de forçar parece edição, o `lastRollAction` é invalidado e a
+  mini-bolha volta a abrir o formulário em vez de repetir.
+- Rolar pelo botão normal **zera** essa escrituração (web e Android): ela
+  descreve o que veio das rolagens anteriores da cadeia, e arrastá-la pra
+  uma rolagem fresca faz aparecer dano de uma rolagem que nem foi forçada.
 
 ## `lastRollAction`, especificamente
 

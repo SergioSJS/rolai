@@ -19,6 +19,18 @@ Notação padrão Roll20 (via `dice-roller-parser` ou equivalente):
 4dF          -- dado Fudge/Fate: três faces valendo -1, 0 e +1
 ```
 
+### Pool vazio (`0dX`)
+
+`0d6` é notação **válida**: rola zero dados, `rolls` sai `[]` e não há
+`dropped`. Existe para sistema que CALCULA a quantidade (Year Zero forçado
+sem dado sobrando num pool, personagem sem equipamento). Keep/drop em cima
+dele (`0d6kh1`) continua erro — não há o que manter.
+
+A alternativa que existia antes — o profile rolar `1d6dl1` (rola e
+descarta) só para ter notação válida — vazava pro palco: descartado
+**anima de propósito** (`10d6kh1` precisa mostrar os 10 dados), então três
+pools zerados jogavam 3d6 na tela.
+
 ### Dado Fudge (`dF`)
 
 `NdF` (maiúsculo ou minúsculo) é um dado de três faces cujos **valores** são

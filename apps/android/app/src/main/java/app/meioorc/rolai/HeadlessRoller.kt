@@ -35,6 +35,11 @@ class HeadlessRoller(
     // (ver headless.ts deliver()), nao pela chamada que originou.
     private val onDeckResult: (resultJson: String) -> Unit = onResult,
     private val onDeckError: (message: String) -> Unit = onError,
+    // Forçar (push do Year Zero): alem do resultado, a entrega traz os
+    // inputs que o motor USOU (pool recalculado, sucessos travados). Chega
+    // ANTES do resultado, pra quem for salvar/mostrar ja ter o valor certo
+    // quando a rolagem aparecer.
+    private val onPushInputs: (inputsJson: String) -> Unit = {},
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val callbackSeq = AtomicLong(0)
@@ -158,6 +163,27 @@ class HeadlessRoller(
         )
     }
 
+    /**
+     * Forçar: recalcula o pool a partir de `previousResultJson` (quantos
+     * dados sobraram, quantos sucessos travaram) e rola de novo. A conta e a
+     * da web (`yzePush.ts`), chamada aqui pela WebView — nada de regra do
+     * Year Zero em Kotlin (AGENTS.md).
+     */
+    fun rollPush(
+        system: String,
+        previousResultJson: String,
+        inputsJson: String,
+        optionsJson: String? = null,
+    ) {
+        val id = nextCallbackId()
+        eval(
+            "rolai.rollPush(${JSONObject.quote(system)}, " +
+                "${JSONObject.quote(previousResultJson)}, ${JSONObject.quote(inputsJson)}, " +
+                "${JSONObject.quote(id)}" +
+                (optionsJson?.let { ", ${JSONObject.quote(it)}" } ?: "") + ")",
+        )
+    }
+
     /** Cria baralho do zero com `configJson` — usado quando `includeJokers`
      *  muda (composicao do monte so muda num baralho novo). */
     fun deckNew(configJson: String) {
@@ -196,6 +222,10 @@ class HeadlessRoller(
             val deliverResult = if (payload.optString("kind") == "deck") onDeckResult else onResult
             val deliverError = if (payload.optString("kind") == "deck") onDeckError else onError
             if (payload.optBoolean("ok")) {
+                // Inputs do Forçar (rolai.rollPush) — sai antes do resultado
+                // de proposito: quem salva o formulario precisa deles ja
+                // valendo quando a rolagem aparecer na tela.
+                payload.optJSONObject("pushInputs")?.let { onPushInputs(it.toString()) }
                 val result = payload.optJSONObject("result")?.toString()
                 if (result != null) deliverResult(result) else deliverError("resposta sem resultado")
             } else {

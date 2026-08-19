@@ -17,18 +17,14 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import type { RollResult, SystemProfile } from "@rolai/rules-engine";
 import { rollFromNotation, rollFromOverlay, rollFromProfile } from "../roll";
-import type { ProfileFamily } from "../profileFamilies";
+import { isYzeSystem, planYzePush } from "../yzePush";
 import { ComposerBar } from "./ComposerBar";
+import { TimesIcon } from "./Glyphs";
 import { StepperInput } from "./StepperInput";
 
 interface RollPanelProps {
   // undefined = notacao livre
   profile?: SystemProfile | undefined;
-  // Presente quando `profile` e um dos modos de uma familia (Infaernum:
-  // oraculo/ideias/acao) — mostra os modos como botoes AQUI, na propria
-  // caixa de rolagem, em vez de exigir abrir Preferências pra trocar.
-  family?: ProfileFamily | undefined;
-  onSelectFamilyMember?: (system: string) => void;
   onRoll: (result: RollResult) => void;
   disabled?: boolean;
 }
@@ -44,6 +40,30 @@ function defaultInputs(profile?: SystemProfile): Record<string, string> {
   return defaults;
 }
 
+// Campo cujo id comeca com "push_" e escrituracao do Forçar (os "1s
+// travados" do Forbidden Lands): quem preenche e o botao, e ver os dois na
+// frente o tempo todo entulhava um formulario que ja tem tres pools. Fica
+// numa secao recolhida — aberta sozinha quando ja tem valor, senao o
+// jogador nao veria o que o Forçar acumulou.
+function isPushField(id: string): boolean {
+  return id.startsWith("push_");
+}
+
+// Inputs que VIRAM DADO (aparecem no `dice` de algum field) — e o que
+// separa "Base/Perícia/Equipamento" de "Dificuldade/Sucesso garantido".
+// Vem do proprio profile, nao de convencao de nome nem de "tem default":
+// as duas tentativas anteriores quebraram assim que um pool ganhou um
+// valor inicial.
+function diceInputIds(profile: SystemProfile): Set<string> {
+  const ids = new Set<string>();
+  for (const field of profile.fields) {
+    for (const m of field.dice.matchAll(/\{input\.([A-Za-z_][A-Za-z0-9_]*)\}/g)) {
+      ids.add(m[1]!);
+    }
+  }
+  return ids;
+}
+
 function ProfileInputFields({
   profile,
   rawInputs,
@@ -53,9 +73,106 @@ function ProfileInputFields({
   rawInputs: Record<string, string>;
   setRawInputs: (update: (prev: Record<string, string>) => Record<string, string>) => void;
 }) {
+  const main = profile.inputs.filter((i) => !isPushField(i.id));
+  // Duas fileiras, nao uma fileira que quebra sozinha: os DADOS (os tres
+  // pools do Forbidden Lands) numa linha, os AJUSTES (dificuldade, sucesso
+  // garantido) na seguinte. Deixado no automatico, o flex-wrap encaixava 4
+  // campos na primeira linha e largava o quinto sozinho esticado embaixo.
+  const poolIds = diceInputIds(profile);
+  const dados = main.filter((i) => poolIds.has(i.id));
+  const ajustes = main.filter((i) => !poolIds.has(i.id));
+  const push = profile.inputs.filter((i) => isPushField(i.id));
+  const pushFilled = push.some((i) => (rawInputs[i.id] ?? "") !== "");
+  return (
+    <>
+      {dados.length > 0 && (
+        <ProfileInputRow
+          inputs={dados}
+          rawInputs={rawInputs}
+          setRawInputs={setRawInputs}
+        />
+      )}
+      {ajustes.length > 0 && (
+        <ProfileInputRow
+          inputs={ajustes}
+          rawInputs={rawInputs}
+          setRawInputs={setRawInputs}
+        />
+      )}
+      {push.length > 0 && (
+        <details className="push-fields" open={pushFilled}>
+          <summary>Escrituração do Forçar</summary>
+          <ProfileInputRow
+            inputs={push}
+            rawInputs={rawInputs}
+            setRawInputs={setRawInputs}
+          />
+        </details>
+      )}
+    </>
+  );
+}
+
+// Campo numerico do formulario de sistema. O "X" fica ao lado do stepper,
+// nao no rotulo: solto no fim de um rotulo que quebra em duas linhas ele
+// aparecia colado no campo VIZINHO. Cabe porque so campo com default ou
+// opcional tem X, e esses ficam na segunda fileira (dois por linha) —
+// nunca na fileira dos pools.
+//
+// Pra onde o X leva depende do campo: opcional volta a ficar VAZIO (e o que
+// faz o motor pular as outcome_rules que o citam); obrigatorio com default
+// volta pro default — o "Sucesso garantido" precisa zerar sem esvaziar, ou
+// a rolagem nem sai (input obrigatorio ausente).
+function ProfileNumberField({
+  input,
+  value,
+  onChange,
+}: {
+  input: SystemProfile["inputs"][number];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const clearTo = input.required === false ? "" : input.default;
+  return (
+    <div className="field">
+      <label htmlFor={`profile-input-${input.id}`}>
+        {input.label}
+        {input.required === false ? " (opcional)" : ""}
+      </label>
+      <span className="field-control">
+        <StepperInput
+          id={`profile-input-${input.id}`}
+          value={value}
+          onChange={onChange}
+        />
+        {clearTo !== undefined && (
+          <button
+            type="button"
+            className="field-clear"
+            aria-label="limpar"
+            disabled={value === clearTo}
+            onClick={() => onChange(clearTo)}
+          >
+            <TimesIcon />
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function ProfileInputRow({
+  inputs,
+  rawInputs,
+  setRawInputs,
+}: {
+  inputs: SystemProfile["inputs"];
+  rawInputs: Record<string, string>;
+  setRawInputs: (update: (prev: Record<string, string>) => Record<string, string>) => void;
+}) {
   return (
     <div className="profile-inputs">
-      {profile.inputs.map((input) =>
+      {inputs.map((input) =>
         input.options ? (
           <div key={input.id} className="field">
             <label htmlFor={`profile-input-${input.id}`}>{input.label}</label>
@@ -74,60 +191,81 @@ function ProfileInputFields({
             </select>
           </div>
         ) : (
-          <div key={input.id} className="field">
-            <label htmlFor={`profile-input-${input.id}`}>
-              {input.label}
-              {input.required === false ? " (opcional)" : ""}
-            </label>
-            <StepperInput
-              id={`profile-input-${input.id}`}
-              value={rawInputs[input.id] ?? ""}
-              onChange={(v) =>
-                setRawInputs((prev) => ({ ...prev, [input.id]: v }))
-              }
-              onClear={
-                input.required === false
-                  ? () => setRawInputs((prev) => ({ ...prev, [input.id]: "" }))
-                  : undefined
-              }
-            />
-          </div>
+          <ProfileNumberField
+            key={input.id}
+            input={input}
+            value={rawInputs[input.id] ?? ""}
+            onChange={(v) => setRawInputs((prev) => ({ ...prev, [input.id]: v }))}
+          />
         ),
       )}
     </div>
   );
 }
 
-export function RollPanel({
-  profile,
-  family,
-  onSelectFamilyMember,
-  onRoll,
-  disabled,
-}: RollPanelProps) {
+export function RollPanel({ profile, onRoll, disabled }: RollPanelProps) {
   const isOverlay = profile?.rollType === "overlay";
   const [rawInputs, setRawInputs] = useState<Record<string, string>>(() =>
     defaultInputs(profile),
   );
   const [notation, setNotation] = useState("2d6");
 
+  // Ultima rolagem DESTE painel com ESTE profile — a base do "Forçar" do
+  // Year Zero. E o resultado proprio de proposito: em sala, `lastResult` do
+  // App tambem recebe a rolagem dos outros, e empurrar a rolagem alheia nao
+  // e uma coisa que exista.
+  const [lastOwn, setLastOwn] = useState<RollResult | null>(null);
+  const [pushHint, setPushHint] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileRolling, setProfileRolling] = useState(false);
   const [freeError, setFreeError] = useState<string | null>(null);
   const [freeRolling, setFreeRolling] = useState(false);
 
-  async function handleProfileSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (!profile) return;
+  // Um caminho so pra rolar pelo profile — o botao Rolar e o Forçar usam
+  // este, com inputs diferentes. O Forçar passa os valores calculados
+  // DIRETO em vez de depender do setRawInputs ja ter chegado no estado
+  // (setState nao e sincrono: rolar lendo `rawInputs` logo depois rolaria
+  // o pool velho, em silencio — a familia de bug do AGENTS.md).
+  async function runProfileRoll(
+    inputs: Record<string, string>,
+  ): Promise<RollResult | null> {
+    if (!profile) return null;
     setProfileError(null);
     setProfileRolling(true);
     try {
-      onRoll(await rollFromProfile(profile, rawInputs));
+      const result = await rollFromProfile(profile, inputs);
+      setLastOwn(result);
+      onRoll(result);
+      return result;
     } catch (err) {
       setProfileError(err instanceof Error ? err.message : String(err));
+      return null;
     } finally {
       setProfileRolling(false);
     }
+  }
+
+  // Rolar normal comeca uma cadeia NOVA: a escrituracao do Forçar
+  // ("push_*": os 1s travados do Forbidden Lands) descreve o que veio das
+  // rolagens ANTERIORES desta cadeia, e carregar isso pra uma rolagem
+  // fresca fazia aparecer dano do nada, de uma rolagem que nem foi forcada.
+  // Quem preenche esses campos e o Forçar, sempre.
+  function withoutPushBookkeeping(
+    inputs: Record<string, string>,
+  ): Record<string, string> {
+    const next = { ...inputs };
+    for (const input of profile?.inputs ?? []) {
+      if (isPushField(input.id)) next[input.id] = "";
+    }
+    return next;
+  }
+
+  async function handleProfileSubmit(event: FormEvent) {
+    event.preventDefault();
+    setPushHint(null);
+    const inputs = withoutPushBookkeeping(rawInputs);
+    setRawInputs(() => inputs);
+    await runProfileRoll(inputs);
   }
 
   async function handleFreeSubmit(event: FormEvent) {
@@ -158,32 +296,37 @@ export function RollPanel({
   // leitor de tela) — texto continua "Rolar" nos dois.
   const twoForms = profile !== undefined && !isOverlay;
 
+  // Forçar (o "push" da linha Year Zero): recalcula quantos dados sobraram
+  // e quantos sucessos ficaram travados (a conta vive em yzePush.ts), joga
+  // isso nos campos E rola na hora — um toque, como na mesa. Os campos
+  // ficam preenchidos com o que foi usado, entao da pra ajustar e rolar de
+  // novo pelo Rolar normal.
+  //
+  // Nada impede forcar de novo o que ja foi forcado: a regra de "so uma
+  // vez" varia por jogo da linha, e quem decide isso e a mesa, nao o app.
+  const pushPlan =
+    profile !== undefined && isYzeSystem(profile.system) && lastOwn !== null
+      ? planYzePush(profile.system, lastOwn, rawInputs)
+      : null;
+
+  async function handlePush() {
+    if (pushPlan === null) return;
+    setRawInputs(() => pushPlan.inputs);
+    const travados = pushPlan.sucessosTravados;
+    const rerrolados = pushPlan.dadosRerrolados;
+    const result = await runProfileRoll(pushPlan.inputs);
+    if (result === null) return;
+    setPushHint(
+      `Forçou: ${travados} ${travados === 1 ? "sucesso garantido" : "sucessos garantidos"}, ` +
+        `${rerrolados} ${rerrolados === 1 ? "dado rerrolado" : "dados rerrolados"}.`,
+    );
+  }
+
   return (
     <div className="roll-panel-stack">
       {twoForms && (
         <form className="panel roll-panel" onSubmit={handleProfileSubmit}>
-          {family ? (
-            <div className="family-tabs" role="tablist" aria-label={family.label}>
-              {family.members.map((member) => (
-                <button
-                  key={member.system}
-                  type="button"
-                  role="tab"
-                  aria-selected={member.system === profile.system}
-                  className={
-                    member.system === profile.system
-                      ? "family-tab is-active"
-                      : "family-tab"
-                  }
-                  onClick={() => onSelectFamilyMember?.(member.system)}
-                >
-                  {member.subLabel}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <h2>{profile.label}</h2>
-          )}
+          <h2>{profile.label}</h2>
           <ProfileInputFields
             profile={profile}
             rawInputs={rawInputs}
@@ -197,6 +340,21 @@ export function RollPanel({
           >
             Rolar
           </button>
+          {pushPlan !== null && (
+            <button
+              type="button"
+              className="push-button"
+              onClick={() => void handlePush()}
+              disabled={disabled || profileRolling}
+            >
+              Forçar
+            </button>
+          )}
+          {pushHint !== null && (
+            <p className="push-hint" role="status">
+              {pushHint}
+            </p>
+          )}
           {profileError !== null && <p className="error">{profileError}</p>}
         </form>
       )}

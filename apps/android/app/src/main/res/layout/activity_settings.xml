@@ -122,15 +122,38 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp" />
 
-            <!-- Campos do sistema escolhido (CD, modificador, vantagem...),
-                 gerados em runtime a partir de assets/headless/systems.json.
-                 Antes isto era um EditText onde se digitava o JSON cru dos
-                 inputs — ver ProfileForm.kt. -->
+            <!-- Seletor de MODO da familia (Year Zero, Infaernum), gerado
+                 em runtime — os campos de valor ficam na secao recolhida
+                 abaixo. Ver ProfileForm.kt. -->
             <LinearLayout
                 android:id="@+id/inputs_form"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
+                android:orientation="vertical" />
+
+            <!-- Valores do sistema (Base, Estresse, Dificuldade...). Vivem
+                 aqui E no painel flutuante — e o MESMO inputsJson, nao duas
+                 configuracoes. Recolhido por default justamente por isso:
+                 quem rola de dentro de outro app edita no painel; esta tela
+                 serve pra deixar um padrao antes de ligar o botao. -->
+            <LinearLayout
+                android:id="@+id/header_values"
+                style="@style/Rolai.SectionGroupHeader">
+
+                <TextView
+                    style="@style/Rolai.SectionHeader.Inline"
+                    android:text="@string/section_values" />
+
+                <TextView
+                    android:id="@+id/chevron_values"
+                    style="@style/Rolai.Chevron" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/group_values"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:orientation="vertical" />
 
             <TextView

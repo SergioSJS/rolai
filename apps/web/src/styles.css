@@ -51,6 +51,22 @@
   --input-bg: rgba(0, 0, 0, 0.35);
   --stage-bg: rgba(14, 38, 29, 0.45);
   --shadow-panel: 0 6px 24px rgba(0, 0, 0, 0.35);
+  /* Caixa do resultado sobre o palco: e translucida, entao precisa de cor
+     PROPRIA por tema — herdar so o texto (var(--text)) deixava letra
+     escura sobre vidro escuro no tema claro, ilegivel. */
+  --result-bg: rgba(10, 13, 16, 0.62);
+  --result-border: rgba(255, 255, 255, 0.09);
+  --result-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  /* Sombra do texto do resultado: no escuro ela "entalha" o numero sobre o
+     palco; no claro, a mesma sombra preta por tras de texto colorido em
+     caixa clara so borra a letra. */
+  --result-text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+  --result-outcome-shadow: 0 0 26px var(--accent-glow), 0 2px 12px rgba(0, 0, 0, 0.55);
+  /* Quanto a arte da carta e escurecida (ver cardTexture.tsx). A arte e
+     branco quase puro: no tema escuro sem isso ela QUEIMA contra o fundo;
+     no claro, escurecer deixa a carta cinza suja. Um numero so, aqui, lido
+     pelo CSS e pelo canvas do palco 3D. */
+  --card-dim: 0.72;
   --radius: 10px;
   --font:
     system-ui,
@@ -81,6 +97,14 @@
   --input-bg: rgba(255, 255, 255, 0.7);
   --stage-bg: rgba(21, 119, 90, 0.08);
   --shadow-panel: 0 4px 18px rgba(23, 33, 28, 0.12);
+  --result-bg: rgba(252, 253, 251, 0.86);
+  --result-border: rgba(23, 33, 28, 0.14);
+  --result-shadow: 0 10px 40px rgba(23, 33, 28, 0.18);
+  --result-text-shadow: none;
+  --result-outcome-shadow: 0 0 18px var(--accent-glow);
+  /* Carta no tema claro fica com a arte como ela e: fundo claro nao
+     estoura com branco, e escurecer so deixava a carta cinza. */
+  --card-dim: 1;
 }
 
 :root[data-theme="table"] {
@@ -300,7 +324,7 @@ body.stream-mode {
   margin: 0 auto;
   padding: 1rem 1.25rem 2rem;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 390px;
   gap: 1.1rem;
   /* stretch: o historico ocupa a altura da tela em vez de deixar um vazio
      enorme embaixo dos paineis. */
@@ -630,6 +654,18 @@ body.stream-mode .stage canvas {
   border-color: rgba(255, 198, 92, 0.5);
 }
 
+/* Mesma regra de legibilidade do headline: no OBS o fundo pode ser
+   qualquer coisa, entao a soma de sucessos leva contorno preto. */
+.stream-root .result-yze-total {
+  color: #f4f7f5;
+  text-shadow:
+    -2px -2px 0 rgba(0, 0, 0, 0.9),
+    2px -2px 0 rgba(0, 0, 0, 0.9),
+    -2px 2px 0 rgba(0, 0, 0, 0.9),
+    2px 2px 0 rgba(0, 0, 0, 0.9),
+    0 0 6px rgba(0, 0, 0, 0.9);
+}
+
 .stream-root .result-tally-item {
   background: #12171c;
   border-color: rgba(255, 255, 255, 0.32);
@@ -856,6 +892,38 @@ button:disabled {
   box-shadow: none;
 }
 
+/* Forçar (o push do Year Zero): rola na hora com o pool recalculado.
+   Botao secundario de proposito, com contorno em vez de preenchimento —
+   e a rolagem de excecao, o ROLAR acima continua sendo a principal. */
+.push-button {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.6rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent-strong);
+  box-shadow: none;
+}
+
+.push-button:hover:not(:disabled) {
+  background: var(--chip-bg);
+}
+
+.push-button:disabled {
+  border-color: var(--chip-bg);
+  color: var(--muted);
+}
+
+.push-hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: 0.4rem 0 0;
+}
+
 /* Modos de uma familia (Infaernum: acao/sim-ou-nao/ideias) como botoes
    dentro da propria caixa de rolagem — trocar de modo nao deveria exigir
    abrir Preferências. Substitui o <h2> do profile quando ha familia. */
@@ -907,19 +975,121 @@ button:disabled {
    dificuldade) cada um virava uma linha inteira so pra um stepper de
    3.1rem — desperdicio de altura enorme. Campos curtos (numero, select)
    ficam lado a lado; so quebra pra proxima linha quando nao cabe. */
+/* Os tres pools do Forbidden Lands (Base, Perícia, Equipamento) precisam
+   caber numa linha so — um por linha empurrava o botao Rolar pra fora da
+   vista. Flex em vez de grade justamente pela ULTIMA linha: quem sobra se
+   estica pra ocupar a largura toda (dois campos = metade cada), em vez de
+   ficar espremido numa coluna de tres com um buraco do lado. */
 .profile-inputs {
   display: flex;
-  flex-direction: row;
   flex-wrap: wrap;
-  gap: 0.6rem 2rem;
+  gap: 0.5rem 0.5rem;
   margin-bottom: 0.3rem;
 }
 
 /* .field tambem e usado sozinho (RoomPanel) — aqui dentro o gap do pai ja
-   espaca as linhas, e o item nao deve ser forcado a largura cheia. */
+   espaca as linhas, e o item nao deve ser forcado a largura cheia. A base
+   pequena e o que deixa tres na mesma linha num painel estreito; o
+   flex-grow devolve o espaco sobrando pros que estao na linha. */
 .profile-inputs .field {
   margin-bottom: 0;
+  flex: 1 1 5.5rem;
   min-width: 0;
+}
+
+/* Stepper + "X" na mesma linha, com o stepper mandando na largura. O
+   rotulo fica em cima, sozinho — X colado no fim de um rotulo que quebra
+   em duas linhas parecia pertencer ao campo vizinho. */
+.field-control {
+  display: flex;
+  align-items: stretch;
+  gap: 0.2rem;
+  min-width: 0;
+  /* Empurra o controle pro rodape do campo: steppers da mesma linha ficam
+     alinhados mesmo quando um rotulo quebra em duas linhas e o outro nao. */
+  margin-top: auto;
+}
+
+.field-control .stepper {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field-clear {
+  flex: 0 0 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.field-clear .glyph {
+  width: 0.7rem;
+  height: 0.7rem;
+}
+
+.field-clear:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--chip-bg);
+}
+
+.field-clear:disabled {
+  opacity: 0.3;
+}
+
+/* Stepper compacto dentro do formulario de sistema: o input encolhe junto
+   com a coluna em vez de manter largura fixa (a largura fixa e o que
+   impedia tres deles na mesma linha). */
+.profile-inputs .stepper {
+  gap: 0.15rem;
+}
+
+.profile-inputs .stepper input {
+  width: auto;
+  flex: 1 1 2rem;
+  min-width: 1.8rem;
+  padding-left: 0.2rem;
+  padding-right: 0.2rem;
+  text-align: center;
+}
+
+.profile-inputs .stepper-button {
+  width: 1.6rem;
+  flex: 0 0 1.6rem;
+}
+
+/* Rotulo curto ("Base", "Perícia") cabe; "Sucesso garantido" quebra em
+   duas linhas em vez de esticar a coluna. */
+.profile-inputs .field > label {
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* Escrituracao do Forçar (os "1s travados" do Forbidden Lands): campos que
+   o botao preenche sozinho, dobrados pra nao competir com os pools. */
+.push-fields {
+  margin: 0.1rem 0 0.5rem;
+  border-top: 1px solid var(--chip-bg);
+  padding-top: 0.4rem;
+}
+
+.push-fields > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0;
+}
+
+.push-fields[open] > summary {
+  margin-bottom: 0.4rem;
 }
 
 /* ---------- Compositor ---------- */
@@ -1173,11 +1343,11 @@ button:disabled {
      resolve sem esconder a animacao atras. */
   padding: 0.9rem 1.4rem 0.8rem;
   border-radius: 18px;
-  background: rgba(10, 13, 16, 0.62);
+  background: var(--result-bg);
   backdrop-filter: blur(10px) saturate(1.1);
   -webkit-backdrop-filter: blur(10px) saturate(1.1);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--result-border);
+  box-shadow: var(--result-shadow);
 }
 
 /* Autor da rolagem. Em sala, o numero sozinho e ambiguo — tres pessoas
@@ -1204,7 +1374,7 @@ button:disabled {
   font-weight: 700;
   line-height: 1.05;
   color: var(--text);
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+  text-shadow: var(--result-text-shadow);
 }
 
 /* Outcome e palavra, nao numero: "sucesso com estilo" no mesmo corpo do
@@ -1216,9 +1386,7 @@ button:disabled {
   color: var(--accent-strong);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  text-shadow:
-    0 0 26px var(--accent-glow),
-    0 2px 12px rgba(0, 0, 0, 0.55);
+  text-shadow: var(--result-outcome-shadow);
 }
 
 /* Tom do resultado. Antes todo outcome saia verde: falha crítica no d20
@@ -1236,6 +1404,32 @@ button:disabled {
   text-shadow:
     0 0 26px rgba(229, 192, 123, 0.35),
     0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+/* Year Zero de varios pools: a soma dos sucessos dos pools. Menor que a
+   headline (o outcome continua mandando), maior que o flag — e o numero
+   que a mesa repete em voz alta. */
+.result-yze-total {
+  margin-top: 0.35rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 2.2vw, 1.5rem);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+/* Nome do pool na linha do historico (so em rolagem multi-grupo). */
+.history-group-name {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: lowercase;
+}
+
+/* "sem dados": pool que ficou em zero. Discreto — e ausencia, nao dado. */
+.result-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
 }
 
 .result-flag {
@@ -1467,10 +1661,11 @@ button:disabled {
   height: 100%;
   backface-visibility: hidden;
   border-radius: 6px;
-  /* brightness(0.72): a arte da carta e branco quase puro — sem isso o
-     card estoura contra o fundo escuro do app (mesmo fator do tier 3D,
-     ver cardTexture.tsx, pra nao ficar mais claro que a versao 3D). */
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45)) brightness(0.72);
+  /* --card-dim: a arte da carta e branco quase puro — no tema escuro, sem
+     escurecer, o card estoura contra o fundo. Mesmo token que o tier 3D le
+     (cardTexture.tsx), pra 2D e 3D nunca ficarem com brilhos diferentes;
+     no tema claro ele vale 1 e a carta fica branca mesmo. */
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45)) brightness(var(--card-dim));
 }
 
 .card-flip-back {
@@ -1554,7 +1749,7 @@ button:disabled {
 
 .modal {
   width: 100%;
-  max-width: 420px;
+  max-width: 520px;
   /* 100% da area util do backdrop (que ja e viewport menos o padding, com
      box-sizing: border-box) — sem conta de vh que erra o padding e deixa o
      modal passar da tela. O corpo e que rola; o cabecalho fica sempre a
@@ -1571,13 +1766,25 @@ button:disabled {
   -webkit-backdrop-filter: blur(14px);
 }
 
+.modal.modal-md {
+  max-width: 520px;
+}
+
+.modal.modal-lg {
+  max-width: 760px;
+}
+
+.modal.modal-xl {
+  max-width: 900px;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   flex: 0 0 auto;
-  padding: 0.9rem 1rem 0.6rem;
+  padding: 1rem 1.35rem 0.75rem;
   border-bottom: 1px solid var(--panel-border);
 }
 
@@ -1586,7 +1793,7 @@ button:disabled {
 }
 
 .modal-close {
-  padding: 0.2rem 0.55rem;
+  padding: 0.25rem 0.6rem;
 }
 
 .modal-body {
@@ -1594,7 +1801,7 @@ button:disabled {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0.9rem 1rem 1.1rem;
+  padding: 1.1rem 1.35rem 1.4rem;
 }
 
 /* Janela baixa (notebook com zoom, celular deitado): quase sem folga, pra
@@ -1617,12 +1824,17 @@ button:disabled {
    bloco de select confuso sem nada pra ancorar o olho ao rolar. O icone da
    ponto de referencia rapido (Dados=d20, Baralho=cartas...) e a linha
    acima marca onde uma secao acaba e a proxima comeca. */
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .settings-panel h3 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin: 1.6rem 0 0.9rem;
-  padding-top: 1.3rem;
+  padding-top: 1.2rem;
   border-top: 1px solid var(--panel-border);
   font-size: 0.82rem;
   letter-spacing: 0.06em;
@@ -1646,11 +1858,15 @@ button:disabled {
 .settings-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem;
+  gap: 0.75rem 0.9rem;
 }
 
 .settings-row > label {
-  flex: 1 1 8rem;
+  flex: 1 1 14rem;
+}
+
+.settings-row > .color-field {
+  flex: 1 1 7rem;
 }
 
 .color-field input[type="color"] {
@@ -2116,43 +2332,48 @@ input[type="range"]:focus {
 
 /* ---------- Ajuda da notação ---------- */
 
+.notation-help {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
 .notation-intro,
 .notation-foot {
   color: var(--muted);
-  font-size: 0.86rem;
-  margin: 0 0 1rem;
-}
-
-.notation-foot {
-  margin: 1rem 0 0;
+  font-size: 0.9rem;
+  margin: 0;
+  line-height: 1.45;
 }
 
 .notation-block h3 {
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.55rem;
   font-family: var(--font-display);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent-strong);
 }
 
-.notation-block + .notation-block {
-  margin-top: 1.1rem;
-}
-
 .notation-list {
   margin: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Grid em vez de dl solto: o exemplo e a explicacao precisam alinhar em
    coluna, senao a leitura vira caca ao par. */
 .notation-row {
   display: grid;
-  grid-template-columns: minmax(7.5rem, auto) 1fr;
-  gap: 0.4rem 0.9rem;
+  grid-template-columns: minmax(11.5rem, auto) 1fr;
+  gap: 0.5rem 1.25rem;
   align-items: baseline;
-  padding: 0.3rem 0;
+  padding: 0.45rem 0.2rem;
   border-bottom: 1px solid var(--panel-border);
+}
+
+.notation-row:last-child {
+  border-bottom: none;
 }
 
 .notation-row dt,
@@ -2162,22 +2383,24 @@ input[type="range"]:focus {
 
 .notation-row code {
   font-family: var(--mono);
-  font-size: 0.88rem;
+  font-size: 0.9rem;
+  font-weight: 700;
   background: var(--chip-bg);
-  padding: 0.15rem 0.45rem;
+  padding: 0.2rem 0.55rem;
   border-radius: 6px;
   color: var(--text);
+  border: 1px solid var(--panel-border);
 }
 
 .notation-row dd {
   color: var(--muted);
-  font-size: 0.86rem;
+  font-size: 0.9rem;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 540px) {
   .notation-row {
     grid-template-columns: 1fr;
-    gap: 0.15rem;
+    gap: 0.2rem;
   }
 }
 
@@ -2198,25 +2421,33 @@ input[type="range"]:focus {
 
 /* Sobre: titulos de secao pra virar documento navegavel em vez de bloco
    de paragrafos. */
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
 .about h3 {
-  margin: 1.3rem 0 0.4rem;
+  margin: 1.3rem 0 0.45rem;
   font-family: var(--font-display);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent-strong);
 }
 
 .about h3:first-of-type {
-  margin-top: 1rem;
+  margin-top: 0.8rem;
 }
 
 .about p {
   margin: 0 0 0.6rem;
+  line-height: 1.5;
+  font-size: 0.92rem;
 }
 
 .about-lead {
-  font-size: 1rem;
+  font-size: 1.05rem;
   color: var(--text);
 }
 
@@ -2226,29 +2457,31 @@ input[type="range"]:focus {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+  margin-bottom: 0.5rem;
 }
 
 .about-contact-name {
   font-family: var(--font-display);
   font-weight: 600;
   color: var(--text);
+  font-size: 0.95rem;
 }
 
 .about-contact-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.5rem;
 }
 
 .about-contact-chip {
   display: inline-flex;
   align-items: center;
-  padding: 0.32rem 0.75rem;
+  padding: 0.35rem 0.85rem;
   border-radius: 999px;
   background: var(--accent-glow);
   border: 1px solid transparent;
   color: var(--accent-strong);
-  font-size: 0.8rem;
+  font-size: 0.84rem;
   text-decoration: none;
   transition: border-color 0.15s ease;
 }
@@ -2267,22 +2500,58 @@ a.about-contact-chip:hover {
 .changelog {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0.75rem;
+  margin: 0 0 0.5rem;
+}
+
+.changelog-entry {
+  padding: 0.65rem 0.85rem;
+  background: var(--chip-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+.changelog-entry dt {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.changelog-date {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.changelog-entry dd {
+  margin: 0.35rem 0 0;
+}
+
+.changelog-entry ul {
   margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
 }
 
 /* Agradecimentos e creditos de recursos abertos */
 .about-credits {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 0.65rem;
   margin: 0 0 1rem;
 }
 
 .about-credit-item {
-  font-size: 0.84rem;
+  font-size: 0.86rem;
   line-height: 1.45;
   color: var(--muted);
+  padding: 0.65rem 0.85rem;
+  background: var(--chip-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
 }
 
 .about-credit-item strong {
@@ -2293,31 +2562,6 @@ a.about-contact-chip:hover {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-.changelog-entry dt {
-  font-family: var(--font-display);
-  font-weight: 600;
-  color: var(--text);
-  font-size: 0.85rem;
-}
-
-.changelog-date {
-  font-weight: 400;
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.changelog-entry dd {
-  margin: 0.25rem 0 0;
-}
-
-.changelog-entry ul {
-  margin: 0;
-  padding-left: 1.1rem;
-  color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.4;
 }
 
 /* Dado descartado pelo keep/drop: aparece, mas nao compete com o que conta. */

@@ -17,7 +17,6 @@ import type { RollResult } from "@rolai/rules-engine";
 import type { Card, DeckConfig, DrawResult } from "@rolai/deck-engine";
 import { playCardDraw } from "./deckSound";
 import { availableProfiles } from "./profiles";
-import { familyFor } from "./profileFamilies";
 import { APK_LATEST_URL } from "./config";
 import { CHANGELOG } from "./changelog";
 import type {
@@ -588,8 +587,6 @@ export function App() {
             <RollPanel
               key={system}
               profile={profiles.find((p) => p.system === system)}
-              family={familyFor(system)}
-              onSelectFamilyMember={handleSystemChange}
               onRoll={handleRoll}
             />
           ) : (
@@ -666,6 +663,7 @@ export function App() {
       {modal === "settings" && (
         <Modal
           title="Preferências"
+          size="lg"
           onClose={() => {
             setModal(null);
             dismissDice();
@@ -689,13 +687,13 @@ export function App() {
         </Modal>
       )}
       {modal === "help" && (
-        <Modal title="Como escrever uma rolagem" onClose={() => setModal(null)}>
+        <Modal title="Como escrever uma rolagem" size="lg" onClose={() => setModal(null)}>
           <NotationHelp />
         </Modal>
       )}
 
       {modal === "about" && (
-        <Modal title="Sobre" onClose={() => setModal(null)}>
+        <Modal title="Sobre" size="lg" onClose={() => setModal(null)}>
           <div className="about">
             <p className="about-lead">
               Dice roller multiplayer pra mesas de RPG: dados 3D com física,

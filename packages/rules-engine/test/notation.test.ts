@@ -89,6 +89,19 @@ describe("parseNotation", () => {
     expect(ast.groups[2]!.dice).toMatchObject({ count: 1, sides: 20, modifier: 1 });
   });
 
+  // Pool vazio e resultado legitimo de sistema que CALCULA a quantidade de
+  // dados (Year Zero forcado sem dado sobrando). O caro era o contrario:
+  // sem "0d6", o profile tinha que rolar um dado e descartar, e o palco 3D
+  // animava esse dado — tres pools zerados jogavam 3d6 na tela.
+  it("aceita pool vazio (0dX) e nao rola nada", () => {
+    const ast = parseNotation("0d6");
+    expect(ast.groups[0]!.dice.count).toBe(0);
+    const result = roll("{0d6} + {2d6}", { deterministic: [3, 4] });
+    expect(Object.values(result.groups)[0]!.rolls).toEqual([]);
+    expect(Object.values(result.groups)[0]!.dropped).toBeUndefined();
+    expect(Object.values(result.groups)[1]!.rolls).toEqual([3, 4]);
+  });
+
   it("rejeita notacao invalida", () => {
     for (const bad of [
       "",
@@ -97,7 +110,8 @@ describe("parseNotation", () => {
       "x2d6",
       "2d6kh",
       "{1d6} vs",
-      "0d6",
+      "0d6kh1",
+      "-1d6",
       "2d1",
       "{1d6} + {2d8} vs {1d20}",
     ]) {

@@ -20,6 +20,7 @@ import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -168,7 +169,13 @@ class OverlayView(context: Context) {
     /** Aba de modo tocada dentro da caixa (ex.: Infaernum "Ideias") — troca
      *  o sistema ativo sem sair pras configuracoes. Espelha as
      *  `family-tabs` do RollPanel da web. */
-    var onSelectFamilyMember: ((String) -> Unit)? = null
+    /**
+     * Forçar (o push do Year Zero): recalcula o pool a partir da rolagem
+     * anterior e rola de novo — um toque, como na mesa. A conta nao mora
+     * aqui nem em Kotlin nenhum: quem calcula e `yzePush.ts`, chamado pela
+     * WebView headless (AGENTS.md).
+     */
+    var onForcePush: ((String) -> Unit)? = null
 
     /** Painel do sistema fechado sem rolar — salva os campos digitados (e a
      *  notacao do composer, se o sistema ativo for "overlay") como novo
@@ -200,10 +207,10 @@ class OverlayView(context: Context) {
     private lateinit var diceContainer: LinearLayout
     private lateinit var deckContainer: LinearLayout
     private lateinit var deckRemainingView: TextView
-    private lateinit var familyTabsRow: LinearLayout
     private lateinit var systemTitle: TextView
     private lateinit var systemFields: LinearLayout
     private lateinit var profileRollButton: TextView
+    private lateinit var pushButton: TextView
     private var activeOverlayInfo: SystemInfo? = null
     private val systemInputViews = LinkedHashMap<String, Pair<ProfileInput, View>>()
     private val resultFlash: TextView
@@ -426,17 +433,35 @@ class OverlayView(context: Context) {
             setPadding(0, 10.dp(), 0, 10.dp())
             setOnClickListener { onRollWithInputs?.invoke(currentInputsJson()) }
         }
-        familyTabsRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
+        // Botao secundario de proposito (contorno, nao preenchido): quem
+        // rola do zero continua sendo o ROLAR acima. So aparece quando ha
+        // uma rolagem propria pra forcar — ver setPushAvailable.
+        pushButton = TextView(context).apply {
+            text = "FORÇAR"
+            gravity = Gravity.CENTER
+            setTextColor(ACCENT)
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            letterSpacing = 0.04f
+            isAllCaps = true
             visibility = View.GONE
+            background = rippled(
+                GradientDrawable().apply {
+                    cornerRadius = 10.dp().toFloat()
+                    setColor(Color.TRANSPARENT)
+                    setStroke(1.dp(), ACCENT)
+                },
+            )
+            setPadding(0, 8.dp(), 0, 8.dp())
+            setOnClickListener { onForcePush?.invoke(currentInputsJson()) }
         }
         systemContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             visibility = if (currentPanelTab == PanelTab.SYSTEM) View.VISIBLE else View.GONE
-            addView(familyTabsRow)
             addView(systemTitle, vParams(topMargin = 2))
             addView(systemFields, vParams(topMargin = 4))
             addView(profileRollButton, vParams(topMargin = 8))
+            addView(pushButton, vParams(topMargin = 6))
         }
 
         // ---------- ABA 2: DADOS LIVRES ----------
@@ -791,7 +816,7 @@ class OverlayView(context: Context) {
     private fun systemShortLabel(info: SystemInfo?): String {
         if (info == null) return "Sistema"
         val family = ProfileFamilies.familyFor(info.system)
-        if (family != null) return family.label
+        if (family != null) return family.shortLabel
         return when (info.system) {
             "roll_under" -> "Roll Under"
             "wod5" -> "WoD v5"
@@ -838,29 +863,21 @@ class OverlayView(context: Context) {
             tabSystemButton.visibility = View.VISIBLE
             tabSystemButton.text = systemShortLabel(info)
             val context = systemFields.context
-            familyTabsRow.removeAllViews()
-            if (family != null) {
-                familyTabsRow.visibility = View.VISIBLE
-                for ((i, member) in family.members.withIndex()) {
-                    val isActive = member.system == info?.system
-                    familyTabsRow.addView(
-                        familyTabButton(context, member.subLabel, isActive) {
-                            onSelectFamilyMember?.invoke(member.system)
-                        },
-                        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                            marginStart = if (i == 0) 0 else 4.dp()
-                        },
-                    )
-                }
-            } else {
-                familyTabsRow.visibility = View.GONE
-            }
-            systemTitle.visibility = if (family != null) View.GONE else View.VISIBLE
+            // O MODO da familia (Year Zero: Genérico/Forbidden/Alien/Walking
+            // Dead; Infaernum: acao/sim ou nao/ideias) e escolhido em
+            // configuracoes, igual na web — a caixa de rolar mostra so o
+            // sistema ATIVO. Ja foram botoes aqui: com quatro modos a
+            // fileira comia metade do painel e ainda quebrava o rotulo no
+            // meio da palavra, e o app passou a ter duas experiencias
+            // diferentes pra mesma escolha.
+            systemTitle.visibility = View.VISIBLE
             systemTitle.text = info?.label
             systemFields.removeAllViews()
             systemInputViews.clear()
 
-            val inputs = info?.inputs.orEmpty()
+            // formInputs, nao inputs: a escrituracao do Forçar ("push_*")
+            // e preenchida pelo proprio botao — ver ProfileInput.
+            val inputs = info?.formInputs.orEmpty()
             var i = 0
             while (i < inputs.size) {
                 val input1 = inputs[i]
@@ -887,6 +904,10 @@ class OverlayView(context: Context) {
             }
 
             profileRollButton.text = "ROLAR ${systemShortLabel(info).uppercase()}"
+            // Trocou de sistema/modo: a rolagem anterior nao serve de base
+            // pra forcar. Quem reabilita e o Service, quando uma rolagem
+            // DESTE sistema sai (ver setPushAvailable).
+            pushButton.visibility = View.GONE
             profileRollButton.visibility = if (info?.isOverlay == true) View.GONE else View.VISIBLE
             setPanelTab(PanelTab.SYSTEM)
         }
@@ -972,6 +993,37 @@ class OverlayView(context: Context) {
             col.addView(stepper, vParams(topMargin = 3))
         }
         return col
+    }
+
+    /**
+     * Mostra ou esconde o FORÇAR. Quem decide e o Service: so faz sentido
+     * com uma rolagem PROPRIA e do sistema atual na memoria — "existe
+     * sistema Year Zero configurado" nao e a mesma coisa que "tem rolagem
+     * pra forcar" (AGENTS.md, a armadilha de sempre).
+     */
+    fun setPushAvailable(available: Boolean) {
+        if (!::pushButton.isInitialized) return
+        pushButton.visibility = if (available) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Repõe os campos com os valores que o Forçar acabou de usar (pool
+     * recalculado, sucesso garantido). Sem isto o formulario continuaria
+     * mostrando o pool ANTES do push — o jogador rolaria de novo com o
+     * numero velho achando que era o novo.
+     */
+    fun updateSystemInputs(values: Map<String, String>) {
+        for ((id, par) in systemInputViews) {
+            val (input, view) = par
+            val value = values[id] ?: continue
+            when (view) {
+                is EditText -> if (view.text.toString() != value) view.setText(value)
+                is Spinner -> {
+                    val index = input.options.indexOfFirst { it.value == value }
+                    if (index >= 0) view.setSelection(index)
+                }
+            }
+        }
     }
 
     private fun currentInputsJson(): String {
@@ -1222,11 +1274,17 @@ class OverlayView(context: Context) {
         TextView(context).apply {
             text = label
             setTextColor(if (active) Color.WHITE else MUTED)
-            textSize = 10f
             isAllCaps = true
             letterSpacing = 0.03f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
+            maxLines = 2
+            // O painel tem largura fixa (300dp) e a fileira divide igual
+            // entre os modos: com quatro (Year Zero), "FORBIDDEN" nao cabia
+            // em 10sp e o Android quebrava NO MEIO da palavra — "FORBIDDE"
+            // numa linha e "N" na outra. Deixa o proprio texto encolher ate
+            // caber em vez de escolher um rotulo mutilado.
+            setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, TypedValue.COMPLEX_UNIT_SP)
             background = rippled(
                 GradientDrawable().apply {
                     cornerRadius = 8.dp().toFloat()

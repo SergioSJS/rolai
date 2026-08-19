@@ -23,7 +23,7 @@ const BUNDLE = path.resolve(
 );
 
 type Delivery =
-  | { ok: true; result: RollResult }
+  | { ok: true; result: RollResult; pushInputs?: Record<string, string> }
   | { ok: false; error: string };
 
 interface BridgeCapture {
@@ -83,6 +83,10 @@ describe("bundle headless (WebView Android)", () => {
       "pool_d6",
       "roll_under",
       "wod5",
+      "yze",
+      "yze_alien",
+      "yze_fbl",
+      "yze_wdu",
     ]);
     for (const s of systems) {
       expect(s.label.length).toBeGreaterThan(0);
@@ -189,6 +193,53 @@ describe("bundle headless (WebView Android)", () => {
       expect(delivery.result.outcome).toBe("success");
       expect(delivery.result.profile).toBe("roll_under");
     }
+  });
+
+  // Forçar (push do Year Zero) no APK: a conta de quantos dados sobraram
+  // e a MESMA da web (yzePush.ts) — o Kotlin so pede e recebe. Sem isto o
+  // overlay precisaria reimplementar a regra, que e exatamente o que o
+  // AGENTS.md proibe.
+  it("rollPush() recalcula o pool e devolve os inputs usados", async () => {
+    const capture = installBridge();
+    // Rolagem anterior: 3 dados na Base, dois 6 (travam) e um 1 (trava no
+    // Forbidden Lands); Perícia e Equipamento vazios.
+    const previous = await rollWithProfile(
+      getProfile("yze_fbl")!,
+      { base: 3, pericia: 0, equipamento: 0, dificuldade: 1, sucessos_anteriores: 0 },
+      { deterministic: [6, 6, 1], timestamp: "2026-01-01T00:00:00.000Z" },
+    );
+    await globalThis.rolai.rollPush(
+      "yze_fbl",
+      JSON.stringify(previous),
+      JSON.stringify({ base: 3, pericia: 0, equipamento: 0, dificuldade: 1, sucessos_anteriores: 0 }),
+      "cb-push",
+      JSON.stringify({ deterministic: [4], timestamp: "2026-01-01T00:00:01.000Z" }),
+    );
+    const delivery = await waitDelivery(capture, "cb-push");
+    expect(delivery.ok).toBe(true);
+    if (!delivery.ok) return;
+    // 6, 6 e 1 ficaram na mesa: nao sobrou dado nenhum pra rerrolar.
+    expect(delivery.pushInputs).toMatchObject({
+      base: "0",
+      sucessos_anteriores: "2",
+      push_banes_base: "1",
+      push_banes_equip: "0",
+    });
+    expect(delivery.result.notation).toBe("{0d6+2} + {0d6} + {0d6}");
+    expect(delivery.result.groups["base"]!.total).toBe(2);
+    expect(delivery.result.outcome).toBe("success");
+    expect(delivery.result.outcome_flags).toContain("yze_dano_atributo_x1");
+  });
+
+  it("rollPush() recusa rolagem de sistema que nao e Year Zero", async () => {
+    const capture = installBridge();
+    const previous = await rollWithProfile(getProfile("pbta")!, { mode: "", mod: 0 }, {
+      deterministic: [3, 4],
+    });
+    await globalThis.rolai.rollPush("pbta", JSON.stringify(previous), "{}", "cb-push-nao");
+    const delivery = await waitDelivery(capture, "cb-push-nao");
+    expect(delivery.ok).toBe(false);
+    if (!delivery.ok) expect(delivery.error).toContain("forcar");
   });
 
   it("devolve erro estruturado pra notacao invalida", async () => {

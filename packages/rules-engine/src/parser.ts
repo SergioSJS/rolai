@@ -91,7 +91,13 @@ function parseHead(rest: string, expr: string): { spec: DiceSpec; rest: string }
   const isCard = head[0].toLowerCase().endsWith("c");
   const fudge = !isCard && head[2]?.toLowerCase() === "f";
   const sides = isCard ? 13 : fudge ? 3 : Number(head[2]);
-  if (!Number.isInteger(count) || count < 1 || count > MAX_DICE) {
+  // count 0 e VALIDO: "0d6" e um pool vazio, nao um erro de digitacao. Vem
+  // de sistema onde a quantidade de dados e calculada (Year Zero: uma
+  // rolagem forcada pode nao ter sobrado dado nenhum num dos pools). A
+  // alternativa — rolar um dado e descartar so pra ter notacao valida —
+  // fazia o palco 3D ANIMAR esse dado, porque descartado tambem rola ali:
+  // "base 0, pericia 0, equipamento 0" jogava 3d6 na tela.
+  if (!Number.isInteger(count) || count < 0 || count > MAX_DICE) {
     throw new NotationError(`quantidade de dados invalida em "${expr}"`);
   }
   if (!fudge && !isCard && (!Number.isInteger(sides) || sides < 2 || sides > MAX_SIDES)) {
@@ -128,7 +134,9 @@ function consumeSuffixes(
             throw new NotationError(`keep/drop duplicado em "${expr}"`);
           }
           const n = Number(m[2]);
-          if (!Number.isInteger(n) || n < 1) {
+          // keep/drop em pool vazio nao existe: "0d6kh1" nao tem o que
+          // manter, e aceitar isso so esconderia um erro de montagem.
+          if (!Number.isInteger(n) || n < 1 || spec.count === 0) {
             throw new NotationError(`keep/drop invalido em "${expr}"`);
           }
           spec.keepDrop = { type: m[1]!.toLowerCase() as KeepDropType, count: n };

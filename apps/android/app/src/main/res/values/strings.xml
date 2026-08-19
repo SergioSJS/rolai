@@ -60,6 +60,7 @@
     <string name="section_general">Botão flutuante</string>
     <string name="section_room">Sala</string>
     <string name="section_quickroll">Padrão de rolagem</string>
+    <string name="section_values">Valores padrão</string>
     <string name="section_deck">Baralho de cartas</string>
     <string name="deck_include_jokers">Incluir curingas (54 cartas)</string>
     <string name="deck_removal_mode">Modo de leitura (carta volta ao monte)</string>

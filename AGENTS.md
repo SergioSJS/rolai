@@ -170,7 +170,8 @@ como prontos sem checar uns aos outros, e o mesmo bug de fundo (repetir
 rolagem com valor velho no overlay do Android) voltando disfarçado de bug
 novo umas quatro vezes. Cobre: onde duplicar label/tom de outcome novo
 (web E Android são arquivos separados), onde a família de sub-modos precisa
-aparecer (configurações E overlay flutuante — dois lugares), e como testar
+aparecer (a tela de Preferências dos DOIS lados — desde 2026-08-19 o modo
+não fica mais como abas dentro da caixa de rolagem), e como testar
 o `lastRollAction` do overlay sem reintroduzir o mesmo bug de duas formas
 opostas.
 

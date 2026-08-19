@@ -61,6 +61,11 @@ class SettingsActivity : Activity() {
     // Numa posicao de familia (Infaernum), o valor muda em runtime pro
     // member escolhido no spinner "Modo" — ver renderInputsForm.
     private var systemIds = mutableListOf("")
+    /** Container dos campos do member ativo — ver renderInputsForm. */
+    private var memberFields: LinearLayout? = null
+    private lateinit var headerValues: View
+    private lateinit var chevronValues: TextView
+
     // Spec dos inputs de cada sistema (indice 0 = notacao livre, sem input).
     private var systemInfos = mutableListOf<SystemInfo?>(null)
     // Todo SystemInfo do systems.json, por id — usado pra resolver qual
@@ -182,6 +187,9 @@ class SettingsActivity : Activity() {
             setOnCheckedChangeListener { _, _ -> saveFromViews() }
         }
         inputsForm = findViewById(R.id.inputs_form)
+        memberFields = findViewById(R.id.group_values)
+        headerValues = findViewById(R.id.header_values)
+        chevronValues = findViewById(R.id.chevron_values)
         editServer = findViewById(R.id.edit_server)
         editWeb = findViewById(R.id.edit_web)
 
@@ -431,13 +439,39 @@ class SettingsActivity : Activity() {
 
     // ---------- preferencias ----------
 
+    /**
+     * Posicao do sistema salvo no spinner principal.
+     *
+     * Familia entra no spinner UMA vez, com o PRIMEIRO member como valor
+     * (`yze` pela "Year Zero", `infaernum` pelo "Infaernum") — entao um
+     * modo salvo que nao seja o primeiro ("yze_fbl", "infaernum_ideias")
+     * nao esta em `systemIds` e o `indexOf` devolvia -1. O fallback pro
+     * indice 0 e "Notação livre": abrir configuracoes escolhia sozinho
+     * "sem sistema", e o `saveFromViews` do proprio spinner GRAVAVA isso
+     * por cima — o modo do jogador sumia so de olhar a tela.
+     *
+     * Aqui o member salvo vira o valor ativo DA FAMILIA (`systemIds`/
+     * `systemInfos` sao mutaveis de proposito, e o spinner "Modo" ja le
+     * dali qual member marcar).
+     */
+    private fun resolveSystemIndex(system: String): Int {
+        val direct = systemIds.indexOf(system)
+        if (direct >= 0) return direct
+        val family = ProfileFamilies.familyFor(system) ?: return 0
+        val position = familyAtPosition.entries.find { it.value.key == family.key }?.key ?: return 0
+        val info = systemInfoById[system] ?: return position
+        systemIds[position] = system
+        systemInfos[position] = info
+        return position
+    }
+
     private fun loadIntoViews(settings: RolaiSettings) {
         editRoomCode.setText(settings.roomCode)
         editName.setText(settings.playerName)
         editNotation.setText(settings.notation)
         editServer.setText(settings.wsBaseUrl)
         editWeb.setText(settings.webBaseUrl)
-        val systemIndex = systemIds.indexOf(settings.system).takeIf { it >= 0 } ?: 0
+        val systemIndex = resolveSystemIndex(settings.system)
         spinnerSystem.setSelection(systemIndex)
         renderInputsForm(systemIndex, settings.inputsJson)
         spinnerDice.setSelection(
@@ -574,6 +608,12 @@ class SettingsActivity : Activity() {
         setupCollapsible(prefs, "about", R.id.header_about, R.id.chevron_about, R.id.group_about)
         setupCollapsible(
             prefs, "advanced", R.id.header_advanced, R.id.chevron_advanced, R.id.group_advanced,
+        )
+        // Valores do sistema: nasce recolhido como todo mundo, e quem rola
+        // de dentro de outro app nem precisa abrir (o painel flutuante tem
+        // os mesmos campos, editando o MESMO inputsJson).
+        setupCollapsible(
+            prefs, "values", R.id.header_values, R.id.chevron_values, R.id.group_values,
         )
     }
 
@@ -863,6 +903,14 @@ class SettingsActivity : Activity() {
         inputsForm.removeAllViews()
         inputViews.clear()
         inputsForm.visibility = View.VISIBLE
+        // Os VALORES vao pra secao recolhida propria (group_values); o
+        // `inputs_form` fica so com o seletor de Modo. Alem de tirar os
+        // campos da frente, isso separa o que `setSelection` remonta:
+        // trocar de modo dispara `onItemSelected`, e sem um container so
+        // dos campos a remontagem EMPILHAVA um segundo formulario embaixo
+        // do primeiro (invisivel enquanto a unica familia era o Infaernum,
+        // cujos modos nao tem input; o Year Zero mostrou na hora dois
+        // "Dados no pool" na tela).
 
         val family = familyAtPosition[position]
         if (family != null) {
@@ -908,6 +956,7 @@ class SettingsActivity : Activity() {
         val info = systemInfos.getOrNull(position)
         if (info == null || !info.needsForm) {
             inputsForm.visibility = View.GONE
+            setValuesSectionVisible(false)
             return
         }
         renderMemberFields(info, inputsJson)
@@ -915,15 +964,34 @@ class SettingsActivity : Activity() {
 
     /** Campos (CD, modificador, vantagem...) de UM sistema — sem se
      *  preocupar se ele veio solto ou escolhido dentro de uma familia. */
+    /** Cabecalho + conteudo da secao "Valores padrão" (o conteudo so
+     *  reaparece se a secao estiver expandida — quem manda nisso e o
+     *  setupCollapsible). */
+    private fun setValuesSectionVisible(visible: Boolean) {
+        headerValues.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) memberFields?.visibility = View.GONE
+        else if (chevronValues.text == "▾") memberFields?.visibility = View.VISIBLE
+    }
+
     private fun renderMemberFields(info: SystemInfo, inputsJson: String) {
+        val container = memberFields ?: inputsForm
+        // Sistema sem campo nenhum (notacao livre, oraculos do Infaernum):
+        // nem o cabecalho aparece — secao vazia so ocupa espaco e faz o
+        // jogador tocar pra descobrir que nao ha nada dentro.
+        setValuesSectionVisible(info.needsForm)
+        // Trocar de modo remonta ESTES campos, e so eles (o spinner "Modo"
+        // esta fora do container). Sem limpar, o formulario do modo anterior
+        // continuava na tela embaixo do novo.
+        container.removeAllViews()
+        inputViews.clear()
         if (!info.needsForm) return
         val salvos = ProfileForm.fromJson(inputsJson)
-        for (input in info.inputs) {
-            inputsForm.addView(fieldLabel(input.label))
+        for (input in info.formInputs) {
+            container.addView(fieldLabel(input.label))
             val view = if (input.isSelect) selectField(input, salvos[input.id])
             else numberField(input, salvos[input.id])
             inputViews[input.id] = view
-            inputsForm.addView(view)
+            container.addView(view)
         }
     }
 
@@ -969,14 +1037,14 @@ class SettingsActivity : Activity() {
         val info = systemInfos.getOrNull(position) ?: return ""
         if (!info.needsForm) return ""
         val valores = mutableMapOf<String, String>()
-        for (input in info.inputs) {
+        for (input in info.formInputs) {
             valores[input.id] = when (val view = inputViews[input.id]) {
                 is EditText -> view.text.toString()
                 is Spinner -> input.options.getOrNull(view.selectedItemPosition)?.value.orEmpty()
                 else -> ""
             }
         }
-        return ProfileForm.toJson(valores, info.inputs)
+        return ProfileForm.toJson(valores, info.formInputs)
     }
 
     private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()

@@ -1,0 +1,48 @@
+system: yze_wdu
+label: "YZ — Walking Dead"
+roll_type: multi
+inputs:
+  - id: base
+    label: "Base"
+    type: number
+    default: "1"
+  - id: estresse
+    label: "Estresse"
+    type: number
+    default: "0"
+  - id: sucessos_anteriores
+    label: "Sucesso garantido"
+    type: number
+    default: "0"
+  - id: dificuldade
+    label: "Dificuldade"
+    type: number
+    required: false
+    default: "1"
+fields:
+  - id: base
+    dice: "{input.base}d6"
+    modifier: "{input.sucessos_anteriores}"
+    compare_individually: true
+    success_rule: ">=6"
+  - id: estresse
+    dice: "{input.estresse}d6"
+    compare_individually: true
+    success_rule: ">=6"
+# Mesma estrutura do Alien (pool base + Estresse, 6 e sucesso nos dois) —
+# muda o nome e a consequencia do 1 no dado de Estresse: no Walking Dead
+# Universe ele e DESCONTROLE (mesa d66 de agir mal sob pressao), nao
+# Panico. Profile separado em vez de um "estresse generico" justamente pra
+# cada linha manter o termo que a mesa usa; o id do outcome tambem e
+# proprio (docs/adding-a-system.md: id de outcome e compartilhado entre
+# profiles, entao renomear um mexeria no outro).
+#
+# Empurrar rerrola tudo que nao deu 6 e acrescenta um dado de Estresse —
+# quem soma esse +1 e o botao Empurrar da UI, nao o profile.
+outcome_rules:
+  - condition: "base.total + estresse.total >= {input.dificuldade}"
+    result: success
+  - condition: "base.total + estresse.total < {input.dificuldade}"
+    result: fail
+  - condition: "count(estresse, '==1') >= 1"
+    result: yze_descontrole
