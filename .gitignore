@@ -29,3 +29,7 @@ build/
 
 # Relatórios de cobertura — sempre locais (docs/manual-test-checklist.md).
 coverage/
+
+# Playwright: relatórios e browsers, sempre locais.
+test-results/
+playwright-report/

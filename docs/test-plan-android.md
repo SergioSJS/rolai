@@ -223,7 +223,22 @@ Faltam:
 Custo: baixo, a infraestrutura existe. Continua **fora do CI** (emulador é
 lento e instável, decisão registrada no `AGENTS.md`).
 
-### E2 — Playwright: um teste, não uma suíte
+### E2 ✅ — Playwright: um teste, não uma suíte
+
+> **Feito** (`apps/web/e2e/sala.spec.ts`, 2 testes, ~8s). Local, fora do CI.
+> Conferido por mutação, e a conferência ensinou duas coisas:
+>
+> 1. Com 20 arrastos o teste passava **mesmo com o bug de volta** — 22
+>    conexões não estouram o limite de 30/min. Subiu pra 40, que é a ordem de
+>    grandeza do relato original (28 num arrasto só).
+> 2. Ainda assim passava: atribuir `el.value` direto **não dispara o onChange
+>    do React**, que intercepta o setter da propriedade. O teste mexia no DOM
+>    e o app não ficava sabendo. Com o setter nativo, o bug produz 30
+>    conexões e 2 `rate_limited`, e o teste falha no sintoma real (expulso da
+>    sala). Com a correção: 5 conexões nos dois testes.
+>
+> Um e2e que passa dos dois lados da mutação é pior que nenhum: dá confiança
+> sem dar cobertura.
 
 Dois contextos de navegador contra o backend local: um rola, o outro recebe;
 um troca a cor, o outro vê. Cobre a seção 1 do checklist manual — a parte

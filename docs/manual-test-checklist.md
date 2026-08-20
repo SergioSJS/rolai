@@ -46,6 +46,11 @@ cd apps/android && adb install -r app/build/outputs/apk/debug/app-debug.apk
 Web e Android na mesma sala. É o fluxo com mais partes móveis e o menos
 coberto por teste automatizado.
 
+> Dois destes casos já são automáticos: `npm run e2e -w @rolai/web` sobe dois
+> navegadores de verdade contra o backend local e cobre "rolagem de um chega
+> no outro" e "arrastar a cor não derruba ninguém". Precisa de backend em
+> :8420 e `npm run dev` em :5273. **O Android continua sendo só manual.**
+
 - [ ] Rolar dos dois lados; cada um vê o dado do outro **na cor de quem rolou**
 - [ ] **Arrastar** (não clicar) o seletor de cor do dado 3, em sala. A outra
       ponta muda de cor uma vez, e **ninguém é expulso da sala**
@@ -123,6 +128,7 @@ CI.
 
 ```bash
 npm run coverage -w @rolai/web                    # web    (HTML em coverage/)
+npm run e2e -w @rolai/web                         # e2e de sala (2 navegadores)
 cd services/backend && pytest --cov=app           # backend
 cd apps/android && ./gradlew coverage             # android, testes JVM
 ```
