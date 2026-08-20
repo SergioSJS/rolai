@@ -1392,7 +1392,7 @@ class OverlayView(context: Context) {
 
     private fun addDie(key: String) {
         val current = notationInput.text.toString()
-        val next = addDieToNotation(current, key)
+        val next = NotationComposer.addDie(current, key)
         notationInput.setText(next)
         notationInput.setSelection(next.length)
         syncChipsWithNotation(next)
@@ -1401,7 +1401,7 @@ class OverlayView(context: Context) {
     /** Tira um dado do tipo; o termo some do pool ao zerar. Ligado ao long-press do chip. */
     private fun removeDie(key: String) {
         val current = notationInput.text.toString()
-        val next = removeDieFromNotation(current, key)
+        val next = NotationComposer.removeDie(current, key)
         notationInput.setText(next)
         notationInput.setSelection(next.length)
         syncChipsWithNotation(next)
@@ -1413,114 +1413,11 @@ class OverlayView(context: Context) {
         syncChipsWithNotation("")
     }
 
-    private fun addDieToNotation(notation: String, key: String): String {
-        val trimmed = notation.trim()
-        val label = if (key == "C") "1c" else if (key == "F") "1dF" else "1d$key"
-
-        if (trimmed.isEmpty()) return label
-
-        // 1. Slot aberto no fim: ex: "1[", "2[", "3[", "... + 1[", "{2d6} vs {"
-        val openBracketRegex = Regex("""^(.*(?:\b[123]\[|\{))\s*$""")
-        val openMatch = openBracketRegex.find(trimmed)
-        if (openMatch != null) {
-            val prefix = openMatch.groupValues[1]
-            val closing = if (prefix.endsWith("{")) "}" else "]"
-            return "$prefix$label$closing"
-        }
-
-        // 2. Bloco de slot fechado no fim: ex: "1[2d6]" ou "1[2d6+1d4]"
-        val slotBlockRegex = Regex("""^(.*?\b[123]\[)([^\]]*?)(\])\s*$""")
-        val slotMatch = slotBlockRegex.find(trimmed)
-        if (slotMatch != null) {
-            val prefix = slotMatch.groupValues[1]
-            val inner = slotMatch.groupValues[2].trim()
-            val suffix = slotMatch.groupValues[3]
-            val innerUpdated = addDieToSimpleExpression(inner, key)
-            return "$prefix$innerUpdated$suffix"
-        }
-
-        // 3. Operador ou separador pendente no fim: ex: "2d6 +", "2d6+", "vs"
-        if (Regex("""[\+\-\*\/]\s*$""").containsMatchIn(trimmed) || Regex("""\bvs\s*$""", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)) {
-            val sep = if (trimmed.endsWith(" ")) "" else " "
-            return "$trimmed$sep$label"
-        }
-
-        // 4. Estado normal do compositor
-        return addDieToSimpleExpression(trimmed, key)
-    }
-
-    private fun addDieToSimpleExpression(expr: String, key: String): String {
-        val label = if (key == "C") "1c" else if (key == "F") "1dF" else "1d$key"
-        val diePattern = if (key == "C") Regex("""(\d+)c\b""", RegexOption.IGNORE_CASE)
-            else if (key == "F") Regex("""(\d+)dF\b""", RegexOption.IGNORE_CASE)
-            else Regex("""(\d+)d$key\b""", RegexOption.IGNORE_CASE)
-
-        val match = diePattern.find(expr)
-        if (match != null) {
-            val count = match.groupValues[1].toIntOrNull() ?: 1
-            val newCount = count + 1
-            val replacement = if (key == "C") "${newCount}c"
-                else if (key == "F") "${newCount}dF"
-                else "${newCount}d$key"
-            return expr.replaceFirst(diePattern, replacement)
-        }
-
-        if (expr.isEmpty()) return label
-        return "$expr+$label"
-    }
-
-    private fun removeDieFromNotation(notation: String, key: String): String {
-        val trimmed = notation.trim()
-        if (trimmed.isEmpty()) return ""
-
-        val slotBlockRegex = Regex("""^(.*?\b[123]\[)([^\]]*?)(\])\s*$""")
-        val slotMatch = slotBlockRegex.find(trimmed)
-        if (slotMatch != null) {
-            val prefix = slotMatch.groupValues[1]
-            val inner = slotMatch.groupValues[2].trim()
-            val suffix = slotMatch.groupValues[3]
-            val innerUpdated = removeDieFromSimpleExpression(inner, key)
-            if (innerUpdated.isEmpty()) {
-                return prefix.replace(Regex("""\b[123]\[$"""), "").trim().removeSuffix("+").trim()
-            }
-            return "$prefix$innerUpdated$suffix"
-        }
-
-        return removeDieFromSimpleExpression(trimmed, key)
-    }
-
-    private fun removeDieFromSimpleExpression(expr: String, key: String): String {
-        val diePattern = if (key == "C") Regex("""(\d+)c\b""", RegexOption.IGNORE_CASE)
-            else if (key == "F") Regex("""(\d+)dF\b""", RegexOption.IGNORE_CASE)
-            else Regex("""(\d+)d$key\b""", RegexOption.IGNORE_CASE)
-
-        val match = diePattern.find(expr) ?: return expr
-        val count = match.groupValues[1].toIntOrNull() ?: 1
-        if (count > 1) {
-            val newCount = count - 1
-            val replacement = if (key == "C") "${newCount}c"
-                else if (key == "F") "${newCount}dF"
-                else "${newCount}d$key"
-            return expr.replaceFirst(diePattern, replacement)
-        } else {
-            var updated = expr.replaceFirst(diePattern, "")
-            updated = updated.replace("++", "+")
-            return updated.trim().removePrefix("+").removeSuffix("+").trim()
-        }
-    }
-
     private fun syncChipsWithNotation(notation: String) {
         val density = root.context.resources.displayMetrics.density
+        val contagens = NotationComposer.countsByKey(notation, chips.keys.toList())
         for ((key, chip) in chips) {
-            val pattern = if (key == "C") Regex("""(\d+)c\b""", RegexOption.IGNORE_CASE)
-                else if (key == "F") Regex("""(\d+)dF\b""", RegexOption.IGNORE_CASE)
-                else Regex("""(\d+)d$key\b""", RegexOption.IGNORE_CASE)
-
-            var count = 0
-            for (match in pattern.findAll(notation)) {
-                count += match.groupValues[1].toIntOrNull() ?: 1
-            }
-
+            val count = contagens[key] ?: 0
             val label = if (key == "C") "carta" else if (key == "F") "dF" else "d$key"
             chip.text = if (count > 0) {
                 if (key == "C") "${count}c" else "${count}$label"
