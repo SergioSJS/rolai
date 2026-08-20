@@ -12,7 +12,7 @@ from fakeredis.aioredis import FakeRedis
 from starlette.testclient import TestClient, WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
-from app import rooms
+from app import room_ws
 from tests.conftest import assert_ws_rejected, make_roll_message
 
 ROOM_CODE_ALPHABET = re.compile(r"^[A-Za-z0-9_-]{8}$")  # token_urlsafe(6) -> 8 chars
@@ -111,7 +111,7 @@ async def test_broadcast_survives_a_dead_connection_ahead_in_the_dict() -> None:
     # nunca recebia rolagem nenhuma ate o `finally` da morta rodar sozinho.
     alive = _RecordingConn()
     connections: dict[str, object] = {"morta": _DeadConn(), "viva": alive}
-    await rooms._broadcast(connections, {"type": "roll", "player": "ana"})  # type: ignore[arg-type]
+    await room_ws._broadcast(connections, {"type": "roll", "player": "ana"})  # type: ignore[arg-type]
     assert alive.received == [{"type": "roll", "player": "ana"}]
 
 
