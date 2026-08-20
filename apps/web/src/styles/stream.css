@@ -1,0 +1,209 @@
+/* ---------- Modo stream/OBS (?room=CODIGO&stream=1) ---------- */
+
+/* Sem UI de app: so o palco (reutiliza .stage/.stage-overlay acima). */
+.stream-root {
+  position: fixed;
+  inset: 0;
+}
+
+/* Overlay do Android (janela translucida): impede a promocao do canvas
+   WebGL a uma superficie propria do sistema. Quando promovido, quem faz o
+   blend e o compositor do Android — que erra o alpha nessa janela e o dado
+   sai fantasma (visto em aparelho; no desktop o canvas nunca e promovido e
+   o dado sempre foi solido). Um filtro nao-identidade obriga o Chromium a
+   compor o canvas no proprio render pass, com blend correto. Visualmente
+   imperceptivel. */
+body.stream-mode .stage canvas {
+  filter: contrast(1.005) brightness(1.005);
+  transform: rotate(0.02deg);
+}
+
+/* Veu do overlay Android: fica ATRAS do palco (z abaixo de .stage) e some
+   junto com o resultado. */
+.stream-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  animation: stream-result-fade 8s forwards;
+  pointer-events: none;
+}
+
+/* O resultado entra, fica e sai sozinho — o unmount no fim da animacao e
+   agendado pela StreamApp (STREAM_RESULT_MS, manter em sincronia). */
+.stream-result {
+  animation: stream-result-fade 8s forwards;
+}
+
+@keyframes stream-result-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  5%,
+  85% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Mensagem minima (sala invalida, desconectado): discreta, sem painel —
+   qualquer coisa maior poluiria a saida da stream. */
+.stream-status {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* Placa do resultado no modo stream: quase opaca e SEM backdrop-filter.
+   O blur de `.result-display` so borra o que esta no compositing da
+   PAGINA — e aqui atras da placa nao tem pagina nenhuma: no overlay
+   Android e outra janela do sistema (o leitor de PDF), no OBS e o
+   gameplay. O blur virava no-op e sobrava alpha 0.62 de fundo escuro
+   disputando com o que estivesse embaixo. Solido resolve, e ainda poupa
+   uma camada de composicao na janela do overlay. */
+.stream-root .result-display {
+  background: rgba(9, 12, 15, 0.95);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.75),
+    0 14px 44px rgba(0, 0, 0, 0.7);
+}
+
+/* Legibilidade do resultado em cima de QUALQUER fundo (o OBS pode estar
+   sobre gameplay colorido/claro): contorno preto em camadas no texto e
+   chips com fundo escuro solido, em vez dos tokens de tema — no modo
+   stream nao existe tema por baixo. */
+.stream-root .result-headline {
+  color: #f4f7f5;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-shadow:
+    -2px -2px 0 rgba(0, 0, 0, 0.9),
+    2px -2px 0 rgba(0, 0, 0, 0.9),
+    -2px 2px 0 rgba(0, 0, 0, 0.9),
+    2px 2px 0 rgba(0, 0, 0, 0.9),
+    0 0 6px rgba(0, 0, 0, 0.9),
+    0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+.stream-root .result-headline.is-long {
+  font-size: clamp(1.4rem, 4vw, 2.4rem);
+  line-height: 1.15;
+}
+
+.stream-root .result-headline.is-outcome {
+  color: #2ee6a8;
+  text-shadow:
+    -2px -2px 0 rgba(0, 0, 0, 0.9),
+    2px -2px 0 rgba(0, 0, 0, 0.9),
+    -2px 2px 0 rgba(0, 0, 0, 0.9),
+    2px 2px 0 rgba(0, 0, 0, 0.9),
+    0 0 22px rgba(46, 230, 168, 0.55),
+    0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+/* Falha e meio-termo no stream tem cor propria, mais clara que a do tema: o
+   contorno preto ja garante a leitura sobre qualquer fundo, mas um vermelho
+   escuro sobre gameplay escuro sumiria. */
+.stream-root .result-headline.is-outcome.tone-failure {
+  color: #ff6b6b;
+  text-shadow:
+    -2px -2px 0 rgba(0, 0, 0, 0.9),
+    2px -2px 0 rgba(0, 0, 0, 0.9),
+    -2px 2px 0 rgba(0, 0, 0, 0.9),
+    2px 2px 0 rgba(0, 0, 0, 0.9),
+    0 0 22px rgba(255, 107, 107, 0.5),
+    0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+.stream-root .result-headline.is-outcome.tone-partial {
+  color: #ffc65c;
+  text-shadow:
+    -2px -2px 0 rgba(0, 0, 0, 0.9),
+    2px -2px 0 rgba(0, 0, 0, 0.9),
+    -2px 2px 0 rgba(0, 0, 0, 0.9),
+    2px 2px 0 rgba(0, 0, 0, 0.9),
+    0 0 22px rgba(255, 198, 92, 0.45),
+    0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+/* Chips solidos pelo mesmo motivo da placa: alpha aqui deixa passar o que
+   estiver atras da janela, e o numero do dado e o que mais importa ler. */
+.stream-root .result-flag {
+  background: #12171c;
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #2ee6a8;
+}
+
+.stream-root .result-flag.tone-failure {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.55);
+}
+
+.stream-root .result-flag.tone-partial {
+  color: #ffc65c;
+  border-color: rgba(255, 198, 92, 0.5);
+}
+
+/* Mesma regra de legibilidade do headline: no OBS o fundo pode ser
+   qualquer coisa, entao a soma de sucessos leva contorno preto. */
+.stream-root .result-yze-total {
+  color: #f4f7f5;
+  text-shadow:
+    -2px -2px 0 rgba(0, 0, 0, 0.9),
+    2px -2px 0 rgba(0, 0, 0, 0.9),
+    -2px 2px 0 rgba(0, 0, 0, 0.9),
+    2px 2px 0 rgba(0, 0, 0, 0.9),
+    0 0 6px rgba(0, 0, 0, 0.9);
+}
+
+.stream-root .result-tally-item {
+  background: #12171c;
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #2ee6a8;
+  text-shadow: none;
+}
+
+.stream-root .result-tally-item.tone-failure {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.55);
+}
+
+.stream-root .result-tally-item.tone-partial {
+  color: #ffc65c;
+  border-color: rgba(255, 198, 92, 0.5);
+}
+
+.stream-root .die-chip {
+  background: #12171c;
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #f4f7f5;
+}
+
+.stream-root .die-chip-sides {
+  color: rgba(244, 247, 245, 0.7);
+}
+
+.stream-root .die-chip-mod {
+  background: #1b2228;
+  color: #2ee6a8;
+}
+
+.stream-root .result-group-total {
+  color: #2ee6a8;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+
+.stream-root .result-group-name,
+.stream-root .result-notation,
+.stream-root .result-tested {
+  color: rgba(244, 247, 245, 0.8);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}

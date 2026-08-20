@@ -1,0 +1,62 @@
+/* ---------- Dado 2D / texto puro (no palco) ---------- */
+
+.die2d {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  background: linear-gradient(160deg, #ffffff, #d8dde2);
+  color: #14181c;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: die2d-shake 0.15s infinite;
+}
+
+.die2d.settled {
+  animation: none;
+  outline: 3px solid var(--accent);
+  box-shadow: 0 0 26px var(--accent-glow);
+}
+
+@keyframes die2d-shake {
+  0% {
+    transform: rotate(-4deg) translateY(-2px);
+  }
+  50% {
+    transform: rotate(3deg) translateY(2px);
+  }
+  100% {
+    transform: rotate(-3deg) translateY(-1px);
+  }
+}
+
+.die-text {
+  font-size: clamp(3rem, 8vw, 5rem);
+  font-weight: 800;
+  color: #fff;
+  text-shadow:
+    0 0 30px var(--accent-glow),
+    0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.error {
+  color: var(--error);
+  font-size: 0.82rem;
+  margin: 0.5rem 0 0;
+}
+
+/* Dica abaixo de um campo. Vira aviso (cor de erro) quando o proprio
+   texto e o motivo da recusa — o seletor fica com quem renderiza. */
+.field-hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.field-hint.is-error {
+  color: var(--error);
+}

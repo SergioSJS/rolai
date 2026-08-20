@@ -1,0 +1,58 @@
+/* ---------- Mobile ---------- */
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Controles primeiro no mobile; historico embaixo. */
+  .sidebar {
+    position: static;
+    order: 1;
+  }
+
+  .main-col {
+    order: 2;
+  }
+
+  .history-panel {
+    min-height: 0;
+    max-height: 50vh;
+  }
+
+  /* Celular: a barra tem marca + sala + sanduiche. A marca FICA (a
+     palavra ancora a identidade; so o icone parecia um botao solto), e
+     quem cede espaco e o codigo da sala, cortado com reticencias. */
+  .menu-bar {
+    padding: 0.5rem 0.8rem;
+    gap: 0.5rem;
+  }
+
+  .brand-name {
+    font-size: 0.95rem;
+  }
+
+  .menu-bar .status-button {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+    padding: 0.3rem 0.35rem;
+  }
+
+  .menu-bar .status-button .room-code {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Campo com label separada do controle (steppers) */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.7rem;
+}
+
+.field > label {
+  margin-bottom: 0;
+}

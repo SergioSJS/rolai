@@ -1,0 +1,443 @@
+/* ---------- Resultado ---------- */
+
+.result-display {
+  text-align: center;
+  max-width: min(92vw, 40rem);
+  /* Caixa translucida: o palco e transparente, entao o resultado ficava
+     ilegivel sobre dado claro, wallpaper ou chroma no modo stream. O blur
+     resolve sem esconder a animacao atras. */
+  padding: 0.9rem 1.4rem 0.8rem;
+  border-radius: 18px;
+  background: var(--result-bg);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  border: 1px solid var(--result-border);
+  box-shadow: var(--result-shadow);
+}
+
+/* Autor da rolagem. Em sala, o numero sozinho e ambiguo — tres pessoas
+   rolando viram tres numeros sem dono. */
+.result-player {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
+
+.result-player-verb {
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.result-headline {
+  /* O numero e o momento da rolagem: entalhado, com peso. */
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 7vw, 4.2rem);
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--text);
+  text-shadow: var(--result-text-shadow);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.result-headline.is-long {
+  font-size: clamp(1.4rem, 4vw, 2.4rem);
+  line-height: 1.15;
+}
+
+/* Outcome e palavra, nao numero: "sucesso com estilo" no mesmo corpo do
+   total (4rem) vira uma faixa de texto atravessando a tela. Corpo menor,
+   com o peso vindo do caixa alta e do brilho. */
+.result-headline.is-outcome {
+  font-size: clamp(1.4rem, 3vw, 2.1rem);
+  line-height: 1.15;
+  color: var(--accent-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-shadow: var(--result-outcome-shadow);
+}
+
+/* Tom do resultado. Antes todo outcome saia verde: falha crítica no d20
+   tinha a mesma cara de acerto crítico. `neutral` (profile custom, outcome
+   que o mapa nao conhece) fica no acento — chutar cor e pior que nao pintar. */
+.result-headline.is-outcome.tone-failure {
+  color: var(--error);
+  text-shadow:
+    0 0 26px rgba(224, 108, 117, 0.4),
+    0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+.result-headline.is-outcome.tone-partial {
+  color: var(--warn);
+  text-shadow:
+    0 0 26px rgba(229, 192, 123, 0.35),
+    0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+/* Year Zero de varios pools: a soma dos sucessos dos pools. Menor que a
+   headline (o outcome continua mandando), maior que o flag — e o numero
+   que a mesa repete em voz alta. */
+.result-yze-total {
+  margin-top: 0.35rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 2.2vw, 1.5rem);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+/* Nome do pool na linha do historico (so em rolagem multi-grupo). */
+.history-group-name {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: lowercase;
+}
+
+/* "sem dados": pool que ficou em zero. Discreto — e ausencia, nao dado. */
+.result-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.result-flag {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent-strong);
+  background: var(--panel);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.result-flag.tone-failure {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.result-flag.tone-partial {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* Contra o que o resultado foi medido (CD, pericia, valor testado...) —
+   discreto de proposito: e contexto pro headline, nao compete com ele. */
+.result-tested {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Infaernum padrao (3d6 individual): lista de linhas de peso IGUAL, nao
+   headline gigante + pills pequenos — cada categoria e uma quantidade
+   ("2 milagres"), nao um hit/miss, e mais de uma pode bater junto. */
+.result-tally {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+/* Infaernum Ideias: verbo + substantivo sao um PAR, lado a lado — nenhum
+   dos dois e "o principal" com o outro de coadjuvante (ao contrario do
+   .result-tally em coluna, que empilha quantas categorias baterem). */
+.result-tally-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
+.result-tally-item {
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent-strong);
+  background: var(--panel);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.result-tally-item.tone-failure {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.result-tally-item.tone-partial {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.result-groups {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.result-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.result-group-name {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.result-chips {
+  display: inline-flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.die-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 2.2rem;
+  padding: 0.25rem 0.45rem 0.15rem;
+  border-radius: 8px;
+  background: var(--chip-bg);
+  border: 1px solid var(--panel-border);
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.die-chip-sides {
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+.die-chip-mod {
+  background: transparent;
+  border-style: dashed;
+  color: var(--accent-strong);
+  justify-content: center;
+  font-size: 1rem;
+}
+
+/* Destaque de acertos/críticos em sistemas de pool (Vampiro/WOD5, Year Zero, etc) */
+.die-chip.die-chip-success {
+  box-shadow: 0 0 10px rgba(37, 196, 143, 0.45), inset 0 0 4px rgba(37, 196, 143, 0.2);
+  border: 1.5px solid #25c48f !important;
+}
+
+.die-chip.die-chip-crit {
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.6), inset 0 0 6px rgba(251, 191, 36, 0.3);
+  border: 2px solid #fbbf24 !important;
+  color: #fbbf24;
+  font-weight: 800;
+}
+
+.die-chip.die-chip-bestial {
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.6), inset 0 0 6px rgba(239, 68, 68, 0.3);
+  border: 2px solid #ef4444 !important;
+  color: #fca5a5 !important;
+}
+
+.die-chip.die-chip-miss {
+  opacity: 0.55;
+}
+
+/* Slots de dados genéricos (1 = Primário, 2 = Secundário, 3 = Terciário) */
+.die-chip.die-chip-slot-1 {
+  background: var(--dice-1-body, #1d9e75);
+  color: var(--dice-1-number, #f4f7f5);
+  border: 1px solid var(--dice-1-outline, #0c3527);
+}
+.die-chip.die-chip-slot-1 .die-chip-sides {
+  color: var(--dice-1-outline, rgba(244, 247, 245, 0.7));
+}
+
+.die-chip.die-chip-slot-2 {
+  background: var(--dice-2-body, #8c1f2b);
+  color: var(--dice-2-number, #f7e8e2);
+  border: 1px solid var(--dice-2-outline, #2b0a0e);
+  box-shadow: 0 0 10px rgba(140, 31, 43, 0.3);
+}
+.die-chip.die-chip-slot-2 .die-chip-sides {
+  color: var(--dice-2-outline, rgba(247, 232, 226, 0.7));
+}
+
+.die-chip.die-chip-slot-3 {
+  background: var(--dice-3-body, #2a86b8);
+  color: var(--dice-3-number, #ffffff);
+  border: 1px solid var(--dice-3-outline, #0e3852);
+  box-shadow: 0 2px 8px rgba(42, 134, 184, 0.35);
+}
+.die-chip.die-chip-slot-3 .die-chip-sides {
+  color: var(--dice-3-outline, rgba(255, 255, 255, 0.7));
+}
+
+/* Dados de cores / temas diferentes legados */
+.die-chip.die-chip-light {
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.die-chip.die-chip-light .die-chip-sides {
+  color: #64748b;
+}
+
+.die-chip.die-chip-dark {
+  background: #090c10;
+  color: #f87171;
+  border: 1px solid #7f1d1d;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.3);
+}
+
+.die-chip.die-chip-dark .die-chip-sides {
+  color: #ef4444;
+}
+
+.die-chip.die-chip-gold {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  color: #78350f;
+  border: 1px solid #d97706;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.35);
+}
+
+.die-chip.die-chip-gold .die-chip-sides {
+  color: #92400e;
+}
+
+.die-chip.die-chip-stress {
+  background: #fef08a;
+  color: #854d0e;
+  border: 1px solid #eab308;
+  box-shadow: 0 2px 6px rgba(234, 179, 8, 0.25);
+}
+
+.die-chip.die-chip-stress .die-chip-sides {
+  color: #a16207;
+}
+
+.die-chip.die-chip-hunger {
+  background: #881337;
+  color: #ffe4e6;
+  border: 1px solid #be123c;
+  box-shadow: 0 0 8px rgba(225, 29, 72, 0.3);
+}
+
+.die-chip.die-chip-hunger .die-chip-sides {
+  color: #fecdd3;
+}
+
+.die-chip.die-chip-gear {
+  background: #334155;
+  color: #f8fafc;
+  border: 1px solid #64748b;
+}
+
+.die-chip.die-chip-gear .die-chip-sides {
+  color: #94a3b8;
+}
+
+.die-chip.die-chip-skill {
+  background: #065f46;
+  color: #ecfdf5;
+  border: 1px solid #059669;
+}
+
+.die-chip.die-chip-skill .die-chip-sides {
+  color: #a7f3d0;
+}
+
+/* No histórico */
+.history-die {
+  display: inline-block;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.85em;
+  margin: 0 1px;
+}
+
+.history-die-slot-1 {
+  background: var(--dice-1-body, #1d9e75);
+  color: var(--dice-1-number, #f4f7f5);
+  border: 1px solid var(--dice-1-outline, #0c3527);
+}
+
+.history-die-slot-2 {
+  background: var(--dice-2-body, #8c1f2b);
+  color: var(--dice-2-number, #f7e8e2);
+  border: 1px solid var(--dice-2-outline, #2b0a0e);
+}
+
+.history-die-slot-3 {
+  background: var(--dice-3-body, #2a86b8);
+  color: var(--dice-3-number, #ffffff);
+  border: 1px solid var(--dice-3-outline, #0e3852);
+}
+
+.history-die-light {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.history-die-dark {
+  color: #f87171;
+  background: rgba(220, 38, 38, 0.2);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+}
+
+.history-die-gold {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.history-die-stress {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.18);
+}
+
+.history-die-hunger {
+  color: #fda4af;
+  background: rgba(225, 29, 72, 0.2);
+}
+
+.history-die-gear {
+  color: #cbd5e1;
+  background: rgba(100, 116, 139, 0.25);
+}
+
+.history-die-skill {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.result-group-total {
+  font-weight: 700;
+  color: var(--accent-strong);
+}

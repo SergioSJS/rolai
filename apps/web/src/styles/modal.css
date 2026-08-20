@@ -1,0 +1,305 @@
+/* ---------- Modal ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Folga elastica: encolhe junto com a janela (12vh fixos empurravam o
+     modal pra fora numa janela baixa). */
+  padding: clamp(0.75rem, 4vh, 3rem) 1rem;
+  /* UMA barra de rolagem so, a do corpo do modal. Se o backdrop tambem
+     rolasse, sobrava barra dupla e o modal parecia cortado. */
+  overflow: hidden;
+}
+
+.modal {
+  width: 100%;
+  max-width: 520px;
+  /* 100% da area util do backdrop (que ja e viewport menos o padding, com
+     box-sizing: border-box) — sem conta de vh que erra o padding e deixa o
+     modal passar da tela. O corpo e que rola; o cabecalho fica sempre a
+     vista. */
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.modal.modal-md {
+  max-width: 520px;
+}
+
+.modal.modal-lg {
+  max-width: 760px;
+}
+
+.modal.modal-xl {
+  max-width: 900px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  padding: 1rem 1.35rem 0.75rem;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.modal-header h2 {
+  margin: 0;
+}
+
+.modal-close {
+  padding: 0.25rem 0.6rem;
+}
+
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.1rem 1.35rem 1.4rem;
+}
+
+/* Janela baixa (notebook com zoom, celular deitado): quase sem folga, pra
+   sobrar altura util pro conteudo. */
+@media (max-height: 640px) {
+  .modal-backdrop {
+    padding: 0.5rem;
+  }
+}
+
+.settings-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0.4rem 0 0;
+}
+
+/* ---------- Preferências ---------- */
+
+/* Titulo de secao com icone + separador: antes era so texto empilhado, um
+   bloco de select confuso sem nada pra ancorar o olho ao rolar. O icone da
+   ponto de referencia rapido (Dados=d20, Baralho=cartas...) e a linha
+   acima marca onde uma secao acaba e a proxima comeca. */
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-panel h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.6rem 0 0.9rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--panel-border);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.settings-panel h3 svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--accent-strong);
+  flex-shrink: 0;
+}
+
+.settings-panel h3:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 0.9rem;
+}
+
+.settings-row > label {
+  flex: 1 1 14rem;
+}
+
+.settings-row > .color-field {
+  flex: 1 1 7rem;
+}
+
+.color-field input[type="color"] {
+  width: 100%;
+  height: 2.1rem;
+  padding: 2px;
+  cursor: pointer;
+}
+
+/* Navegação por slots de dados (1, 2, 3) em Preferências */
+.dice-slots-nav {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.dice-slot-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--panel-subtle, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--panel-border, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dice-slot-btn:hover {
+  background: var(--panel-border, rgba(255, 255, 255, 0.1));
+  color: var(--text, #f8fafc);
+}
+
+.dice-slot-btn.is-active {
+  background: var(--accent-subtle, rgba(56, 189, 248, 0.15));
+  border-color: var(--accent, #38bdf8);
+  color: var(--text, #f8fafc);
+  font-weight: 600;
+}
+
+.dice-slot-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  display: inline-block;
+}
+
+.die-preview-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  transition: transform 0.15s ease;
+}
+
+.die-preview-container:hover {
+  transform: translateY(-2px);
+}
+
+.die-preview-slot-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+/* Previa dos dados: mesa de feltro com dados nas cores/textura reais. */
+.dice-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.4rem;
+  height: 8.5rem;
+  border-radius: 12px;
+  background:
+    radial-gradient(140% 120% at 50% 0%, rgba(29, 158, 117, 0.16) 0%, transparent 55%),
+    #0e2a20;
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
+}
+
+.die-preview {
+  position: relative;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 2px 6px rgba(255, 255, 255, 0.28),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.35),
+    0 8px 16px rgba(0, 0, 0, 0.45);
+}
+
+.die-preview-small {
+  width: 2.9rem;
+  height: 2.9rem;
+  border-radius: 11px;
+}
+
+/* A mesma imagem .webp estampada no dado 3D, multiplicada sobre a cor. */
+.die-preview-tex {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-size: cover;
+  background-position: center;
+  mix-blend-mode: multiply;
+  opacity: 0.9;
+}
+
+.die-preview-num {
+  position: relative;
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.die-preview-small .die-preview-num {
+  font-size: 1.1rem;
+}
+
+.dice-preview-hint {
+  margin: 0.35rem 0 0.6rem;
+  text-align: center;
+}
+
+/* Slider (tamanho do dado) na cor do tema. */
+input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  accent-color: var(--accent);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  box-shadow: 0 0 8px var(--accent-glow);
+  cursor: pointer;
+}
+
+input[type="range"]:focus {
+  box-shadow: none;
+  outline: none;
+}
+
+.about p {
+  margin: 0 0 0.7rem;
+  font-size: 0.9rem;
+}

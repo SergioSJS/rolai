@@ -1,0 +1,153 @@
+/* ---------- Baralho (specs/08-baralho.md) ---------- */
+
+.card-chip {
+  font-size: 1.3rem;
+  min-width: 2.6rem;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+}
+
+.card-chip.is-red {
+  color: #dc2626;
+}
+
+.card-chip .die-chip-sides {
+  color: #64748b;
+}
+
+.stream-root .die-chip.card-chip {
+  background: #ffffff;
+  color: #111827;
+  border-color: rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.stream-root .die-chip.card-chip.is-red {
+  color: #dc2626;
+}
+
+.stream-root .die-chip.card-chip .die-chip-sides {
+  color: #64748b;
+}
+
+.deck-remaining {
+  margin: 0 0 0.6rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Reembaralhar: acao secundaria full-width, mesma largura do botao
+   principal (Puxar) — antes era um botao-fantasma solto embaixo, sem
+   peso nenhum, meio perdido na caixa. */
+.deck-reshuffle-button {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+/* Flip 3D via CSS: a carta nasce de verso, flipa pra face na entrada
+   (CardFlip.tsx). perspective no container, preserve-3d no inner, cada
+   face com backface-visibility escondida — a face comeca pre-rotada 180deg
+   pra ficar de frente (nao espelhada) quando o inner completa o giro.
+   Tamanho grande de proposito: mostra no palco compartilhado (App.tsx),
+   igual ao dado — nao mais encolhida dentro do DeckPanel.
+   flex-shrink: 0 e o que importa aqui: sem isso, `.card-stack` (flex)
+   ENCOLHE as cartas pra caber tudo numa linha em vez de deixar a escada
+   (.card-stack-item, abaixo) fazer o trabalho de economizar espaco. */
+.card-flip {
+  display: inline-block;
+  flex-shrink: 0;
+  width: clamp(110px, 20vw, 210px);
+  aspect-ratio: 5 / 7;
+  perspective: 800px;
+}
+
+.card-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.3, 0.1, 0.2, 1);
+}
+
+.card-flip.is-flipped .card-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.card-flip-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 6px;
+  /* --card-dim: a arte da carta e branco quase puro — no tema escuro, sem
+     escurecer, o card estoura contra o fundo. Mesmo token que o tier 3D le
+     (cardTexture.tsx), pra 2D e 3D nunca ficarem com brilhos diferentes;
+     no tema claro ele vale 1 e a carta fica branca mesmo. */
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45)) brightness(var(--card-dim));
+}
+
+.card-flip-back {
+  transform: rotateY(0deg);
+}
+
+.card-flip-front {
+  transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-flip-inner {
+    transition: none;
+  }
+}
+
+.result-notation {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.result-dismiss-hint {
+  opacity: 0.65;
+}
+
+.result-dismiss-hint::before {
+  content: "·";
+  margin-right: 0.5rem;
+}
+
+.notice {
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  background: rgba(229, 192, 123, 0.14);
+  border: 1px solid rgba(229, 192, 123, 0.45);
+  color: var(--warn);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+/* Indicador de conectividade: pildora discreta no canto, abaixo do palco
+   (z60) — some sozinha quando a rede volta. */
+.offline-badge {
+  position: fixed;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 15;
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
