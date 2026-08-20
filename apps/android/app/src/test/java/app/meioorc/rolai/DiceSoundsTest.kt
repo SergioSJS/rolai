@@ -67,13 +67,13 @@ class DiceSoundsTest {
     @Test
     fun `conta os dados de todos os grupos do resultado`() {
         val vs = """{"groups":{"action":{"rolls":[4]},"challenge":{"rolls":[7,7]}}}"""
-        assertEquals(3, OverlayService.diceCountOf(vs))
+        assertEquals(3, ResultFormat.diceCountOf(vs))
     }
 
     /** JSON quebrado ou sem grupos: melhor um clique do que silencio. */
     @Test
     fun `resultado sem grupos toca uma vez`() {
-        assertEquals(1, OverlayService.diceCountOf("""{"notation":"2d6"}"""))
-        assertEquals(1, OverlayService.diceCountOf("nao e json"))
+        assertEquals(1, ResultFormat.diceCountOf("""{"notation":"2d6"}"""))
+        assertEquals(1, ResultFormat.diceCountOf("nao e json"))
     }
 }

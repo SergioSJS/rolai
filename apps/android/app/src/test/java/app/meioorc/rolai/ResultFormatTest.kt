@@ -13,13 +13,13 @@ import org.junit.Test
  * Ironsworn: "match" junto do hit/miss), a linha mostra TODAS juntas em vez
  * de so a primeira (`outcome`), que escondia o resto sem erro nenhum.
  */
-class OverlayServiceFormatTest {
+class ResultFormatTest {
 
     @Test
     fun `uma so flag mostra so o outcome`() {
         val json = """{"notation":"2d6+1","groups":{"roll":{"rolls":[6,6],"modifier":1,"total":13}},
             "outcome":"strong_hit","outcome_flags":["strong_hit"]}"""
-        assertEquals("2d6+1 [6, 6] + 1 = 13 — sucesso completo", OverlayService.formatResult(json))
+        assertEquals("2d6+1 [6, 6] + 1 = 13 — sucesso completo", ResultFormat.formatResult(json))
     }
 
     /** Infaernum padrao (3d6 individual): milagre + desgraca no mesmo pool. */
@@ -29,7 +29,7 @@ class OverlayServiceFormatTest {
             "outcome":"milagre_x1","outcome_flags":["milagre_x1","desgraca_x1","vislumbre_x1"]}"""
         assertEquals(
             "3d6 [1, 3, 6] = 10 — 1 milagre, 1 desgraça, 1 vislumbre",
-            OverlayService.formatResult(json),
+            ResultFormat.formatResult(json),
         )
     }
 
@@ -42,7 +42,7 @@ class OverlayServiceFormatTest {
             "outcome":"strong_hit","outcome_flags":["strong_hit","match"]}"""
         assertEquals(
             "{1d6+2} vs {2d10} ação [4] + 2 = 6 vs desafio [5, 5] — sucesso completo, combinação!",
-            OverlayService.formatResult(json),
+            ResultFormat.formatResult(json),
         )
     }
 
@@ -55,7 +55,7 @@ class OverlayServiceFormatTest {
             "outcome":"weak_hit","outcome_flags":["weak_hit"]}"""
         assertEquals(
             "{2d6+1} vs {2c} ação [6, 4] + 1 = 11 vs desafio [J♣, 4♦] — sucesso parcial",
-            OverlayService.formatResult(json),
+            ResultFormat.formatResult(json),
         )
     }
 
@@ -68,25 +68,25 @@ class OverlayServiceFormatTest {
             "tested":[{"label":"Valor testado","value":10}]}"""
         assertEquals(
             "1d20 [8] = 8 — sucesso (Valor testado: 10)",
-            OverlayService.formatResult(json),
+            ResultFormat.formatResult(json),
         )
     }
 
     @Test
     fun `sem outcome nao aparece traco nenhum`() {
         val json = """{"notation":"2d6","groups":{"roll":{"rolls":[3,4]}}}"""
-        assertEquals("2d6 [3, 4] = 7", OverlayService.formatResult(json))
+        assertEquals("2d6 [3, 4] = 7", ResultFormat.formatResult(json))
     }
 
     @Test
     fun `formatDeckDrawAction formata contagem e naipes`() {
         val json = """[{"id":"10-hearts","rank":"10","suit":"hearts"},{"id":"K-spades","rank":"K","suit":"spades"}]"""
-        assertEquals("puxou 2 cartas: 10♥, K♠", OverlayService.formatDeckDrawAction(json))
+        assertEquals("puxou 2 cartas: 10♥, K♠", ResultFormat.formatDeckDrawAction(json))
     }
 
     @Test
     fun `json quebrado nao derruba, so mostra o texto cru`() {
-        assertEquals("nao e json", OverlayService.formatResult("nao e json"))
+        assertEquals("nao e json", ResultFormat.formatResult("nao e json"))
     }
 
     /**
@@ -105,7 +105,7 @@ class OverlayServiceFormatTest {
         assertEquals(
             "{2d6+1} + {0d6} + {1d6} base [6, 2] + 1 = 2 + perícia — = 0 + " +
                 "equipamento [1] = 0 — sucesso, 1 dano de equipamento",
-            OverlayService.formatResult(json),
+            ResultFormat.formatResult(json),
         )
     }
 
@@ -133,8 +133,8 @@ class OverlayServiceFormatTest {
         val form = """{"base":5,"pericia":0,"equipamento":0,"sucessos_anteriores":2,"dificuldade":1}"""
         val salvo = """{"base":5,"pericia":0,"equipamento":0,"sucessos_anteriores":2,
             "dificuldade":1,"push_banes_base":1,"push_banes_equip":0}"""
-        val merged = OverlayService.mergePushBookkeeping(form, salvo)
-        assertTrue(OverlayService.sameInputs(merged, salvo))
+        val merged = ResultFormat.mergePushBookkeeping(form, salvo)
+        assertTrue(ResultFormat.sameInputs(merged, salvo))
     }
 
     /** Mexer num campo de verdade continua contando como mudanca. */
@@ -143,15 +143,15 @@ class OverlayServiceFormatTest {
         val form = """{"base":3,"pericia":0,"equipamento":0,"sucessos_anteriores":2,"dificuldade":1}"""
         val salvo = """{"base":5,"pericia":0,"equipamento":0,"sucessos_anteriores":2,
             "dificuldade":1,"push_banes_base":1}"""
-        val merged = OverlayService.mergePushBookkeeping(form, salvo)
-        assertFalse(OverlayService.sameInputs(merged, salvo))
+        val merged = ResultFormat.mergePushBookkeeping(form, salvo)
+        assertFalse(ResultFormat.sameInputs(merged, salvo))
     }
 
     /** Ordem de chave em JSON nao e conteudo diferente. */
     @Test
     fun `mesma coisa em outra ordem nao e mudanca`() {
         assertTrue(
-            OverlayService.sameInputs(
+            ResultFormat.sameInputs(
                 """{"base":5,"dificuldade":1}""",
                 """{"dificuldade":1,"base":5}""",
             ),
@@ -162,7 +162,7 @@ class OverlayServiceFormatTest {
     fun `formatDisplayLines divide infaernum em headline de flags e linha de dados`() {
         val json = """{"notation":"3d6","groups":{"pool":{"rolls":[1,3,6]}},
             "outcome":"milagre_x1","outcome_flags":["milagre_x1","desgraca_x1","vislumbre_x1"]}"""
-        val lines = OverlayService.formatDisplayLines(json)
+        val lines = ResultFormat.formatDisplayLines(json)
         assertEquals("1 milagre, 1 desgraça, 1 vislumbre", lines.headline)
         assertEquals("3d6 [1, 3, 6] = 10", lines.detail)
         assertNull(lines.tested)
@@ -177,7 +177,7 @@ class OverlayServiceFormatTest {
             "equipamento":{"rolls":[1],"total":0}},
             "outcome":"success","outcome_flags":["success","yze_dano_equipamento_x1"],
             "tested":[{"label":"Dificuldade","value":1}]}"""
-        val lines = OverlayService.formatDisplayLines(json)
+        val lines = ResultFormat.formatDisplayLines(json)
         assertEquals("sucesso, 1 dano de equipamento", lines.headline)
         assertEquals("base [6, 2] + 1 = 2 • perícia — = 0 • equipamento [1] = 0", lines.detail)
         assertEquals("Dificuldade: 1", lines.tested)
@@ -189,7 +189,7 @@ class OverlayServiceFormatTest {
             "groups":{"action":{"rolls":[4],"modifier":2,"total":6},
             "challenge":{"rolls":[5,5]}},
             "outcome":"strong_hit","outcome_flags":["strong_hit","match"]}"""
-        val lines = OverlayService.formatDisplayLines(json)
+        val lines = ResultFormat.formatDisplayLines(json)
         assertEquals("sucesso completo, combinação!", lines.headline)
         assertEquals("ação [4] + 2 = 6 vs desafio [5, 5]", lines.detail)
         assertNull(lines.tested)
@@ -200,7 +200,7 @@ class OverlayServiceFormatTest {
         val json = """{"notation":"1d20","groups":{"roll":{"rolls":[8],"total":8}},
             "outcome":"success","outcome_flags":["success"],
             "tested":[{"label":"Valor testado","value":10}]}"""
-        val lines = OverlayService.formatDisplayLines(json)
+        val lines = ResultFormat.formatDisplayLines(json)
         assertEquals("sucesso", lines.headline)
         assertEquals("1d20 [8] = 8", lines.detail)
         assertEquals("Valor testado: 10", lines.tested)
@@ -209,7 +209,7 @@ class OverlayServiceFormatTest {
     @Test
     fun `formatDisplayLines divide rolagem livre com total grande e linha de dados`() {
         val json = """{"notation":"2d6","groups":{"roll":{"rolls":[3,4]}}}"""
-        val lines = OverlayService.formatDisplayLines(json)
+        val lines = ResultFormat.formatDisplayLines(json)
         assertEquals("7", lines.headline)
         assertEquals("2d6 [3, 4] = 7", lines.detail)
         assertNull(lines.tested)
@@ -223,12 +223,12 @@ class OverlayServiceFormatTest {
             "groups":{"regular":{"rolls":[10,8,3],"total":2},"hunger":{"rolls":[10,1],"total":1}},
             "outcome":"messy_critical","outcome_flags":["messy_critical","success"],
             "tested":[{"label":"Dificuldade","value":2}]}"""
-        val lines = OverlayService.formatDisplayLines(json)
+        val lines = ResultFormat.formatDisplayLines(json)
         assertEquals("crítico manchado, sucesso (5 sucessos)", lines.headline)
         assertEquals("regulares [10, 8, 3] = 2 • fome/ira [10, 1] = 1", lines.detail)
         assertEquals("Dificuldade: 2", lines.tested)
 
-        val formatted = OverlayService.formatResult(json)
+        val formatted = ResultFormat.formatResult(json)
         assertEquals(
             "{3d10} + {2d10} regulares [10, 8, 3] = 2 + fome/ira [10, 1] = 1 — crítico manchado, sucesso (5 sucessos) (Dificuldade: 2)",
             formatted,
@@ -239,7 +239,7 @@ class OverlayServiceFormatTest {
     fun `formatDisplayLines vampiro wod5 sem dificuldade mostra total de sucessos`() {
         val json = """{"notation":"{2d10} + {1d10}","profile":"wod5",
             "groups":{"regular":{"rolls":[7,8],"total":2},"hunger":{"rolls":[2],"total":0}}}"""
-        val lines = OverlayService.formatDisplayLines(json)
+        val lines = ResultFormat.formatDisplayLines(json)
         assertEquals("2 sucessos", lines.headline)
         assertEquals("regulares [7, 8] = 2 • fome/ira [2] = 0", lines.detail)
         assertNull(lines.tested)
