@@ -76,6 +76,18 @@ export interface RoomSession {
   restyle: (styles: DiceStyles) => void;
 }
 
+/**
+ * Espera antes de reconectar por cor nova.
+ *
+ * `<input type="color">` dispara a cada movimento do seletor, e cada
+ * mudanca reabre o WebSocket (a aparencia viaja no handshake). Arrastar a
+ * cor gerava DEZENAS de conexoes em segundos — o suficiente pra estourar o
+ * `ws_connect_limit_per_minute` do backend (30), levar um 4429 e o cliente
+ * tratar como recusa definitiva: saia da sala sozinho e limpava o codigo
+ * salvo. Quem mexeu na cor simplesmente perdia a mesa.
+ */
+const RESTYLE_DEBOUNCE_MS = 300;
+
 export function useRoomSession(options: RoomSessionOptions): RoomSession {
   const { animate, animateCards, diceStyle, diceStyles } = options;
 
@@ -89,6 +101,20 @@ export function useRoomSession(options: RoomSessionOptions): RoomSession {
   const pendingRef = useRef(new PendingRolls());
   const pendingDeckRef = useRef(new PendingDeckDraws());
   const selfNameRef = useRef("anonymous");
+  // Aparencia que a conexao ATUAL anunciou no handshake. Serve pra nao
+  // reconectar quando a "mudanca" de cor nao mudou nada de fato.
+  const announcedStylesRef = useRef<string>(JSON.stringify(diceStyles));
+  const restyleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelRestyle = useCallback(() => {
+    if (restyleTimerRef.current !== null) {
+      clearTimeout(restyleTimerRef.current);
+      restyleTimerRef.current = null;
+    }
+  }, []);
+
+  // Reconexao agendada nao pode sobreviver ao componente.
+  useEffect(() => cancelRestyle, [cancelRestyle]);
 
   // A sala está de pé AGORA? Não basta existir cliente.
   const connected = room.status === "connected";
@@ -126,6 +152,10 @@ export function useRoomSession(options: RoomSessionOptions): RoomSession {
 
   const join = useCallback(
     (code: string, name: string) => {
+      // Entrar de novo manda a aparencia atual — uma reconexao agendada por
+      // cor viraria uma segunda conexao logo depois, sem motivo.
+      cancelRestyle();
+      announcedStylesRef.current = JSON.stringify(diceStyles);
       clientRef.current?.leave();
       selfNameRef.current = name;
       setPlayerName(name);
@@ -149,7 +179,7 @@ export function useRoomSession(options: RoomSessionOptions): RoomSession {
       clientRef.current = client;
       client.connect();
     },
-    [handleRoomEvent, diceStyle, diceStyles],
+    [handleRoomEvent, diceStyle, diceStyles, cancelRestyle],
   );
 
   // Link de convite (?room=CODIGO) entra direto, sem passar pelo modal — com
@@ -194,12 +224,13 @@ export function useRoomSession(options: RoomSessionOptions): RoomSession {
   );
 
   const leave = useCallback(() => {
+    cancelRestyle();
     clientRef.current?.leave();
     clientRef.current = null;
     setLocalHistory([]);
     clearRoomCode(window.localStorage);
     setRoomUrlParam(null);
-  }, []);
+  }, [cancelRestyle]);
 
   const sendRoll = useCallback(
     (result: RollResult): boolean => {
@@ -252,25 +283,40 @@ export function useRoomSession(options: RoomSessionOptions): RoomSession {
 
   const restyle = useCallback(
     (next: DiceStyles) => {
-      if (room.code === null) return;
-      clientRef.current?.leave();
-      dispatch({ type: "joining", code: room.code });
-      const client = new RoomClient(
-        room.code,
-        selfNameRef.current,
-        handleRoomEvent,
-        next["1"],
-        false,
-        5,
-        // Os TRES slots, nao so o primeiro: reconectar mandando so `next["1"]`
-        // fazia a mesa voltar a ver o dado 2 e 3 na cor antiga ate o proximo
-        // join — a cor mudava aqui e nao mudava na tela dos outros.
-        next,
-      );
-      clientRef.current = client;
-      client.connect();
+      const serialized = JSON.stringify(next);
+      // Mesma aparencia que a conexao ja anunciou: nao ha o que avisar.
+      if (serialized === announcedStylesRef.current) return;
+      if (room.code === null) {
+        // Fora de sala nao ha handshake pra refazer — o proximo join ja
+        // leva a cor nova.
+        announcedStylesRef.current = serialized;
+        return;
+      }
+      const code = room.code;
+      cancelRestyle();
+      restyleTimerRef.current = setTimeout(() => {
+        restyleTimerRef.current = null;
+        announcedStylesRef.current = serialized;
+        clientRef.current?.leave();
+        dispatch({ type: "joining", code });
+        const client = new RoomClient(
+          code,
+          selfNameRef.current,
+          handleRoomEvent,
+          next["1"],
+          false,
+          5,
+          // Os TRES slots, nao so o primeiro: reconectar mandando so
+          // `next["1"]` fazia a mesa voltar a ver o dado 2 e 3 na cor antiga
+          // ate o proximo join — a cor mudava aqui e nao mudava na tela dos
+          // outros.
+          next,
+        );
+        clientRef.current = client;
+        client.connect();
+      }, RESTYLE_DEBOUNCE_MS);
     },
-    [handleRoomEvent, room.code],
+    [handleRoomEvent, room.code, cancelRestyle],
   );
 
   return {

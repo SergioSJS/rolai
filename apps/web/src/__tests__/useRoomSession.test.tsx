@@ -84,10 +84,13 @@ describe("useRoomSession", () => {
   beforeEach(() => {
     FakeWebSocket.instances = [];
     vi.stubGlobal("WebSocket", FakeWebSocket);
+    // O restyle e debounced: sem relogio falso o teste teria que dormir.
+    vi.useFakeTimers();
     window.history.replaceState(null, "", "/");
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -259,6 +262,7 @@ describe("useRoomSession", () => {
       "3": { ...DEFAULT_DICE_STYLES["3"], body: "#333333" },
     };
     act(() => view.result.current.restyle(novas));
+    act(() => void vi.advanceTimersByTime(400));
 
     const params = new URL(ultimoSocket().url).searchParams;
     expect(JSON.parse(params.get("style")!)).toEqual(novas["1"]);
@@ -270,7 +274,67 @@ describe("useRoomSession", () => {
   it("trocar de cor fora de sala nao abre conexao nenhuma", () => {
     const view = montar();
     act(() => view.result.current.restyle(DEFAULT_DICE_STYLES));
+    act(() => void vi.advanceTimersByTime(400));
     expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+
+  // REGRESSAO: arrastar o seletor de cor dispara onChange a cada movimento.
+  // Sem debounce viravam dezenas de reconexoes em segundos, o backend batia
+  // no ws_connect_limit_per_minute (30), respondia 4429, e o cliente tratava
+  // como recusa definitiva — saia da sala e limpava o codigo salvo. Quem
+  // mexeu na cor perdia a mesa.
+  it("arrastar a cor gera UMA reconexao, nao uma por movimento", () => {
+    const view = montar();
+    entrar(view);
+    const conexoesAntes = FakeWebSocket.instances.length;
+
+    // 30 mudancas seguidas, como um arrasto de seletor.
+    act(() => {
+      for (let i = 0; i < 30; i++) {
+        view.result.current.restyle({
+          ...DEFAULT_DICE_STYLES,
+          "3": { ...DEFAULT_DICE_STYLES["3"], body: `#0000${i.toString(16).padStart(2, "0")}` },
+        });
+      }
+    });
+    // Antes do debounce vencer, nada de novo foi aberto.
+    expect(FakeWebSocket.instances.length).toBe(conexoesAntes);
+
+    act(() => void vi.advanceTimersByTime(400));
+
+    expect(FakeWebSocket.instances.length).toBe(conexoesAntes + 1);
+    // E a conexao que sobrou leva a ULTIMA cor, nao a primeira do arrasto.
+    const styles = JSON.parse(new URL(ultimoSocket().url).searchParams.get("styles")!);
+    expect(styles["3"].body).toBe("#00001d");
+  });
+
+  it("mesma cor de novo nao reconecta", () => {
+    const view = montar();
+    entrar(view);
+    const antes = FakeWebSocket.instances.length;
+
+    act(() => view.result.current.restyle(DEFAULT_DICE_STYLES));
+    act(() => void vi.advanceTimersByTime(400));
+
+    expect(FakeWebSocket.instances.length).toBe(antes);
+  });
+
+  it("sair cancela a reconexao de cor que estava agendada", () => {
+    const view = montar();
+    entrar(view);
+    act(() =>
+      view.result.current.restyle({
+        ...DEFAULT_DICE_STYLES,
+        "2": { ...DEFAULT_DICE_STYLES["2"], body: "#123456" },
+      }),
+    );
+    const antes = FakeWebSocket.instances.length;
+
+    act(() => view.result.current.leave());
+    act(() => void vi.advanceTimersByTime(400));
+
+    // Nada de reconectar numa sala que a pessoa acabou de deixar.
+    expect(FakeWebSocket.instances.length).toBe(antes);
   });
 
   it("link de convite (?room=) entra sozinho ao montar", () => {

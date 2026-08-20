@@ -344,3 +344,20 @@ def test_roll_com_keep_drop_atravessa_a_sala(client: TestClient) -> None:
         evento = next_event(ws)
         assert evento["type"] == "roll", evento
         assert evento["result"]["groups"]["roll"]["dropped"] == [1]
+
+
+def test_cliente_ja_foi_reconhece_o_send_pos_close() -> None:
+    """RuntimeError de socket morto e engolido; qualquer outro sobe.
+
+    O cliente que desiste no meio do handshake (o navegador reconecta em
+    rajada quando se arrasta o seletor de cor) fazia o servidor mandar o
+    snapshot pra uma conexao ja fechada. O Starlette levanta RuntimeError, o
+    handler nao tratava, e cada uma virava "Exception in ASGI application"
+    com traceback inteiro no log — ruido que esconde erro de verdade.
+    """
+    morto = RuntimeError('Cannot call "send" once a close message has been sent.')
+    assert room_ws.cliente_ja_foi(morto) is True
+
+    # Nao pode virar um catch-all: bug de verdade tem que continuar subindo.
+    assert room_ws.cliente_ja_foi(RuntimeError("dict changed size during iteration")) is False
+    assert room_ws.cliente_ja_foi(RuntimeError()) is False

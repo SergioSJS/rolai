@@ -84,6 +84,22 @@ router = APIRouter()
 _CLIENT_EVENT_ADAPTER: TypeAdapter[ClientEventIn] = TypeAdapter(ClientEventIn)
 
 
+def cliente_ja_foi(exc: RuntimeError) -> bool:
+    """Este RuntimeError e "o cliente fechou antes de eu responder"?
+
+    O Starlette levanta RuntimeError — nao WebSocketDisconnect — quando um
+    `send` acontece DEPOIS de a conexao ja ter sido fechada. A janela e
+    real: o cliente desiste no meio do handshake (o navegador reconecta em
+    rajada quando o usuario arrasta o seletor de cor) e o snapshot sai pra
+    um socket morto.
+
+    Nao e erro do servidor, mas subia como "Exception in ASGI application"
+    com traceback inteiro — ruido que esconde erro de verdade no log. Aqui a
+    checagem e pela mensagem, e QUALQUER outro RuntimeError volta a subir.
+    """
+    return "close message has been sent" in str(exc)
+
+
 async def _send_error(ws: WebSocket, message: str) -> None:
     await ws.send_json({"type": "error", "message": message})
 
@@ -464,6 +480,10 @@ async def room_ws(
             await _broadcast(_room_dict(websocket.app.state.room_spectators, code), event)
     except WebSocketDisconnect:
         pass
+    except RuntimeError as exc:
+        if not cliente_ja_foi(exc):
+            raise
+        log.info("event=ws_gone_early code=%s role=%s player=%s", code, role, name)
     finally:
         log.info("event=ws_closed code=%s role=%s player=%s", code, role, name)
         if spectator:
