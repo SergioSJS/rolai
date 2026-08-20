@@ -617,6 +617,14 @@ export class DiceBoxRenderer implements RollRenderer {
       // por nao carregar os 75 mp3.
       await box.initialize();
       this.soundPendente = this.options.sounds;
+      if (this.soundPendente) {
+        // Precisa aparecer: sem este aviso, "abri a aba e nao tem som" nao
+        // tinha nenhum rastro no console — o caso silencioso era literalmente
+        // silencioso nos dois sentidos.
+        console.warn(
+          "[rolai] aba em segundo plano: palco sem audio ate ela ficar visivel",
+        );
+      }
     }
     if (this.disposed) return;
     // A lib cria TODO material de dado com `transparent: true` e
