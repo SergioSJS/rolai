@@ -13,9 +13,12 @@
 // executa o bundle em Node e gera OutcomeCatalog.kt a partir daqui
 // (apps/web/scripts/install-headless.mjs).
 
-import { GROUP_LABELS, OUTCOME_LABELS, OUTCOME_TONES } from "./format";
+// De outcomeTables.ts, NAO de format.ts: format arrasta cardFormat ->
+// React, e este modulo entra no bundle headless do Android (que roda numa
+// WebView sem `process`). Ver o cabecalho de outcomeTables.ts.
+import { GROUP_LABELS, OUTCOME_LABELS, OUTCOME_TONES } from "./outcomeTables";
+import type { OutcomeTone } from "./outcomeTables";
 import { PROFILE_FAMILIES } from "./profileFamilies";
-import type { OutcomeTone } from "./format";
 
 export interface CatalogFamilyMember {
   system: string;

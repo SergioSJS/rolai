@@ -36,6 +36,29 @@ if (!fs.existsSync(bundle)) {
   process.exit(1);
 }
 
+// A WebView headless nao tem `process` nem DOM: qualquer import que arraste
+// React (ou outra lib que leia process.env.NODE_ENV) faz o bundle INTEIRO
+// morrer no load com "Uncaught ReferenceError: process is not defined", e o
+// efeito no aparelho e a rolagem simplesmente nao acontecer, sem erro.
+//
+// Aconteceu de verdade: `catalog.ts` importava `format.ts`, que importa
+// `cardFormat` -> @letele/playing-cards -> React. Em Node passa (process
+// existe), nos testes JVM passa (nao tocam a WebView) — so o aparelho
+// reclama. Por isso a checagem e aqui, no gerador.
+const codigo = fs.readFileSync(bundle, "utf8");
+const proibidos = [
+  [/\bprocess\.env\b/, "process.env — alguma dependencia so roda em Node/bundler"],
+  [/reactjs\.org\/link/, "React entrou no bundle (import indireto de componente?)"],
+];
+for (const [padrao, motivo] of proibidos) {
+  if (padrao.test(codigo)) {
+    console.error(`bundle headless invalido: ${motivo}`);
+    console.error("A WebView do Android nao carrega isso — a rolagem para de acontecer,");
+    console.error("sem erro visivel. Ache o import novo e corte a dependencia.");
+    process.exit(1);
+  }
+}
+
 // Executa o IIFE em Node pra extrair systems() da fonte de verdade.
 // O rules-engine so precisa de globalThis.crypto (Node 18+).
 await import(pathToFileURL(bundle).href);

@@ -37,7 +37,12 @@ class RoomClientReconnectTest {
 
     @After
     fun tearDown() {
-        server.shutdown()
+        // O shutdown do MockWebServer as vezes estoura "Gave up waiting for
+        // queue to shut down" — o cliente ainda esta em backoff tentando
+        // reconectar quando o servidor cai, e a fila dele nao drena a tempo.
+        // Isso e ruido de desmontagem: reprovava um teste que ja tinha
+        // passado, e o resultado do run virava loteria.
+        runCatching { server.shutdown() }
     }
 
     @Test

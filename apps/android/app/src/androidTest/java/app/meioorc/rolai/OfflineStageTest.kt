@@ -28,10 +28,15 @@ class OfflineStageTest {
         .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
         .build()
 
+    // LOCAL_STAGE_BASE aponta pro ARQUIVO index.html (o AssetsPathHandler
+    // nao faz indice de diretorio). Pra pedir um caminho qualquer da pasta,
+    // volta uma barra — concatenar direto dava ".../index.html/index.html",
+    // que o handler responde com data nula e o teste morria de NPE, como se
+    // o palco nao estivesse no APK.
+    private val pastaDoPalco = DiceStageWindow.LOCAL_STAGE_BASE.substringBeforeLast("/")
+
     private fun buscar(caminho: String) =
-        loader().shouldInterceptRequest(
-            android.net.Uri.parse("${DiceStageWindow.LOCAL_STAGE_BASE}/$caminho"),
-        )
+        loader().shouldInterceptRequest(android.net.Uri.parse("$pastaDoPalco/$caminho"))
 
     @Test
     fun paginaDoPalcoEstaNoApk() {
@@ -40,7 +45,10 @@ class OfflineStageTest {
         // devolve null). O statusCode so e preenchido no fluxo real da
         // WebView, entao o que vale aqui e o stream de dados.
         assertNotNull("assets/stage/index.html nao foi embarcado", resposta)
-        val html = resposta!!.data!!.bufferedReader().readText()
+        // data nula = o handler achou a ROTA mas nao o arquivo. Dizer isso
+        // vale mais que o NullPointerException que vinha antes.
+        assertNotNull("assets/stage/index.html sem conteudo", resposta!!.data)
+        val html = resposta.data!!.bufferedReader().readText()
         assertTrue("index.html vazio ou errado", html.contains("<div id=\"root\""))
         assertTrue("bundle nao referenciado", html.contains("/assets/"))
     }
