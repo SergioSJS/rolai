@@ -183,64 +183,29 @@ class RoomClient(private val listener: Listener) {
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            val message = try {
-                JSONObject(text)
-            } catch (e: JSONException) {
-                return // payload que nao e JSON: ignora (servidor nunca manda)
-            }
-            when (message.optString("type")) {
-                "snapshot" -> {
-                    val names = parseRosterNames(message)
-                    handler.post { listener.onRoster(names) }
+            // A LEITURA vive em ServerEvent (pura, testada); aqui fica só a
+            // entrega ao Listener na thread certa.
+            when (val evento = ServerEvent.parse(text)) {
+                null -> return // nao e JSON, sem `type`, ou tipo que este APK nao conhece
+                is ServerEvent.Ping -> webSocket.send("{\"type\":\"pong\"}")
+                is ServerEvent.Snapshot -> handler.post { listener.onRoster(evento.memberNames) }
+                is ServerEvent.Roster -> handler.post { listener.onRoster(evento.memberNames) }
+                is ServerEvent.Roll -> handler.post {
+                    listener.onRoll(evento.player, evento.resultJson, evento.styleJson, evento.stylesJson)
                 }
-                "roster" -> {
-                    val names = parseRosterNames(message)
-                    handler.post { listener.onRoster(names) }
+                is ServerEvent.DeckDraw -> handler.post {
+                    listener.onDeckDraw(evento.player, evento.cardsJson, evento.remaining)
                 }
-                "roll" -> {
-                    val player = message.optString("player", "?")
-                    val result = message.optJSONObject("result")?.toString() ?: return
-                    val style = message.optJSONObject("style")?.toString()
-                    val styles = message.optJSONObject("styles")?.toString()
-                    handler.post { listener.onRoll(player, result, style, styles) }
+                is ServerEvent.DeckShuffle -> handler.post { listener.onDeckShuffle(evento.player) }
+                is ServerEvent.DeckConfig -> handler.post {
+                    listener.onDeckConfig(
+                        evento.player,
+                        evento.includeJokers,
+                        evento.removalMode,
+                        evento.autoReshuffleOnEmpty,
+                    )
                 }
-                "deck_draw" -> {
-                    val player = message.optString("player", "?")
-                    val cards = message.optJSONArray("cards")?.toString() ?: return
-                    val remaining = message.optInt("remaining", 0)
-                    handler.post { listener.onDeckDraw(player, cards, remaining) }
-                }
-                "deck_shuffle" -> {
-                    val player = message.optString("player", "?")
-                    handler.post { listener.onDeckShuffle(player) }
-                }
-                "deck_config" -> {
-                    val player = message.optString("player", "?")
-                    val includeJokers = if (message.has("include_jokers")) {
-                        message.optBoolean("include_jokers")
-                    } else {
-                        null
-                    }
-                    val removalMode = message.optString("removal_mode", "").ifEmpty { null }
-                    val autoReshuffleOnEmpty = if (message.has("auto_reshuffle_on_empty")) {
-                        message.optBoolean("auto_reshuffle_on_empty")
-                    } else {
-                        null
-                    }
-                    handler.post {
-                        listener.onDeckConfig(player, includeJokers, removalMode, autoReshuffleOnEmpty)
-                    }
-                }
-                "error" -> {
-                    val error = message.optString("message", "erro do servidor")
-                    handler.post { listener.onError(error) }
-                }
-                "ping" -> {
-                    // Heartbeat do backend (ws_heartbeat_seconds): responder
-                    // mantem proxies com timeout ocioso (Cloudflare ~100s) e
-                    // o NAT da rede movel sem derrubar a conexao parada.
-                    webSocket.send("{\"type\":\"pong\"}")
-                }
+                is ServerEvent.Error -> handler.post { listener.onError(evento.message) }
             }
         }
 
@@ -344,14 +309,5 @@ class RoomClient(private val listener: Listener) {
             return "#$bare"
         }
 
-        private fun parseRosterNames(message: JSONObject): List<String> {
-            val roster = message.optJSONArray("roster") ?: return emptyList()
-            return buildList {
-                for (i in 0 until roster.length()) {
-                    val member = roster.optJSONObject(i) ?: continue
-                    add(member.optString("name", "?"))
-                }
-            }
-        }
     }
 }
