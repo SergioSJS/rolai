@@ -147,7 +147,8 @@ Os 20% do Android assustam menos do que parecem, e o detalhe explica por quê:
 | `OverlayService` | 485 | **0%** |
 
 Activity, View e Service não rodam em JVM — o que os cobre é o instrumentado
-(aparelho) e este checklist. O número que importa acompanhar é o **da lógica
+(aparelho) e este checklist. O plano pra melhorar isso, em ordem de risco,
+está em `docs/test-plan-android.md`. O número que importa acompanhar é o **da lógica
 pura**: sempre que algo sai de dentro de uma tela, ele sobe. Foi o que
 aconteceu na 1.3.0, quando ~310 linhas de leitura de resultado saíram de dois
 arquivos a 0% para dois arquivos a 86–95%.
