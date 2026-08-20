@@ -183,7 +183,7 @@ export function addDieToNotation(notation: string, kind: DieKind): string {
 
   // 1. Slot aberto no fim: ex: "1[", "2[", "3[", "... + 1[", "{2d6} vs {"
   const openBracketMatch = trimmed.match(/^(.*(?:\b[123]\[|\{))\s*$/);
-  if (openBracketMatch) {
+  if (openBracketMatch && openBracketMatch[1] !== undefined) {
     const prefix = openBracketMatch[1];
     const closing = prefix.endsWith("{") ? "}" : "]";
     return `${prefix}${label}${closing}`;
@@ -191,7 +191,12 @@ export function addDieToNotation(notation: string, kind: DieKind): string {
 
   // 2. Bloco de slot fechado no fim: ex: "1[2d6]" ou "1[2d6+1d4]"
   const slotBlockMatch = trimmed.match(/^(.*?\b[123]\[)([^\]]*?)(\])\s*$/);
-  if (slotBlockMatch) {
+  if (
+    slotBlockMatch &&
+    slotBlockMatch[1] !== undefined &&
+    slotBlockMatch[2] !== undefined &&
+    slotBlockMatch[3] !== undefined
+  ) {
     const prefix = slotBlockMatch[1];
     const inner = slotBlockMatch[2].trim();
     const suffix = slotBlockMatch[3];
@@ -227,7 +232,12 @@ export function removeDieFromNotation(notation: string, kind: DieKind): string {
 
   // 1. Bloco de slot fechado no fim
   const slotBlockMatch = trimmed.match(/^(.*?\b[123]\[)([^\]]*?)(\])\s*$/);
-  if (slotBlockMatch) {
+  if (
+    slotBlockMatch &&
+    slotBlockMatch[1] !== undefined &&
+    slotBlockMatch[2] !== undefined &&
+    slotBlockMatch[3] !== undefined
+  ) {
     const prefix = slotBlockMatch[1];
     const inner = slotBlockMatch[2].trim();
     const suffix = slotBlockMatch[3];

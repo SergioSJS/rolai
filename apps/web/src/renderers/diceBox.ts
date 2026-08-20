@@ -303,6 +303,35 @@ export function makeDiceOpaque(box: DiceBoxInstance): void {
 }
 
 /**
+ * Patch permanente em DiceFactory.create para injetar o colorset específico
+ * de cada slot sem wrap aninhado ou race condition entre rolagens.
+ */
+export function enableMultiSlotColors(
+  box: DiceBoxInstance,
+  getResolver: () => ((type: string) => unknown) | null,
+): void {
+  const factory = box.DiceFactory as
+    | (DiceFactoryLike & { __rolai_native_create?: (type: string, colorData?: unknown) => unknown })
+    | undefined;
+  if (!factory || typeof factory.create !== "function") return;
+  if (!factory.__rolai_native_create) {
+    factory.__rolai_native_create = factory.create.bind(factory);
+    const native = factory.__rolai_native_create;
+    factory.create = function patchedCreate(type: string, colorData?: unknown) {
+      const resolver = getResolver();
+      if (resolver) {
+        const targetColorSet = resolver(type);
+        if (targetColorSet && factory.applyColorSet) {
+          factory.applyColorSet(targetColorSet);
+          factory.setMaterialInfo();
+        }
+      }
+      return native(type, colorData);
+    };
+  }
+}
+
+/**
  * Ajusta as opcoes do contexto WebGL criado pela dice-box.
  *
  * `preserveDrawingBuffer: true` obriga o Chromium a COPIAR o buffer do
@@ -477,6 +506,7 @@ export function impactStrength(
 export class DiceBoxRenderer implements RollRenderer {
   private box: DiceBoxInstance | null = null;
   private container: HTMLElement | null = null;
+  private slotColorResolver: ((type: string) => unknown) | null = null;
   // Uma faixa de brilho por borda; cada impacto vira um filho efemero.
   private barriers: Partial<Record<BarrierEdge, HTMLElement>> = {};
   private lastImpact: Partial<Record<BarrierEdge, number>> = {};
@@ -561,6 +591,7 @@ export class DiceBoxRenderer implements RollRenderer {
     // fabrica, entao vale pra todo dado criado daqui pra frente.
     makeDiceOpaque(box);
     makeOutlineVisible(box);
+    enableMultiSlotColors(box, () => this.slotColorResolver);
     this.box = box;
     this.mountBarrier(container);
     this.watchImpacts(box);
@@ -738,37 +769,25 @@ export class DiceBoxRenderer implements RollRenderer {
       }
     }
 
-    // Intercepta DiceFactory.create para injetar o material do slot específico de cada dado
-    const factory = this.box.DiceFactory;
-    const originalCreate = factory?.create?.bind(factory);
     const orderedDice = orderDiceForBox(dice);
     let spawnIndex = 0;
-
-    if (factory && originalCreate) {
-      factory.create = (type: string, colorData?: unknown) => {
-        const targetDie = orderedDice[spawnIndex++];
-        const slotNum = targetDie?.slot ?? 1;
-        const targetColorSet = slotColorSets[slotNum] ?? slotColorSets[1];
-        if (targetColorSet && factory.applyColorSet) {
-          factory.applyColorSet(targetColorSet);
-          factory.setMaterialInfo();
-        }
-        return originalCreate(type, colorData);
-      };
-    }
+    this.slotColorResolver = () => {
+      const targetDie = orderedDice[spawnIndex++];
+      const slotNum = targetDie?.slot ?? 1;
+      return slotColorSets[slotNum] ?? slotColorSets[1];
+    };
 
     try {
       // Teto de sons e por ROLAGEM: zera aqui.
       this.soundsThisRoll = 0;
       await this.box.roll(buildBoxNotation(dice));
     } finally {
-      if (factory && originalCreate) {
-        factory.create = originalCreate;
-      }
+      this.slotColorResolver = null;
     }
   }
 
   clear(): void {
+    this.slotColorResolver = null;
     this.box?.clearDice();
   }
 
