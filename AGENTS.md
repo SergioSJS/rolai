@@ -67,6 +67,10 @@ Todo PR deve rodar limpo: `npm test` (rules-engine e web), `pytest`
 (backend), `ruff check` e `mypy` (backend), `./gradlew testDebugUnitTest`
 (Android, se o módulo for tocado).
 
+Cobertura roda LOCAL, nunca no CI (`npm run coverage -w @rolai/web`,
+`pytest --cov=app`, `./gradlew coverage`): serve pra escolher onde investir
+teste antes de subir versão, não pra reprovar PR por decimal.
+
 Antes de SUBIR VERSÃO, a suíte verde não basta: rode
 `docs/manual-test-checklist.md`. Ele cobre de propósito só o que nenhuma
 suíte alcança (som, palco 3D, sala com duas pontas, pixel do overlay) e

@@ -1,6 +1,10 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // Cobertura dos testes JVM. Local, nao no CI: serve pra saber ONDE nao
+    // ha teste antes de subir versao, nao pra virar um portao que reprova
+    // PR por decimal (ver docs/manual-test-checklist.md).
+    jacoco
 }
 
 android {
@@ -137,4 +141,42 @@ configurations.all {
     resolutionStrategy {
         force("androidx.browser:browser:1.8.0")
     }
+}
+
+/**
+ * Relatorio de cobertura dos testes JVM: `./gradlew coverage`.
+ *
+ * So mede `testDebugUnitTest` — instrumentado precisa de aparelho e nao
+ * entra aqui. Por isso o numero vem BAIXO de proposito: Activity, View e
+ * Service sao a maior parte do codigo e nenhum roda em JVM. O que este
+ * relatorio responde e "a logica pura esta coberta?", que e a pergunta que
+ * importa quando se decide extrair algo de dentro de uma tela.
+ */
+tasks.register<JacocoReport>("coverage") {
+    group = "verification"
+    description = "Cobertura dos testes JVM (HTML + XML em app/build/reports/jacoco)"
+    dependsOn("testDebugUnitTest")
+
+    reports {
+        html.required.set(true)
+        xml.required.set(true)
+        csv.required.set(false)
+    }
+
+    // Gerados pelo build: contá-los só afundaria o número sem dizer nada.
+    val ignorados = listOf(
+        "**/R.class", "**/R$*.class", "**/BuildConfig.*", "**/Manifest*.*",
+        "**/*_Factory.*", "**/*Test*.*",
+    )
+    classDirectories.setFrom(
+        files(
+            fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) {
+                exclude(ignorados)
+            },
+        ),
+    )
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(
+        fileTree(layout.buildDirectory.get()) { include("**/testDebugUnitTest.exec") },
+    )
 }

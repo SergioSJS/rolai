@@ -9,7 +9,8 @@
     "build:headless": "vite build --config vite.headless.config.ts && node scripts/install-headless.mjs",
     "test": "vitest run",
     "preview": "vite preview",
-    "build:stage": "vite build && node scripts/install-stage.mjs"
+    "build:stage": "vite build && node scripts/install-stage.mjs",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@3d-dice/dice-box-threejs": "^0.0.12",
@@ -32,6 +33,7 @@
     "typescript": "^5.6.0",
     "vite": "^5.4.0",
     "vite-plugin-pwa": "^0.20.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "@vitest/coverage-v8": "^2.1.0"
   }
 }

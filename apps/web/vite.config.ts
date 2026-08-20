@@ -71,5 +71,15 @@ export default defineConfig({
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["src/__tests__/setup.ts"],
+    // `npm run coverage`. Local, nao no CI: serve pra saber ONDE falta teste
+    // antes de subir versao (ver docs/manual-test-checklist.md), nao pra
+    // reprovar PR por decimal.
+    coverage: {
+      provider: "v8",
+      reporter: ["text-summary", "html"],
+      include: ["src/**/*.{ts,tsx}"],
+      // Nao sao codigo de produto: teste, tipos e o entry do bundle.
+      exclude: ["src/**/*.test.{ts,tsx}", "src/__tests__/**", "src/types/**", "src/main.tsx"],
+    },
   },
 });

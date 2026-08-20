@@ -115,6 +115,43 @@ Só depois de mexer no CSS ou no layout.
 
 ---
 
+## Onde falta teste — medindo antes de decidir
+
+A cobertura é **local, de propósito**: serve pra escolher onde investir teste
+antes de subir versão, não pra reprovar PR por decimal. Nenhuma delas roda no
+CI.
+
+```bash
+npm run coverage -w @rolai/web                    # web    (HTML em coverage/)
+cd services/backend && pytest --cov=app           # backend
+cd apps/android && ./gradlew coverage             # android, testes JVM
+```
+
+Medido em 1.3.0:
+
+| | cobertura de linhas |
+| --- | --- |
+| Backend | **93%** (774 linhas) |
+| Web | **72%** (5.879 linhas) |
+| Android (JVM) | **20%** (4.051 linhas) |
+
+Os 20% do Android assustam menos do que parecem, e o detalhe explica por quê:
+
+| classe | linhas | coberto |
+| --- | --- | --- |
+| `OutcomeCatalog` / `ProfileForm` | 190 | 100% |
+| `RichTextPlan` | 88 | 95% |
+| `ResultFormat` / `RolaiSettings` | 301 | 86% |
+| `OverlayView` | 1125 | **0%** |
+| `SettingsActivity` | 621 | **0%** |
+| `OverlayService` | 485 | **0%** |
+
+Activity, View e Service não rodam em JVM — o que os cobre é o instrumentado
+(aparelho) e este checklist. O número que importa acompanhar é o **da lógica
+pura**: sempre que algo sai de dentro de uma tela, ele sobe. Foi o que
+aconteceu na 1.3.0, quando ~310 linhas de leitura de resultado saíram de dois
+arquivos a 0% para dois arquivos a 86–95%.
+
 ## O que este checklist NÃO cobre (e por quê)
 
 | área | cobertura automatizada |
@@ -124,16 +161,9 @@ Só depois de mexer no CSS ou no layout.
 | Formatação do resultado (Android) | 122 testes JVM |
 | Sala (cliente, reducer, echo, hook) | 17 casos, 2 conferidos por mutação |
 
-Onde a cobertura é fraca, e por isso o teste manual importa mais:
-
-| arquivo | linhas | situação |
-| --- | --- | --- |
-| `OverlayView.kt` | 1854 | UI construída em código, sem teste de pixel |
-| `SettingsActivity.kt` | 1177 | tela inteira sem teste; a lógica pura já saiu |
-| `renderers/diceBox.ts` | 492 | 40% — o resto exige WebGL de verdade |
-| `cardScene3D.ts` | 184 | 0% — cena three.js |
-
-Web em 72% de linhas no total; backend em 93%.
+Do lado web, o que puxa os 72% pra baixo é o que exige WebGL de verdade:
+`renderers/diceBox.ts` (492 linhas, 40%) e `cardScene3D.ts` (184 linhas, 0%).
+Justamente o que a seção "Palco 3D" acima existe pra cobrir.
 
 ## Depois de aprovar
 

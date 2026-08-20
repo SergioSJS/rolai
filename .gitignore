@@ -26,3 +26,6 @@ build/
 
 # Cache incremental do tsc — artefato de build local, muda a cada `tsc -b`.
 *.tsbuildinfo
+
+# Relatórios de cobertura — sempre locais (docs/manual-test-checklist.md).
+coverage/
