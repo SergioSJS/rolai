@@ -74,6 +74,8 @@ const OUTCOME_LABELS: Record<string, string> = {
   yze_dano_equipamento_x3: "3+ danos de equipamento",
   yze_panico: "pânico!",
   yze_descontrole: "descontrole!",
+  // trophy (trophy_dark / trophy_gold)
+  trophy_ruina_aumenta: "ruína aumenta (+1)",
 };
 
 export function outcomeLabel(outcome: string): string {
@@ -94,9 +96,18 @@ const GROUP_LABELS: Record<string, string> = {
   pericia: "perícia",
   equipamento: "equipamento",
   estresse: "estresse",
+  // trophy
+  claros: "claros",
+  escuros: "escuros",
+  ruina: "ruína",
 };
 
 export function groupLabel(name: string): string {
+  const match = /^group(\d+)$/i.exec(name);
+  if (match) {
+    const num = Number(match[1]) + 1;
+    return `grupo ${num}`;
+  }
   return GROUP_LABELS[name.toLowerCase()] ?? name;
 }
 
@@ -190,6 +201,8 @@ const OUTCOME_TONES: Record<string, OutcomeTone> = {
   yze_dano_equipamento_x3: "failure",
   yze_panico: "failure",
   yze_descontrole: "failure",
+  // trophy
+  trophy_ruina_aumenta: "failure",
 };
 
 export function outcomeTone(outcome: string): OutcomeTone {
@@ -208,6 +221,7 @@ function optionalNumber(value: number | null | undefined): number | undefined {
 export function summarizeDice(result: RollResult): string {
   const groups = displayGroups(result);
   const joiner = result.notation.includes(" + ") ? " + " : " vs ";
+  const isSumNotation = !result.notation.includes(" vs ") && result.notation.includes(" + ");
   const parts = groups.map((g) => {
     // Pool de zero dados (Forçar do Year Zero pode zerar um deles): o motor
     // rola e descarta um dado so pra ter notacao valida — "[]" no historico
@@ -225,10 +239,24 @@ export function summarizeDice(result: RollResult): string {
           ? ` + ${mod}`
           : ` − ${Math.abs(mod)}`
         : "";
-    const total = g.total !== undefined ? ` = ${g.total}` : "";
+    const groupTotal =
+      g.total ??
+      (isSumNotation && typeof result.outcome !== "string"
+        ? g.rolls.reduce((sum, r) => sum + r.value, 0) + (g.modifier ?? 0)
+        : undefined);
+    const total = groupTotal !== undefined ? ` = ${groupTotal}` : "";
     return `${rolls}${modifier}${total}`;
   });
-  const text = parts.join(joiner);
+  let text = parts.join(joiner);
+  if (isSumNotation && groups.length > 1 && typeof result.outcome !== "string") {
+    const grandTotal = groups.reduce(
+      (sum, g) =>
+        sum +
+        (g.total ?? g.rolls.reduce((s, r) => s + r.value, 0) + (g.modifier ?? 0)),
+      0,
+    );
+    text += ` = ${grandTotal}`;
+  }
   return text === "" ? result.notation : text;
 }
 
@@ -251,6 +279,8 @@ export interface DisplayRoll {
   card?: boolean;
   isRed?: boolean;
   symbol?: string;
+  slot?: number;
+  theme?: string;
 }
 
 // Grupo pronto pra exibicao: junta os rolls do resultado com as faces
@@ -262,6 +292,8 @@ export interface DisplayGroup {
   dropped?: DisplayRoll[];
   modifier?: number;
   total?: number;
+  slot?: number;
+  theme?: string;
 }
 
 // Valor de um dado ou carta como o jogador le: dado Fudge vira sinal, carta vira A/J/Q/K.
@@ -293,6 +325,9 @@ export function displayGroups(result: RollResult): DisplayGroup[] {
     const rolls: DisplayRoll[] = [];
     const dropped: DisplayRoll[] = [];
 
+    const theme = group.theme;
+    const slot = group.slot ?? groupSpec?.slot;
+
     if (groupSpec && groupSpec.terms.length > 0) {
       let rollCursor = 0;
       let dropCursor = 0;
@@ -314,6 +349,8 @@ export function displayGroups(result: RollResult): DisplayGroup[] {
             fudge: spec.fudge === true,
             card: spec.card === true,
           };
+          if (slot !== undefined) item.slot = slot;
+          if (theme) item.theme = theme;
           if (spec.card) {
             const card = cardFromRollValue(v, totalCardCount++);
             item.isRed = isRedSuit(card);
@@ -332,6 +369,8 @@ export function displayGroups(result: RollResult): DisplayGroup[] {
               fudge: spec.fudge === true,
               card: spec.card === true,
             };
+            if (slot !== undefined) item.slot = slot;
+            if (theme) item.theme = theme;
             if (spec.card) {
               const card = cardFromRollValue(v, totalCardCount++);
               item.isRed = isRedSuit(card);
@@ -344,25 +383,34 @@ export function displayGroups(result: RollResult): DisplayGroup[] {
       }
       if (rollCursor < group.rolls.length) {
         for (let j = rollCursor; j < group.rolls.length; j++) {
-          rolls.push({
+          const item: DisplayRoll = {
             value: group.rolls[j]!,
             sides: null,
-          });
+          };
+          if (slot !== undefined) item.slot = slot;
+          if (theme) item.theme = theme;
+          rolls.push(item);
         }
       }
     } else {
       for (const v of group.rolls) {
-        rolls.push({
+        const item: DisplayRoll = {
           value: v,
           sides: null,
-        });
+        };
+        if (slot !== undefined) item.slot = slot;
+        if (theme) item.theme = theme;
+        rolls.push(item);
       }
       if (group.dropped) {
         for (const v of group.dropped) {
-          dropped.push({
+          const item: DisplayRoll = {
             value: v,
             sides: null,
-          });
+          };
+          if (slot !== undefined) item.slot = slot;
+          if (theme) item.theme = theme;
+          dropped.push(item);
         }
       }
     }
@@ -371,6 +419,8 @@ export function displayGroups(result: RollResult): DisplayGroup[] {
       name,
       rolls,
     };
+    if (slot !== undefined) display.slot = slot;
+    if (theme) display.theme = theme;
     if (dropped.length > 0) display.dropped = dropped;
     const modifier = optionalNumber(group.modifier);
     const total = optionalNumber(group.total);

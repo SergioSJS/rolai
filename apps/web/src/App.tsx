@@ -21,6 +21,7 @@ import { APK_LATEST_URL } from "./config";
 import { CHANGELOG } from "./changelog";
 import type {
   DiceStyle,
+  DiceStyles,
   QualityTier,
   ThemeName,
 } from "./settings";
@@ -29,6 +30,7 @@ import {
   loadDeckConfig,
   loadDiceScale,
   loadDiceStyle,
+  loadDiceStyles,
   loadPlayerName,
   loadQualityTier,
   loadRoomCode,
@@ -36,7 +38,7 @@ import {
   loadTheme,
   saveDeckConfig,
   saveDiceScale,
-  saveDiceStyle,
+  saveDiceStyles,
   savePlayerName,
   saveQualityTier,
   saveRoomCode,
@@ -100,9 +102,24 @@ export function App() {
   const [theme, setTheme] = useState<ThemeName>(() =>
     loadTheme(window.localStorage),
   );
+  const [diceStyles, setDiceStyles] = useState<DiceStyles>(() =>
+    loadDiceStyles(window.localStorage),
+  );
   const [diceStyle, setDiceStyle] = useState<DiceStyle>(() =>
     loadDiceStyle(window.localStorage),
   );
+
+  useEffect(() => {
+    const root = document.documentElement;
+    for (const slot of ["1", "2", "3"] as const) {
+      const s = diceStyles[slot];
+      if (s) {
+        root.style.setProperty(`--dice-${slot}-body`, s.body);
+        root.style.setProperty(`--dice-${slot}-number`, s.number);
+        root.style.setProperty(`--dice-${slot}-outline`, s.outline);
+      }
+    }
+  }, [diceStyles]);
   const [diceScale, setDiceScale] = useState<number>(() =>
     loadDiceScale(window.localStorage),
   );
@@ -121,9 +138,11 @@ export function App() {
   const [localHistory, setLocalHistory] = useState<HistoryEntry[]>([]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
   // Quem rolou o que esta na tela (null = eu mesmo, ou rolagem local).
-  const [lastRoller, setLastRoller] = useState<
-    { name: string; style?: DiceStyle | null } | null
-  >(null);
+  const [lastRoller, setLastRoller] = useState<{
+    name: string;
+    style?: DiceStyle | null;
+    styles?: DiceStyles | null;
+  } | null>(null);
   // Cartas puxadas na tela — mesmo palco compartilhado do dado, so que sem
   // renderer proprio (CardFlip e sempre CSS). Mutuamente exclusivo com
   // lastResult: um substitui o outro, nunca os dois ao mesmo tempo (ver
@@ -156,7 +175,7 @@ export function App() {
     const stage = stageRef.current;
     if (!stage) return;
     let disposed = false;
-    const renderer = createRenderer(tier, diceStyle, diceScale);
+    const renderer = createRenderer(tier, diceStyle, diceScale, true, diceStyles);
     renderer.init(stage).catch((err: unknown) => {
       console.warn("renderer falhou, caindo pra texto puro:", err);
       if (disposed) return;
@@ -170,7 +189,7 @@ export function App() {
       renderer.dispose();
       if (rendererRef.current === renderer) rendererRef.current = null;
     };
-  }, [tier, diceStyle, diceScale]);
+  }, [tier, diceStyle, diceScale, diceStyles]);
 
   // Tema visual: atributo no <html>, as CSS custom properties fazem o resto.
   useEffect(() => {
@@ -218,10 +237,15 @@ export function App() {
     };
   }, [lastResult, lastCards, dismissDice]);
 
-  // `style` = aparencia dos dados de quem rolou (nulo = rolagem local, vale
+  // `style` / `styles` = aparencia dos dados de quem rolou (nulo = rolagem local, vale
   // a propria). Cada cliente ve o dado do outro na cor do outro.
   const animate = useCallback(
-    (result: RollResult, style?: DiceStyle | null, player?: string) => {
+    (
+      result: RollResult,
+      style?: DiceStyle | null,
+      player?: string,
+      styles?: DiceStyles | null,
+    ) => {
       const cards = cardsFromResult(result);
       if (cards.length > 0) {
         setLastCards(cards);
@@ -232,7 +256,7 @@ export function App() {
         setLastCardPlayer(null);
       }
       setLastResult(result);
-      setLastRoller(player === undefined ? null : { name: player, style });
+      setLastRoller(player === undefined ? null : { name: player, style, styles });
       if (exceedsAnimationCap(result)) {
         // Pool grande demais: o resultado vale igual — so nao anima.
         setNotice("Pool grande demais pra animar — mostrando só o resultado.");
@@ -242,7 +266,7 @@ export function App() {
       // Depois do commit: a faixa do pe do palco e medida da placa que
       // acabou de entrar na tela, e so entao o dado voa (stage/floor.ts).
       queueRoll(() => {
-        rendererRef.current?.roll(result, style).catch((err: unknown) => {
+        rendererRef.current?.roll(result, style, styles).catch((err: unknown) => {
           console.warn("animacao falhou:", err);
         });
       });
@@ -271,7 +295,7 @@ export function App() {
         // no historico (via reducer acima). Rolagem dos outros: anima com a
         // aparencia de dado de quem rolou.
         if (!pendingRef.current.consumeEcho(event.player, event.result)) {
-          animate(event.result, event.style, event.player);
+          animate(event.result, event.style, event.player, event.styles);
         }
       } else if (event.type === "deck_draw") {
         // Mesma logica do roll acima, so que pro baralho (echo.ts).
@@ -302,11 +326,19 @@ export function App() {
       dispatch({ type: "joining", code });
       // O estilo do dado vai no join: a sala inteira anima a rolagem de
       // cada um com a cor de cada um.
-      const client = new RoomClient(code, name, handleRoomEvent, diceStyle);
+      const client = new RoomClient(
+        code,
+        name,
+        handleRoomEvent,
+        diceStyle,
+        false,
+        5,
+        diceStyles,
+      );
       clientRef.current = client;
       client.connect();
     },
-    [handleRoomEvent, diceStyle],
+    [handleRoomEvent, diceStyle, diceStyles],
   );
 
   // Link de convite (?room=CODIGO) entra direto, sem passar pelo modal — com
@@ -414,7 +446,7 @@ export function App() {
       // "você" tambem na propria rolagem: em sala, a dos outros mostra o
       // nome e a nossa mostrava nada — ficava parecendo que so o resultado
       // alheio tem dono. O historico ja usa a mesma palavra.
-      animate(result, undefined, "você");
+      animate(result, undefined, "você", diceStyles);
       const client = clientRef.current;
       if (client && room.status === "connected") {
         pendingRef.current.track(selfNameRef.current, result);
@@ -430,7 +462,7 @@ export function App() {
         }
       }
     },
-    [animate, room.status, room.code, room.roster.length],
+    [animate, diceStyles, room.status, room.code, room.roster.length],
   );
 
   // Baralho: DeckPanel calcula local (deck-engine) e chama isto DEPOIS do
@@ -508,10 +540,11 @@ export function App() {
     saveDiceScale(window.localStorage, next);
   }, []);
 
-  const handleDiceStyleChange = useCallback(
-    (next: DiceStyle) => {
-      setDiceStyle(next);
-      saveDiceStyle(window.localStorage, next);
+  const handleDiceStylesChange = useCallback(
+    (next: DiceStyles) => {
+      setDiceStyles(next);
+      setDiceStyle(next["1"]);
+      saveDiceStyles(window.localStorage, next);
       // Reconecta pra sala saber a cor nova (o estilo vai no handshake).
       if (room.code !== null) {
         clientRef.current?.leave();
@@ -520,13 +553,20 @@ export function App() {
           room.code,
           selfNameRef.current,
           handleRoomEvent,
-          next,
+          next["1"],
         );
         clientRef.current = client;
         client.connect();
       }
     },
     [handleRoomEvent, room.code],
+  );
+
+  const handleDiceStyleChange = useCallback(
+    (next: DiceStyle) => {
+      handleDiceStylesChange({ ...diceStyles, "1": next });
+    },
+    [diceStyles, handleDiceStylesChange],
   );
 
   const inRoom = room.code !== null;
@@ -623,6 +663,7 @@ export function App() {
           result={lastResult}
           player={lastRoller?.name}
           playerStyle={lastRoller?.style}
+          playerStyles={lastRoller?.styles}
         />
         {lastCards !== null && lastCards.length > 0 && lastResult === null && (
           <div className="result-display">
@@ -672,6 +713,7 @@ export function App() {
           <SettingsPanel
             tier={tier}
             theme={theme}
+            diceStyles={diceStyles}
             diceStyle={diceStyle}
             diceScale={diceScale}
             system={system}
@@ -679,6 +721,7 @@ export function App() {
             deckConfig={deckConfig}
             onTierChange={handleTierChange}
             onThemeChange={handleThemeChange}
+            onDiceStylesChange={handleDiceStylesChange}
             onDiceStyleChange={handleDiceStyleChange}
             onDiceScaleChange={handleDiceScaleChange}
             onSystemChange={handleSystemChange}

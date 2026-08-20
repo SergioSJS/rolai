@@ -45,6 +45,14 @@ export const PROFILE_FAMILIES: ProfileFamily[] = [
       { system: "yze_wdu", subLabel: "Walking Dead" },
     ],
   },
+  {
+    key: "trophy",
+    label: "Trophy",
+    members: [
+      { system: "trophy_dark", subLabel: "Trophy Dark" },
+      { system: "trophy_gold", subLabel: "Trophy Gold" },
+    ],
+  },
 ];
 
 // Familia que contem este system id, se houver.

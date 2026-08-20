@@ -2,6 +2,7 @@ package app.meioorc.rolai
 
 import android.Manifest
 import android.app.Activity
+import android.content.res.ColorStateList
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -51,6 +52,14 @@ class SettingsActivity : Activity() {
     private lateinit var switchDeckAuto: Switch
     private lateinit var previewFrame: android.widget.FrameLayout
     private lateinit var txtPreview: TextView
+
+    private lateinit var btnSlot1: Button
+    private lateinit var btnSlot2: Button
+    private lateinit var btnSlot3: Button
+    private var activeDiceSlot = "1"
+    private var slot1Style = RolaiSettings.PRESET_STYLES["esmeralda"]!!
+    private var slot2Style = RolaiSettings.PRESET_STYLES["sangue"]!!
+    private var slot3Style = RolaiSettings.PRESET_STYLES["gelo"]!!
 
     // Cores escolhidas nas paletas (hex "#rrggbb").
     private var colorBody = RolaiSettings.DEFAULT_BODY
@@ -119,6 +128,15 @@ class SettingsActivity : Activity() {
         editName = findViewById(R.id.edit_name)
         editNotation = findViewById(R.id.edit_notation)
         spinnerSystem = findViewById(R.id.spinner_system)
+
+        btnSlot1 = findViewById(R.id.btn_slot_1)
+        btnSlot2 = findViewById(R.id.btn_slot_2)
+        btnSlot3 = findViewById(R.id.btn_slot_3)
+
+        btnSlot1.setOnClickListener { switchSlot("1") }
+        btnSlot2.setOnClickListener { switchSlot("2") }
+        btnSlot3.setOnClickListener { switchSlot("3") }
+
         spinnerDice = findViewById<Spinner>(R.id.spinner_dice).apply {
             adapter = ArrayAdapter(
                 this@SettingsActivity,
@@ -465,6 +483,83 @@ class SettingsActivity : Activity() {
         return position
     }
 
+    private fun getActiveSlotStyle(): DiceSlotStyle = when (activeDiceSlot) {
+        "2" -> slot2Style
+        "3" -> slot3Style
+        else -> slot1Style
+    }
+
+    private fun setActiveSlotStyle(style: DiceSlotStyle) {
+        when (activeDiceSlot) {
+            "2" -> slot2Style = style
+            "3" -> slot3Style = style
+            else -> slot1Style = style
+        }
+    }
+
+    private fun saveCurrentSlotFromControls() {
+        val preset = RolaiSettings.DICE_PRESET_IDS[
+            spinnerDice.selectedItemPosition.coerceIn(0, RolaiSettings.DICE_PRESET_IDS.size - 1)
+        ]
+        val texture = RolaiSettings.TEXTURE_IDS[
+            spinnerTexture.selectedItemPosition.coerceIn(0, RolaiSettings.TEXTURE_IDS.size - 1)
+        ]
+        val material = RolaiSettings.MATERIAL_IDS[
+            spinnerMaterial.selectedItemPosition.coerceIn(0, RolaiSettings.MATERIAL_IDS.size - 1)
+        ]
+        val style = DiceSlotStyle(
+            body = colorBody,
+            number = colorNumber,
+            outline = colorOutline,
+            texture = texture,
+            material = material,
+            preset = preset,
+        )
+        setActiveSlotStyle(style)
+    }
+
+    private fun loadSlotIntoControls(style: DiceSlotStyle) {
+        colorBody = style.body
+        colorNumber = style.number
+        colorOutline = style.outline
+        spinnerDice.setSelection(
+            RolaiSettings.DICE_PRESET_IDS.indexOf(style.preset).coerceAtLeast(0)
+        )
+        spinnerTexture.setSelection(
+            RolaiSettings.TEXTURE_IDS.indexOf(style.texture).coerceAtLeast(0)
+        )
+        spinnerMaterial.setSelection(
+            RolaiSettings.MATERIAL_IDS.indexOf(style.material).coerceAtLeast(0)
+        )
+        buildPalettes()
+        renderPreview()
+    }
+
+    private fun switchSlot(slot: String) {
+        if (activeDiceSlot == slot) return
+        saveCurrentSlotFromControls()
+        activeDiceSlot = slot
+        updateSlotButtons()
+        loadSlotIntoControls(getActiveSlotStyle())
+        saveFromViews()
+    }
+
+    private fun updateSlotButtons() {
+        val activeColor = 0xFF1D9E75.toInt()
+        val inactiveColor = 0xFF1B2228.toInt()
+        val textActive = 0xFFFFFFFF.toInt()
+        val textInactive = 0xFF8B95A1.toInt()
+
+        btnSlot1.backgroundTintList = ColorStateList.valueOf(if (activeDiceSlot == "1") activeColor else inactiveColor)
+        btnSlot1.setTextColor(if (activeDiceSlot == "1") textActive else textInactive)
+
+        btnSlot2.backgroundTintList = ColorStateList.valueOf(if (activeDiceSlot == "2") activeColor else inactiveColor)
+        btnSlot2.setTextColor(if (activeDiceSlot == "2") textActive else textInactive)
+
+        btnSlot3.backgroundTintList = ColorStateList.valueOf(if (activeDiceSlot == "3") activeColor else inactiveColor)
+        btnSlot3.setTextColor(if (activeDiceSlot == "3") textActive else textInactive)
+    }
+
     private fun loadIntoViews(settings: RolaiSettings) {
         editRoomCode.setText(settings.roomCode)
         editName.setText(settings.playerName)
@@ -474,19 +569,14 @@ class SettingsActivity : Activity() {
         val systemIndex = resolveSystemIndex(settings.system)
         spinnerSystem.setSelection(systemIndex)
         renderInputsForm(systemIndex, settings.inputsJson)
-        spinnerDice.setSelection(
-            RolaiSettings.DICE_PRESET_IDS.indexOf(settings.dicePreset).coerceAtLeast(0)
-        )
-        colorBody = settings.diceBody
-        colorNumber = settings.diceNumber
-        colorOutline = settings.diceOutline
-        spinnerTexture.setSelection(
-            RolaiSettings.TEXTURE_IDS.indexOf(settings.diceTexture).coerceAtLeast(0),
-        )
-        spinnerMaterial.setSelection(
-            RolaiSettings.MATERIAL_IDS.indexOf(settings.diceMaterial).coerceAtLeast(0),
-        )
-        renderPreview()
+
+        slot1Style = settings.slotStyle("1")
+        slot2Style = settings.slotStyle("2")
+        slot3Style = settings.slotStyle("3")
+        activeDiceSlot = "1"
+        updateSlotButtons()
+        loadSlotIntoControls(slot1Style)
+
         seekScale.progress = settings.diceScalePercent
         updateScaleLabel(settings.diceScalePercent)
         spinnerQuality.setSelection(
@@ -676,6 +766,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun saveFromViews() {
+        saveCurrentSlotFromControls()
         val position = spinnerSystem.selectedItemPosition.coerceIn(0, systemIds.size - 1)
         val server = editServer.text.toString().trim()
         RolaiSettings.save(
@@ -688,29 +779,31 @@ class SettingsActivity : Activity() {
                 inputsJson = inputsFromForm(position),
                 wsBaseUrl = if (RolaiSettings.isValidWsBaseUrl(server)) server
                 else RolaiSettings.DEFAULT_WS_BASE_URL,
-                // Endereco do app (botao "Abrir o rolai.app"). Numa build de
-                // DEBUG o default aponta pro Vite da maquina
-                // (localhost:5273), entao sem campo na tela o botao ficava
-                // quebrado sem conserto possivel. Vazio volta pro default do
-                // buildType. O palco 3D nao passa por aqui — vem do APK.
                 webBaseUrl = editWeb.text.toString().trim()
                     .ifEmpty { RolaiSettings.DEFAULT_WEB_BASE_URL },
-                dicePreset = RolaiSettings.DICE_PRESET_IDS[
-                    spinnerDice.selectedItemPosition
-                        .coerceIn(0, RolaiSettings.DICE_PRESET_IDS.size - 1)
-                ],
+                // Slot 1
+                dicePreset = slot1Style.preset,
+                diceBody = slot1Style.body,
+                diceNumber = slot1Style.number,
+                diceOutline = slot1Style.outline,
+                diceTexture = slot1Style.texture,
+                diceMaterial = slot1Style.material,
+                // Slot 2
+                dice2Preset = slot2Style.preset,
+                dice2Body = slot2Style.body,
+                dice2Number = slot2Style.number,
+                dice2Outline = slot2Style.outline,
+                dice2Texture = slot2Style.texture,
+                dice2Material = slot2Style.material,
+                // Slot 3
+                dice3Preset = slot3Style.preset,
+                dice3Body = slot3Style.body,
+                dice3Number = slot3Style.number,
+                dice3Outline = slot3Style.outline,
+                dice3Texture = slot3Style.texture,
+                dice3Material = slot3Style.material,
+                // Geral
                 diceScalePercent = seekScale.progress,
-                diceBody = colorBody,
-                diceNumber = colorNumber,
-                diceOutline = colorOutline,
-                diceTexture = RolaiSettings.TEXTURE_IDS[
-                    spinnerTexture.selectedItemPosition
-                        .coerceIn(0, RolaiSettings.TEXTURE_IDS.size - 1)
-                ],
-                diceMaterial = RolaiSettings.MATERIAL_IDS[
-                    spinnerMaterial.selectedItemPosition
-                        .coerceIn(0, RolaiSettings.MATERIAL_IDS.size - 1)
-                ],
                 quality = RolaiSettings.QUALITY_IDS[
                     spinnerQuality.selectedItemPosition
                         .coerceIn(0, RolaiSettings.QUALITY_IDS.size - 1)
@@ -739,24 +832,36 @@ class SettingsActivity : Activity() {
             val json = assets.open("headless/systems.json").bufferedReader().use { it.readText() }
             val allInfos = ProfileForm.parseSystems(json)
             systemInfoById = allInfos.associateBy { it.system }
-            // Sistemas soltos primeiro (na ordem do systems.json); os que
-            // sao member de uma familia (Infaernum) NAO entram aqui — so
-            // aparecem uma vez, pela familia, abaixo.
+
+            data class SystemOption(
+                val id: String,
+                val label: String,
+                val info: SystemInfo,
+                val family: ProfileFamily? = null,
+            )
+
+            val options = mutableListOf<SystemOption>()
+            // Sistemas soltos primeiro
             for (info in allInfos) {
                 if (info.system in ProfileFamilies.memberSystemIds) continue
-                systemIds.add(info.system)
-                labels.add(info.label)
-                systemInfos.add(info)
+                options.add(SystemOption(info.system, info.label, info, null))
             }
-            // Uma entrada por familia, no PRIMEIRO member por padrao — o
-            // spinner "Modo" (renderInputsForm) troca pros outros sem
-            // precisar de outra linha aqui.
+            // Famílias de sistemas
             for (family in ProfileFamilies.ALL) {
                 val first = systemInfoById[family.members.first().system] ?: continue
-                familyAtPosition[systemIds.size] = family
-                systemIds.add(first.system)
-                labels.add(family.label)
-                systemInfos.add(first)
+                options.add(SystemOption(first.system, family.label, first, family))
+            }
+
+            val collator = java.text.Collator.getInstance(java.util.Locale("pt", "BR"))
+            options.sortWith { a, b -> collator.compare(a.label, b.label) }
+
+            for (opt in options) {
+                if (opt.family != null) {
+                    familyAtPosition[systemIds.size] = opt.family
+                }
+                systemIds.add(opt.id)
+                labels.add(opt.label)
+                systemInfos.add(opt.info)
             }
         } catch (e: Exception) {
             // systems.json ausente/corrompido: fica so a notacao livre —
@@ -1055,13 +1160,15 @@ class SettingsActivity : Activity() {
      * atalho pra quem nao quer escolher cor a cor.
      */
     private fun applyPreset(id: String) {
-        val preset = PRESETS[id] ?: return
-        colorBody = preset[0]
-        colorNumber = preset[1]
-        colorOutline = preset[2]
-        spinnerTexture.setSelection(RolaiSettings.TEXTURE_IDS.indexOf(preset[3]).coerceAtLeast(0))
-        spinnerMaterial.setSelection(RolaiSettings.MATERIAL_IDS.indexOf(preset[4]).coerceAtLeast(0))
+        val preset = RolaiSettings.PRESET_STYLES[id] ?: return
+        colorBody = preset.body
+        colorNumber = preset.number
+        colorOutline = preset.outline
+        spinnerTexture.setSelection(RolaiSettings.TEXTURE_IDS.indexOf(preset.texture).coerceAtLeast(0))
+        spinnerMaterial.setSelection(RolaiSettings.MATERIAL_IDS.indexOf(preset.material).coerceAtLeast(0))
+        buildPalettes()
         renderPreview()
+        saveCurrentSlotFromControls()
     }
 
     companion object {
@@ -1073,17 +1180,5 @@ class SettingsActivity : Activity() {
         // inflaria RolaiSettings (e todo teste que instancia ela) por algo
         // que nao tem nada a ver com rolagem.
         private const val COLLAPSE_PREFS_NAME = "rolai_settings_ui"
-
-        // id -> [corpo, numero, contorno, textura, material]
-        private val PRESETS = mapOf(
-            "esmeralda" to listOf("#1d9e75", "#f4f7f5", "#0c3527", "none", "plastic"),
-            "osso" to listOf("#e8e0cd", "#3a3226", "#3a3226", "marble", "auto"),
-            "obsidiana" to listOf("#14171c", "#e5c07b", "#e5c07b", "speckles", "metal"),
-            "sangue" to listOf("#8c1f2b", "#f7e8e2", "#2b0a0e", "marble", "plastic"),
-            "abissal" to listOf("#22307a", "#9fd8ff", "#0a1030", "astral", "auto"),
-            "gelo" to listOf("#bfe6f2", "#123a4a", "#0b2733", "ice", "glass"),
-            "escamas" to listOf("#2f6b3a", "#eaf7d9", "#10240f", "dragon", "auto"),
-            "madeira" to listOf("#7a4a22", "#f0dcb8", "#2a1608", "wood", "wood"),
-        )
     }
 }

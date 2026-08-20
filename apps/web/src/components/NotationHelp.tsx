@@ -36,8 +36,14 @@ const COMBINADO: Linha[] = [
   { exemplo: "{2d6+2} vs {2c}", explica: "dados de ação contra cartas de desafio (Firelights)" },
 ];
 
+const CORES: Linha[] = [
+  { exemplo: "1[3d6] + 2[1d6]", explica: "3 dados na Cor 1 (primária) e 1 dado na Cor 2 (secundária)" },
+  { exemplo: "1[3d6] + 2[2d6] + 3[1d6]", explica: "mistura dados das cores 1, 2 e 3 (configuráveis em Preferências)" },
+  { exemplo: "1[1d20adv] + 2[1d4]", explica: "d20 na cor primária com dado de bônus na cor secundária" },
+];
+
 /** Todos os exemplos exibidos — o teste garante que o parser aceita cada um. */
-export const HELP_EXAMPLES: string[] = [...BASICO, ...SELECAO, ...COMBINADO].map(
+export const HELP_EXAMPLES: string[] = [...BASICO, ...SELECAO, ...COMBINADO, ...CORES].map(
   (linha) => linha.exemplo,
 );
 
@@ -69,6 +75,7 @@ export function NotationHelp() {
       <Bloco titulo="Básico" linhas={BASICO} />
       <Bloco titulo="Escolher e rerrolar" linhas={SELECAO} />
       <Bloco titulo="Combinar" linhas={COMBINADO} />
+      <Bloco titulo="Cores diferentes" linhas={CORES} />
       <p className="notation-foot">
         Escolher sistema em <strong>Preferências</strong> troca o painel por
         campos prontos (Firelights, Ironsworn, PbtA, FitD, Fate, d20, d100) — a notação

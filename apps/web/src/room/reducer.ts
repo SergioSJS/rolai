@@ -12,7 +12,7 @@
 
 import type { RollResult } from "@rolai/rules-engine";
 import type { Card, DeckConfig } from "@rolai/deck-engine";
-import type { DiceStyle } from "../settings";
+import type { DiceStyle, DiceStyles } from "../settings";
 
 export interface RollHistoryEntry {
   type: "roll";
@@ -21,6 +21,7 @@ export interface RollHistoryEntry {
   // Aparencia dos dados de quem rolou (pode faltar: cliente antigo ou
   // estilo invalido) — usada pra colorir o nome e animar na cor certa.
   style?: DiceStyle | null;
+  styles?: DiceStyles | null;
 }
 
 export interface DeckDrawHistoryEntry {
@@ -55,6 +56,7 @@ export type HistoryEntry =
 export interface RosterMember {
   name: string;
   style?: DiceStyle | null;
+  styles?: DiceStyles | null;
 }
 
 export type ConnectionStatus =

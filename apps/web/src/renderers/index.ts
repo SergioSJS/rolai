@@ -2,7 +2,7 @@
 // ver src/settings.ts). Os dois tiers 3D dividem o mesmo motor; o "leve" so
 // desliga a sombra.
 
-import type { DiceStyle, QualityTier } from "../settings";
+import type { DiceStyle, DiceStyles, QualityTier } from "../settings";
 import { clampDiceScale, DEFAULT_DICE_SCALE, DEFAULT_DICE_STYLE } from "../settings";
 import type { DiceBoxOptions } from "./diceBox";
 import type { RollRenderer } from "./types";
@@ -21,11 +21,13 @@ export function diceBoxOptions(
   style: DiceStyle,
   scale: number = DEFAULT_DICE_SCALE,
   sounds: boolean = true,
+  styles?: DiceStyles,
 ): DiceBoxOptions {
   return {
     shadows: tier === "3d-full",
     lightIntensity: LIGHT_INTENSITY,
     style,
+    styles,
     scale: clampDiceScale(scale),
     sounds,
   };
@@ -38,11 +40,12 @@ export function createRenderer(
   // Desligado pelo overlay do Android, que toca o som nativo (DiceSounds.kt)
   // pra nao pedir foco de audio e abaixar o som de quem estiver ouvindo.
   sounds: boolean = true,
+  styles?: DiceStyles,
 ): RollRenderer {
   switch (tier) {
     case "3d-full":
     case "3d-light":
-      return new DiceBoxRenderer(diceBoxOptions(tier, style, scale, sounds));
+      return new DiceBoxRenderer(diceBoxOptions(tier, style, scale, sounds, styles));
     case "2d":
       return new Css2DRenderer();
     case "text":

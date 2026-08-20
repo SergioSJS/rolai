@@ -1055,55 +1055,7 @@ class OverlayView(context: Context) {
         }
         val ssb = SpannableStringBuilder()
         for (i in lines.indices) {
-            val line = lines[i]
-            val colonIdx = line.indexOf(": ")
-            val startLine = ssb.length
-
-            if (colonIdx != -1) {
-                val playerName = line.substring(0, colonIdx)
-                val rest = line.substring(colonIdx + 2)
-                val nameStart = ssb.length
-                ssb.append(playerName)
-                ssb.setSpan(
-                    ForegroundColorSpan(ACCENT_BRIGHT),
-                    nameStart,
-                    ssb.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-                ssb.setSpan(
-                    StyleSpan(Typeface.BOLD),
-                    nameStart,
-                    ssb.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-                ssb.append(": ")
-                ssb.append(rest)
-            } else {
-                ssb.append(line)
-            }
-
-            // Destaca cartas vermelhas (♥ e ♦)
-            val lineEnd = ssb.length
-            try {
-                val cardRedRegex = Regex("""(10|[A2-9JQK])([♥♦])""")
-                for (match in cardRedRegex.findAll(ssb.substring(startLine, lineEnd))) {
-                    val matchStart = startLine + match.range.first
-                    val matchEnd = startLine + match.range.last + 1
-                    ssb.setSpan(
-                        ForegroundColorSpan(Color.parseColor("#FF6B6B")),
-                        matchStart,
-                        matchEnd,
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
-                    ssb.setSpan(
-                        StyleSpan(Typeface.BOLD),
-                        matchStart,
-                        matchEnd,
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
-                }
-            } catch (_: Exception) {}
-
+            ssb.append(formatRichLine(lines[i]))
             if (i < lines.size - 1) {
                 ssb.append("\n\n")
             }
@@ -1530,7 +1482,7 @@ class OverlayView(context: Context) {
         statusDot.setTextColor(if (connected) ACCENT_BRIGHT else MUTED)
     }
 
-    fun showResult(text: String, tone: OutcomeTone = OutcomeTone.NEUTRAL) {
+    fun showResult(text: CharSequence, tone: OutcomeTone = OutcomeTone.NEUTRAL) {
         // Falha em vermelho: rolando por cima de outro app, a linha some no
         // meio do que estiver embaixo se sucesso e falha tiverem a mesma cor.
         val cor = when (tone) {
@@ -1541,9 +1493,10 @@ class OverlayView(context: Context) {
         panelResultView.setTextColor(cor)
         historyResultView.setTextColor(cor)
         resultFlash.setTextColor(cor)
-        panelResultView.text = text
-        historyResultView.text = text
-        resultFlash.text = text
+        val formatted = if (text is String) formatRichLine(text) else text
+        panelResultView.text = formatted
+        historyResultView.text = formatted
+        resultFlash.text = formatted
         // Com o painel aberto (rolagem por chips/digitada), o resultado
         // aparece nele mesmo. Pelo atalho do fan: flash compacto que some
         // sozinho — NAO abre cartao nenhum.
@@ -1554,7 +1507,13 @@ class OverlayView(context: Context) {
     fun addActivityLine(line: String) {
         history.addLast(line)
         while (history.size > MAX_HISTORY) history.removeFirst()
-        activityView.text = history.toList().takeLast(MAX_ACTIVITY_LINES).joinToString("\n")
+        val recent = history.toList().takeLast(MAX_ACTIVITY_LINES)
+        val ssb = SpannableStringBuilder()
+        for (i in recent.indices) {
+            ssb.append(formatRichLine(recent[i]))
+            if (i < recent.size - 1) ssb.append("\n")
+        }
+        activityView.text = ssb
         if (mode == Mode.HISTORY) renderHistory()
     }
 
@@ -1690,6 +1649,155 @@ class OverlayView(context: Context) {
         // vermelho escuro sumiria sobre fundo escuro.
         private val FAILURE_TEXT = Color.rgb(0xFF, 0x6B, 0x6B)
         private val PARTIAL_TEXT = Color.rgb(0xFF, 0xC6, 0x5C)
+
+        // Cores dos slots de dados para formatação rica de resultados e logs
+        private val SLOT_1_COLOR = Color.rgb(0x25, 0xC4, 0x8F) // Esmeralda (#25c48f)
+        private val SLOT_2_COLOR = Color.rgb(0xF8, 0x71, 0x71) // Sangue (#f87171)
+        private val SLOT_3_COLOR = Color.rgb(0x38, 0xBD, 0xF8) // Gelo (#38bdf8)
+        private val CARD_RED_COLOR = Color.rgb(0xFF, 0x6B, 0x6B)
+
+        /**
+         * Formata uma linha de histórico / atividade com destaque de cores nos
+         * nomes de jogadores, rótulos de slots (Base, Perícia, Equipamento),
+         * valores de cartas, dados e desfechos (sucesso / falha / dano).
+         */
+        fun formatRichLine(rawLine: String): SpannableStringBuilder {
+            val ssb = SpannableStringBuilder()
+            val colonIdx = rawLine.indexOf(": ")
+
+            val content = if (colonIdx != -1) {
+                val playerName = rawLine.substring(0, colonIdx)
+                val nameStart = ssb.length
+                ssb.append(playerName)
+                ssb.setSpan(
+                    ForegroundColorSpan(ACCENT_BRIGHT),
+                    nameStart,
+                    ssb.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+                ssb.setSpan(
+                    StyleSpan(Typeface.BOLD),
+                    nameStart,
+                    ssb.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+                val colonStart = ssb.length
+                ssb.append(": ")
+                ssb.setSpan(
+                    ForegroundColorSpan(MUTED),
+                    colonStart,
+                    ssb.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+                rawLine.substring(colonIdx + 2)
+            } else {
+                rawLine
+            }
+
+            val bodyStart = ssb.length
+            ssb.append(content)
+
+            // 1. Notação inicial (ex: "{2d6+1} + {0d6} + {1d6}" ou "1[1d6] + 2[2d6]" ou "2d6+1"):
+            // Se houver grupos ou outcome na linha, a notação que precede fica em MUTED
+            val notationRegex = Regex("""^(\{[^}]+\}(\s*(\+|\bvs\b)\s*\{[^}]+\})*|\d*\[[^\]]+\](\s*(\+|\bvs\b)\s*\d*\[[^\]]+\])*|\b\d+d\w+[^\s]*)\s+""")
+            val notationMatch = notationRegex.find(content)
+            if (notationMatch != null) {
+                val notStart = bodyStart + notationMatch.range.first
+                val notEnd = bodyStart + notationMatch.range.last + 1
+                ssb.setSpan(
+                    ForegroundColorSpan(MUTED),
+                    notStart,
+                    notEnd,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+
+            // 2. Destaca grupos de dados com cores de slots:
+            // Slot 1: base, ação, claros, grupo 1, regulares
+            val slot1Regex = Regex("""\b(base|ação|acao|claros|grupo 1|regulares)\b""", RegexOption.IGNORE_CASE)
+            for (m in slot1Regex.findAll(content)) {
+                val ms = bodyStart + m.range.first
+                val me = bodyStart + m.range.last + 1
+                ssb.setSpan(ForegroundColorSpan(SLOT_1_COLOR), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // Slot 2: perícia, desafio, escuros, fome/ira, grupo 2
+            val slot2Regex = Regex("""\b(perícia|pericia|desafio|escuros|fome/ira|grupo 2)\b""", RegexOption.IGNORE_CASE)
+            for (m in slot2Regex.findAll(content)) {
+                val ms = bodyStart + m.range.first
+                val me = bodyStart + m.range.last + 1
+                ssb.setSpan(ForegroundColorSpan(SLOT_2_COLOR), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // Slot 3: equipamento, ruína, grupo 3
+            val slot3Regex = Regex("""\b(equipamento|ruína|ruina|grupo 3)\b""", RegexOption.IGNORE_CASE)
+            for (m in slot3Regex.findAll(content)) {
+                val ms = bodyStart + m.range.first
+                val me = bodyStart + m.range.last + 1
+                ssb.setSpan(ForegroundColorSpan(SLOT_3_COLOR), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // 3. Destaca números nos colchetes [x, y, z]:
+            val bracketRegex = Regex("""\[([^\]]+)\]""")
+            for (m in bracketRegex.findAll(content)) {
+                val ms = bodyStart + m.range.first
+                val me = bodyStart + m.range.last + 1
+                ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // 4. Destaca cartas vermelhas (♥ e ♦)
+            val cardRedRegex = Regex("""(10|[A2-9JQK])([♥♦])""")
+            for (m in cardRedRegex.findAll(content)) {
+                val ms = bodyStart + m.range.first
+                val me = bodyStart + m.range.last + 1
+                ssb.setSpan(ForegroundColorSpan(CARD_RED_COLOR), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // 5. Destaca outcome / resultado (após " — "):
+            val outcomeIdx = content.indexOf(" — ")
+            if (outcomeIdx != -1) {
+                var outcomeEndIdx = content.indexOf(" (", outcomeIdx)
+                if (outcomeEndIdx == -1) outcomeEndIdx = content.length
+                val outcomeText = content.substring(outcomeIdx + 3, outcomeEndIdx)
+                val outStart = bodyStart + outcomeIdx + 3
+                val outEnd = bodyStart + outcomeEndIdx
+
+                val isFailure = outcomeText.contains("falha", ignoreCase = true) ||
+                    outcomeText.contains("dano", ignoreCase = true) ||
+                    outcomeText.contains("desgraça", ignoreCase = true) ||
+                    outcomeText.contains("desgraca", ignoreCase = true) ||
+                    outcomeText.contains("pânico", ignoreCase = true) ||
+                    outcomeText.contains("panico", ignoreCase = true) ||
+                    outcomeText.contains("descontrole", ignoreCase = true)
+
+                val isPartial = outcomeText.contains("parcial", ignoreCase = true) ||
+                    outcomeText.contains("vislumbre", ignoreCase = true) ||
+                    outcomeText.contains("complicada", ignoreCase = true)
+
+                val outColor = when {
+                    isFailure -> FAILURE_TEXT
+                    isPartial -> PARTIAL_TEXT
+                    else -> ACCENT_BRIGHT
+                }
+                ssb.setSpan(ForegroundColorSpan(outColor), outStart, outEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ssb.setSpan(StyleSpan(Typeface.BOLD), outStart, outEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // 6. Destaca parâmetros testados (ex: "(Dificuldade: 1)"):
+            val testedRegex = Regex("""\(([^)]+)\)""")
+            for (m in testedRegex.findAll(content)) {
+                val ms = bodyStart + m.range.first
+                val me = bodyStart + m.range.last + 1
+                ssb.setSpan(ForegroundColorSpan(MUTED), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            return ssb
+        }
+
         private const val MAX_ACTIVITY_LINES = 3
         private const val HISTORY_CARD_LINES = 20
         private const val MAX_HISTORY = 40

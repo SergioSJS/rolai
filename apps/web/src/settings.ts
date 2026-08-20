@@ -290,6 +290,52 @@ export function saveTheme(storage: StorageLike, theme: ThemeName): void {
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
+export type DiceStyles = Record<"1" | "2" | "3", DiceStyle>;
+
+export const DEFAULT_DICE_STYLES: DiceStyles = {
+  "1": DEFAULT_DICE_STYLE,
+  "2": {
+    body: "#14171c",
+    number: "#f87171",
+    outline: "#7f1d1d",
+    texture: "speckles",
+    material: "metal",
+  },
+  "3": {
+    body: "#7a4a22",
+    number: "#f0dcb8",
+    outline: "#2a1608",
+    texture: "wood",
+    material: "wood",
+  },
+};
+
+const DICE_STYLES_KEY = "rolai.dice-styles";
+
+export function sanitizeDiceStyle(
+  raw: unknown,
+  fallback: DiceStyle = DEFAULT_DICE_STYLE,
+): DiceStyle {
+  if (typeof raw !== "object" || raw === null) return fallback;
+  const { body, number, outline, texture, material } = raw as Record<
+    string,
+    unknown
+  >;
+  const color = (v: unknown, def: string): string =>
+    typeof v === "string" && HEX_COLOR.test(v) ? v : def;
+  return {
+    body: color(body, fallback.body),
+    number: color(number, fallback.number),
+    outline: color(outline, fallback.outline),
+    texture: (DICE_TEXTURES as readonly unknown[]).includes(texture)
+      ? (texture as DiceTexture)
+      : fallback.texture,
+    material: (DICE_MATERIALS as readonly unknown[]).includes(material)
+      ? (material as DiceMaterial)
+      : fallback.material,
+  };
+}
+
 // Estilo do dado: valida campo a campo e cai no default no que estiver
 // corrompido — o valor vai direto pro renderer 3D.
 export function loadDiceStyle(storage: StorageLike): DiceStyle {
@@ -297,24 +343,7 @@ export function loadDiceStyle(storage: StorageLike): DiceStyle {
   if (raw === null) return DEFAULT_DICE_STYLE;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return DEFAULT_DICE_STYLE;
-    const { body, number, outline, texture, material } = parsed as Record<
-      string,
-      unknown
-    >;
-    const color = (v: unknown, fallback: string): string =>
-      typeof v === "string" && HEX_COLOR.test(v) ? v : fallback;
-    return {
-      body: color(body, DEFAULT_DICE_STYLE.body),
-      number: color(number, DEFAULT_DICE_STYLE.number),
-      outline: color(outline, DEFAULT_DICE_STYLE.outline),
-      texture: (DICE_TEXTURES as readonly unknown[]).includes(texture)
-        ? (texture as DiceTexture)
-        : DEFAULT_DICE_STYLE.texture,
-      material: (DICE_MATERIALS as readonly unknown[]).includes(material)
-        ? (material as DiceMaterial)
-        : DEFAULT_DICE_STYLE.material,
-    };
+    return sanitizeDiceStyle(parsed, DEFAULT_DICE_STYLE);
   } catch {
     return DEFAULT_DICE_STYLE;
   }
@@ -322,6 +351,36 @@ export function loadDiceStyle(storage: StorageLike): DiceStyle {
 
 export function saveDiceStyle(storage: StorageLike, style: DiceStyle): void {
   storage.setItem(DICE_STYLE_KEY, JSON.stringify(style));
+}
+
+export function loadDiceStyles(storage: StorageLike): DiceStyles {
+  const raw = storage.getItem(DICE_STYLES_KEY);
+  const single = loadDiceStyle(storage);
+  const result: DiceStyles = {
+    "1": single,
+    "2": DEFAULT_DICE_STYLES["2"],
+    "3": DEFAULT_DICE_STYLES["3"],
+  };
+  if (raw !== null) {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (typeof parsed === "object" && parsed !== null) {
+        if (parsed["1"]) result["1"] = sanitizeDiceStyle(parsed["1"], DEFAULT_DICE_STYLES["1"]);
+        if (parsed["2"]) result["2"] = sanitizeDiceStyle(parsed["2"], DEFAULT_DICE_STYLES["2"]);
+        if (parsed["3"]) result["3"] = sanitizeDiceStyle(parsed["3"], DEFAULT_DICE_STYLES["3"]);
+      }
+    } catch {
+      // fallback
+    }
+  }
+  return result;
+}
+
+export function saveDiceStyles(storage: StorageLike, styles: DiceStyles): void {
+  storage.setItem(DICE_STYLES_KEY, JSON.stringify(styles));
+  if (styles["1"]) {
+    saveDiceStyle(storage, styles["1"]);
+  }
 }
 
 // Tamanho do dado: multiplicador do baseScale do motor 3D.

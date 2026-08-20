@@ -170,7 +170,22 @@ export function rollAST(
   const state = createRollState(options);
   const groups: Record<string, RollGroup> = {};
   for (const groupSpec of ast.groups) {
-    groups[groupSpec.name] = rollGroup(groupSpec, state);
+    const rolled = rollGroup(groupSpec, state);
+    if (groupSpec.slot !== undefined) {
+      rolled.slot = groupSpec.slot;
+    }
+    // Em notação de múltiplos grupos com soma ("1[1d6] + 2[2d6] + ..."), cada
+    // grupo é somado: calculamos o total de cada grupo se não houver operador interno.
+    if (
+      ast.groups.length > 1 &&
+      groupSpec.name.startsWith("group") &&
+      rolled.total === undefined
+    ) {
+      rolled.total =
+        rolled.rolls.reduce((sum, v) => sum + v, 0) +
+        (groupSpec.dice.modifier ?? 0);
+    }
+    groups[groupSpec.name] = rolled;
   }
   return {
     notation,

@@ -24,6 +24,8 @@ import yzeYaml from "@rolai/rules-engine/profiles/yze.yaml?raw";
 import yzeFblYaml from "@rolai/rules-engine/profiles/yze_fbl.yaml?raw";
 import yzeAlienYaml from "@rolai/rules-engine/profiles/yze_alien.yaml?raw";
 import yzeWduYaml from "@rolai/rules-engine/profiles/yze_wdu.yaml?raw";
+import trophyDarkYaml from "@rolai/rules-engine/profiles/trophy_dark.yaml?raw";
+import trophyGoldYaml from "@rolai/rules-engine/profiles/trophy_gold.yaml?raw";
 
 // A ordem aqui e a ordem do seletor de sistema na UI: do mais comum na
 // mesa pro mais especifico.
@@ -35,6 +37,8 @@ const PROFILE_YAMLS: Record<string, string> = {
   fitd: fitdYaml,
   ironsworn: ironswornYaml,
   firelights: firelightsYaml,
+  trophy_dark: trophyDarkYaml,
+  trophy_gold: trophyGoldYaml,
   d100: d100Yaml,
   roll_under: rollUnderYaml,
   pool_d6: poolD6Yaml,

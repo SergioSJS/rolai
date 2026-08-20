@@ -185,9 +185,14 @@ class RoomStore:
             await self._redis.expire(self._key(code, suffix), ttl)
 
     async def add_member(
-        self, code: str, member_id: str, name: str, style: DiceStyle | None = None
+        self,
+        code: str,
+        member_id: str,
+        name: str,
+        style: DiceStyle | None = None,
+        styles: dict[str, DiceStyle] | None = None,
     ) -> None:
-        member = RosterMember(name=name, style=style)
+        member = RosterMember(name=name, style=style, styles=styles)
         await self._redis.hset(self._key(code, ":roster"), member_id, member.model_dump_json())
         await self._refresh_ttl(code)
 
@@ -385,6 +390,23 @@ def _parse_style(raw: str | None) -> DiceStyle | None:
         return None
 
 
+def _parse_styles(raw: str | None) -> dict[str, DiceStyle] | None:
+    """Estilos dos 3 slots de dados (JSON na query string 'styles')."""
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            parsed: dict[str, DiceStyle] = {}
+            for k in ("1", "2", "3"):
+                if k in data and isinstance(data[k], dict):
+                    parsed[k] = DiceStyle.model_validate(data[k])
+            return parsed or None
+    except (json.JSONDecodeError, ValidationError, ValueError, TypeError):
+        return None
+    return None
+
+
 def _room_dict(
     store: dict[str, dict[str, WebSocket]], code: str
 ) -> dict[str, WebSocket]:
@@ -462,6 +484,7 @@ async def room_ws(
     code: str,
     name: str = "anonymous",
     style: str | None = None,
+    styles: str | None = None,
     spectator: bool = False,
 ) -> None:
     settings = _settings_of(websocket)
@@ -519,7 +542,7 @@ async def room_ws(
         try:
             created = await store.claim(code)
         except RoomCapReached:
-            log.warning("event=room_cap_reached via=ws ip=%s", ip)
+            log.warning("event=room_cap_reached via=ws ip=%s", code)
             _stats_of(websocket).limit_hit("room_cap")
             await websocket.close(code=4429)
             return
@@ -553,12 +576,16 @@ async def room_ws(
     name = name.strip()[: settings.max_name_length] or "anonymous"
 
     member_id = uuid.uuid4().hex
+    dice_styles = _parse_styles(styles)
     dice_style = _parse_style(style)
+    if dice_style is None and dice_styles is not None:
+        dice_style = dice_styles.get("1")
+
     role = "spectator" if spectator else "player"
     if spectator:
         spectators[member_id] = websocket
     else:
-        await store.add_member(code, member_id, name, dice_style)
+        await store.add_member(code, member_id, name, dice_style, dice_styles)
         connections[member_id] = websocket
     log.info("event=ws_open code=%s role=%s player=%s ip=%s", code, role, name, ip)
     _stats_of(websocket).ws_opened(spectator)
@@ -567,7 +594,16 @@ async def room_ws(
     bucket = TokenBucket(rate_per_second=limit / 60.0, capacity=float(limit))
 
     def roster_payload(members: list[RosterMember]) -> list[dict[str, object]]:
-        return [m.model_dump(mode="json") for m in members]
+        payload: list[dict[str, object]] = []
+        for m in members:
+            item: dict[str, object] = {
+                "name": m.name,
+                "style": m.style.model_dump(mode="json") if m.style else None,
+            }
+            if m.styles is not None:
+                item["styles"] = {k: v.model_dump(mode="json") for k, v in m.styles.items()}
+            payload.append(item)
+        return payload
 
     # Nota: o RollResult vai com exclude_none — campo opcional ausente, nunca
     # null. O contrato TS (docs/roll-notation.md) usa `campo?: tipo`, e um
@@ -637,15 +673,22 @@ async def room_ws(
             entry: HistoryEntry
             event: dict[str, object]
             if isinstance(event_in, RollEventIn):
-                # `style` acompanha a rolagem: cada cliente anima o dado de
-                # quem rolou com a cor de quem rolou, e nao com a propria.
-                entry = RollHistoryEntry(player=name, result=event_in.result, style=dice_style)
+                # `style` e `styles` acompanham a rolagem: cada cliente anima o dado de
+                # quem rolou com as cores de quem rolou, e nao com as proprias.
+                entry = RollHistoryEntry(
+                    player=name,
+                    result=event_in.result,
+                    style=dice_style,
+                    styles=dice_styles,
+                )
                 event = {
                     "type": "roll",
                     "player": name,
                     "result": event_in.result.model_dump(mode="json", exclude_none=True),
                     "style": dice_style.model_dump(mode="json") if dice_style else None,
                 }
+                if dice_styles is not None:
+                    event["styles"] = {k: v.model_dump(mode="json") for k, v in dice_styles.items()}
                 _stats_of(websocket).rolls_relayed += 1
             elif isinstance(event_in, DeckDrawEventIn):
                 entry = DeckDrawHistoryEntry(

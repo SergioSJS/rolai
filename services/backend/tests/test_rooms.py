@@ -249,6 +249,36 @@ def test_history_keeps_the_style_of_who_rolled(client: TestClient) -> None:
         assert snapshot["history"][0]["style"] == STYLE
 
 
+def test_player_styles_three_slots_travel_with_the_roll_and_roster(client: TestClient) -> None:
+    """Testa que styles com 3 slots viaja no roster, no broadcast do roll e no histórico."""
+    code = client.post("/rooms").json()["code"]
+    styles_dict = {
+        "1": STYLE,
+        "2": {
+            "body": "#112233",
+            "number": "#ffffff",
+            "outline": "#000000",
+            "texture": "marble",
+            "material": "metal",
+        },
+        "3": {
+            "body": "#334455",
+            "number": "#ffffff",
+            "outline": "#000000",
+            "texture": "marble",
+            "material": "metal",
+        },
+    }
+    styles_qs = quote(json.dumps(styles_dict))
+    with client.websocket_connect(f"/rooms/{code}?name=Ana&styles={styles_qs}") as ws_a:
+        snapshot = next_event(ws_a)
+        assert snapshot["roster"][0]["styles"] == styles_dict
+        ws_a.send_json(make_roll_message())
+        event = next_event(ws_a)
+        assert event["type"] == "roll"
+        assert event["styles"] == styles_dict
+
+
 # --- Sala com codigo escolhido pelo usuario (docs/security.md) ---
 
 CODIGO_FIXO = "mesa-do-sergio-2026"

@@ -122,7 +122,7 @@ class HandshakeStyleTest {
     }
 
     @Test
-    fun `url do handshake carrega o style`() {
+    fun `url do handshake carrega o style e styles`() {
         val url = RoomClient.buildHandshakeUrl(
             "wss://api.rolai.app",
             "a1B2-c3D",
@@ -131,6 +131,21 @@ class HandshakeStyleTest {
         )
         assertTrue(url.startsWith("wss://api.rolai.app/rooms/a1B2-c3D?name=sergio&style="))
         assertTrue(url.contains("%23b3261e")) // '#' escapado
+        assertTrue(url.contains("&styles="))
+    }
+
+    @Test
+    fun `stylesJson contem os 3 slots com formato DiceStyle`() {
+        val json = org.json.JSONObject(RoomClient.stylesJson(settings()))
+        assertTrue(json.has("1"))
+        assertTrue(json.has("2"))
+        assertTrue(json.has("3"))
+        val slot1 = json.getJSONObject("1")
+        assertEquals("#b3261e", slot1.getString("body"))
+        val slot2 = json.getJSONObject("2")
+        assertEquals(RolaiSettings.DEFAULT_2_BODY.lowercase(), slot2.getString("body"))
+        val slot3 = json.getJSONObject("3")
+        assertEquals(RolaiSettings.DEFAULT_3_BODY.lowercase(), slot3.getString("body"))
     }
 
     @Test

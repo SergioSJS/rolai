@@ -59,10 +59,12 @@ export function roomWsUrl(
   name: string,
   style?: unknown,
   spectator = false,
+  styles?: unknown,
 ): string {
   const base = wsBaseUrl().replace(/\/$/, "");
   const params = new URLSearchParams({ name });
   if (style !== undefined) params.set("style", JSON.stringify(style));
+  if (styles !== undefined) params.set("styles", JSON.stringify(styles));
   if (spectator) params.set("spectator", "1");
   return `${base}/rooms/${encodeURIComponent(code)}?${params.toString()}`;
 }

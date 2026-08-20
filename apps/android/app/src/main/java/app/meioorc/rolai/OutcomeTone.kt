@@ -44,6 +44,8 @@ private val FAILURE = setOf(
     "yze_dano_equipamento_x3",
     "yze_panico",
     "yze_descontrole",
+    // trophy
+    "trophy_ruina_aumenta",
 )
 
 private val PARTIAL = setOf(

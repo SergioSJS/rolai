@@ -89,6 +89,34 @@ describe("parseNotation", () => {
     expect(ast.groups[2]!.dice).toMatchObject({ count: 1, sides: 20, modifier: 1 });
   });
 
+  it("grupo: aceita marcadores de slot (1[3d6] + 2[2d6] + 3[1d6])", () => {
+    const ast = parseNotation("1[3d6] + 2[2d6] + 3[1d6]");
+    expect(ast.groups).toHaveLength(3);
+    expect(ast.groups[0]!.slot).toBe(1);
+    expect(ast.groups[0]!.dice).toMatchObject({ count: 3, sides: 6 });
+    expect(ast.groups[1]!.slot).toBe(2);
+    expect(ast.groups[1]!.dice).toMatchObject({ count: 2, sides: 6 });
+    expect(ast.groups[2]!.slot).toBe(3);
+    expect(ast.groups[2]!.dice).toMatchObject({ count: 1, sides: 6 });
+
+    const result = roll("1[3d6] + 2[2d6] + 3[1d6]", { deterministic: [1, 2, 3, 4, 5, 6] });
+    expect(result.groups["group0"]!.slot).toBe(1);
+    expect(result.groups["group1"]!.slot).toBe(2);
+    expect(result.groups["group2"]!.slot).toBe(3);
+  });
+
+  it("grupo vs: aceita marcadores de slot (1[1d6] vs 2[2d10])", () => {
+    const ast = parseNotation("1[1d6+2] vs 2[2d10]");
+    expect(ast.groups[0]!.slot).toBe(1);
+    expect(ast.groups[1]!.slot).toBe(2);
+  });
+
+  it("grupo individual: aceita 2[1d20adv]", () => {
+    const ast = parseNotation("2[1d20adv]");
+    expect(ast.groups[0]!.slot).toBe(2);
+    expect(ast.groups[0]!.dice).toMatchObject({ count: 2, sides: 20 });
+  });
+
   // Pool vazio e resultado legitimo de sistema que CALCULA a quantidade de
   // dados (Year Zero forcado sem dado sobrando). O caro era o contrario:
   // sem "0d6", o profile tinha que rolar um dado e descartar, e o palco 3D

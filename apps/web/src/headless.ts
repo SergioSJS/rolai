@@ -15,7 +15,8 @@ import { createDeck, draw, reshuffleDeck, updateConfig } from "@rolai/deck-engin
 import type { DeckConfig, DeckState } from "@rolai/deck-engine";
 import { availableProfiles, getProfile } from "./profiles.js";
 import { applyInputQuirks } from "./profileInputQuirks.js";
-import { planYzePush } from "./yzePush.js";
+import { isYzeSystem, planYzePush } from "./yzePush.js";
+import { isTrophy, planTrophyPush } from "./trophyPush.js";
 
 // Bridge injetado pelo Kotlin via addJavascriptInterface("RolaiBridge").
 // Em ambiente de teste (node/jsdom) pode nao existir — nesse caso o
@@ -271,10 +272,26 @@ const api: RolaiHeadlessApi = {
         : {};
       const raw: Record<string, string> = {};
       for (const [k, v] of Object.entries(current)) raw[k] = String(v);
-      const plan = planYzePush(system, previous, raw);
-      if (plan === null) throw new Error("essa rolagem nao da pra forcar");
+
+      let pushInputs: Record<string, string> | null = null;
+      if (isYzeSystem(system)) {
+        const plan = planYzePush(system, previous, raw);
+        if (plan === null) throw new Error("essa rolagem nao da pra forcar");
+        pushInputs = plan.inputs;
+      } else if (isTrophy(system)) {
+        const plan = planTrophyPush(previous, raw);
+        if (plan === null) throw new Error("essa rolagem nao da pra forcar");
+        pushInputs = {
+          claros: String(plan["claros"]),
+          escuros: String(plan["escuros"]),
+          ruina: String(plan["ruina"]),
+        };
+      } else {
+        throw new Error("sistema nao suporta forcar rolagem");
+      }
+
       const inputs: Record<string, number | string> = {};
-      for (const [k, v] of Object.entries(plan.inputs)) {
+      for (const [k, v] of Object.entries(pushInputs)) {
         if (v === "") continue;
         const n = Number(v);
         inputs[k] = Number.isFinite(n) ? n : v;
@@ -284,7 +301,7 @@ const api: RolaiHeadlessApi = {
         applyInputQuirks(profile, inputs),
         parseOptions(optionsJson),
       );
-      deliver(callbackId, { ok: true, result, pushInputs: plan.inputs });
+      deliver(callbackId, { ok: true, result, pushInputs });
     } catch (e) {
       deliver(callbackId, toError(e));
     }

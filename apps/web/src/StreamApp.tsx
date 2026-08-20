@@ -13,9 +13,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RollResult } from "@rolai/rules-engine";
 import type { Card } from "@rolai/deck-engine";
-import { loadDiceStyle, loadQualityTier, loadDiceScale, isQualityTier } from "./settings";
+import { loadDiceStyle, loadQualityTier, loadDiceScale, isQualityTier, DEFAULT_DICE_STYLES } from "./settings";
 import { DICE_PRESETS } from "./settings";
-import type { DiceStyle } from "./settings";
+import type { DiceStyle, DiceStyles } from "./settings";
 import type { RollRenderer } from "./renderers/types";
 import { exceedsAnimationCap, cardsFromResult } from "./renderers/types";
 import { createRenderer } from "./renderers";
@@ -34,7 +34,7 @@ import type { StreamOptions } from "./stream";
 export const STREAM_RESULT_MS = 8_000;
 
 export interface StreamBridge {
-  play(result: RollResult | string, style?: DiceStyle | null): void;
+  play(result: RollResult | string, style?: DiceStyle | null, styles?: DiceStyles | null): void;
   // Baralho (specs/08-baralho.md): mesmo espirito do play(), mas pra
   // cartas — segue a mesma escada de qualidade (tier 2D usa CardStack,
   // 3D usa CardStage3D).
@@ -62,6 +62,7 @@ interface Shown {
   // o dado que caiu — mesma logica do app principal (App.tsx).
   player: string;
   style: DiceStyle | null;
+  styles?: DiceStyles | null;
   seq: number;
 }
 
@@ -157,8 +158,34 @@ export function StreamApp({ options }: { options: StreamOptions }) {
     [scheduleCardClear],
   );
 
+  // Sincroniza as variáveis CSS para chips dos slots 1, 2 e 3
+  useEffect(() => {
+    const root = document.documentElement;
+    for (const [slot, defaultStyle] of Object.entries(DEFAULT_DICE_STYLES)) {
+      root.style.setProperty(`--dice-${slot}-body`, defaultStyle.body);
+      root.style.setProperty(`--dice-${slot}-number`, defaultStyle.number);
+      root.style.setProperty(`--dice-${slot}-outline`, defaultStyle.outline);
+    }
+  }, []);
+
   const animate = useCallback(
-    (result: RollResult, style?: DiceStyle | null, player?: string) => {
+    (result: RollResult, style?: DiceStyle | null, player?: string, styles?: DiceStyles | null) => {
+      // Atualiza variáveis CSS se estilos customizados foram passados
+      const root = document.documentElement;
+      if (styles) {
+        for (const [slot, s] of Object.entries(styles)) {
+          if (s) {
+            root.style.setProperty(`--dice-${slot}-body`, s.body);
+            root.style.setProperty(`--dice-${slot}-number`, s.number);
+            root.style.setProperty(`--dice-${slot}-outline`, s.outline);
+          }
+        }
+      } else if (style) {
+        root.style.setProperty("--dice-1-body", style.body);
+        root.style.setProperty("--dice-1-number", style.number);
+        root.style.setProperty("--dice-1-outline", style.outline);
+      }
+
       // Dados da rolagem anterior saem antes da nova entrar: sem ninguem
       // clicando pra dispensar, eles se acumulariam na mesa.
       rendererRef.current?.clear();
@@ -167,6 +194,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
         result,
         player: player ?? "",
         style: style ?? null,
+        styles: styles ?? null,
         seq: (prev?.seq ?? 0) + 1,
       }));
       const cards = cardsFromResult(result);
@@ -179,7 +207,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       if (!exceedsAnimationCap(result)) {
         // Depois do commit: a placa precisa estar na tela pra ser medida.
         queueRoll(() => {
-          rendererRef.current?.roll(result, style).catch((err: unknown) => {
+          rendererRef.current?.roll(result, style, styles).catch((err: unknown) => {
             console.warn("[rolai] animacao falhou:", err);
           });
         });
@@ -197,7 +225,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
     if (options.room === "") return;
     const onEvent = (event: RoomEvent) => {
       if (event.type === "roll") {
-        animate(event.result, event.style, event.player);
+        animate(event.result, event.style, event.player, event.styles);
       } else if (event.type === "deck_draw") {
         animateCards(event.cards);
       } else if (event.type === "snapshot") {
@@ -226,9 +254,10 @@ export function StreamApp({ options }: { options: StreamOptions }) {
   // do Android entrega string). `playCard` e o equivalente pra baralho.
   useEffect(() => {
     const bridge: StreamBridge = {
-      play(result, style) {
+      play(result, style, styles) {
         const parsed: unknown = typeof result === "string" ? JSON.parse(result) : result;
-        animate(parsed as RollResult, style ?? null);
+        const parsedStyles: unknown = typeof styles === "string" ? JSON.parse(styles) : styles;
+        animate(parsed as RollResult, style ?? null, undefined, parsedStyles as DiceStyles | null);
       },
       playCard(cards) {
         const parsed: unknown = typeof cards === "string" ? JSON.parse(cards) : cards;
@@ -289,6 +318,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
               result={shown.result}
               player={shown.player}
               playerStyle={shown.style}
+              playerStyles={shown.styles}
               showDismissHint={false}
             />
           </div>

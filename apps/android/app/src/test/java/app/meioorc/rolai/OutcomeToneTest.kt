@@ -83,6 +83,14 @@ class OutcomeToneTest {
     }
 
     @Test
+    fun `year zero e trophy`() {
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("yze_dano_atributo_x1"))
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("yze_panico"))
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("yze_descontrole"))
+        assertEquals(OutcomeTone.FAILURE, outcomeTone("trophy_ruina_aumenta"))
+    }
+
+    @Test
     fun `outcome desconhecido fica neutro em vez de chutar`() {
         assertEquals(OutcomeTone.NEUTRAL, outcomeTone("algo_de_profile_custom"))
         assertEquals(OutcomeTone.NEUTRAL, outcomeTone(""))

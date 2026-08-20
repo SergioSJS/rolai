@@ -535,7 +535,7 @@ class OverlayService : Service() {
             publishStatus(getString(R.string.status_connecting))
         }
 
-        override fun onRoll(player: String, resultJson: String, styleJson: String?) {
+        override fun onRoll(player: String, resultJson: String, styleJson: String?, stylesJson: String?) {
             overlay.addActivityLine("$player: ${formatResult(resultJson)}")
             // EMPURRA em vez de esperar o eco chegar na WebView espectadora.
             // O palco era um segundo cliente WS (spectator) e dependia dessa
@@ -543,7 +543,7 @@ class OverlayService : Service() {
             // simplesmente nao aparecia, sem erro nenhum. Agora quem ja tem a
             // rolagem (este servico) manda direto: uma conexao a menos por
             // aparelho e nada de animacao dependendo de rede extra.
-            diceStage.play(resultJson, styleJson)
+            diceStage.play(resultJson, styleJson, stylesJson)
             playDiceSound(resultJson)
             stageShow()
         }
@@ -947,7 +947,10 @@ class OverlayService : Service() {
         val entregue = roomState == RoomState.CONNECTED &&
             roomClient?.sendRoll(resultJson) == true
         if (!entregue) {
-            diceStage.play(resultJson)
+            val s = RolaiSettings.load(this)
+            val styleJson = RoomClient.styleJson(s)
+            val stylesJson = RoomClient.stylesJson(s)
+            diceStage.play(resultJson, styleJson, stylesJson)
             playDiceSound(resultJson)
             stageShow()
             // Sem eco do servidor, a nossa rolagem entra no historico aqui.
@@ -1192,21 +1195,33 @@ class OverlayService : Service() {
          * `apps/web/src/format.ts` — id desconhecido cai nele mesmo, igual
          * na web.
          */
-        private fun groupLabel(name: String): String = when (name.lowercase()) {
-            "action" -> "ação"
-            "challenge" -> "desafio"
-            "verb" -> "verbo"
-            "noun" -> "substantivo"
-            "regular" -> "regulares"
-            "hunger" -> "fome/ira"
-            "pool" -> "pool"
-            "roll" -> "rolagem"
-            // year zero
-            "base" -> "base"
-            "pericia" -> "perícia"
-            "equipamento" -> "equipamento"
-            "estresse" -> "estresse"
-            else -> name
+        private fun groupLabel(name: String): String {
+            val lower = name.lowercase()
+            val groupMatch = Regex("""^group(\d+)$""").find(lower)
+            if (groupMatch != null) {
+                val num = (groupMatch.groupValues[1].toIntOrNull() ?: 0) + 1
+                return "grupo $num"
+            }
+            return when (lower) {
+                "action" -> "ação"
+                "challenge" -> "desafio"
+                "verb" -> "verbo"
+                "noun" -> "substantivo"
+                "regular" -> "regulares"
+                "hunger" -> "fome/ira"
+                "pool" -> "pool"
+                "roll" -> "rolagem"
+                // year zero
+                "base" -> "base"
+                "pericia" -> "perícia"
+                "equipamento" -> "equipamento"
+                "estresse" -> "estresse"
+                // trophy
+                "claros" -> "claros"
+                "escuros" -> "escuros"
+                "ruina" -> "ruína"
+                else -> name
+            }
         }
 
         /**

@@ -46,6 +46,15 @@ object ProfileFamilies {
                 ProfileFamilyMember("yze_wdu", "Walking Dead"),
             ),
         ),
+        ProfileFamily(
+            key = "trophy",
+            label = "Trophy",
+            shortLabel = "Trophy",
+            members = listOf(
+                ProfileFamilyMember("trophy_dark", "Trophy Dark"),
+                ProfileFamilyMember("trophy_gold", "Trophy Gold"),
+            ),
+        ),
     )
 
     /** Ids de todo member de toda familia — esses NAO aparecem soltos. */

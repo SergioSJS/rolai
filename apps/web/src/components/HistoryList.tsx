@@ -3,52 +3,105 @@ import type { RollResult } from "@rolai/rules-engine";
 import { dieFaceLabel, displayGroups, groupLabel, outcomeLabel, outcomeTone } from "../format";
 import { cardLabel, deckConfigChangeLabel, isRedSuit } from "../cardFormat";
 import { PlayerTag } from "./PlayerTag";
+import type { DiceStyle, DiceStyles } from "../settings";
 
-function HistoryRollResult({ result }: { result: RollResult }) {
+function HistoryRollResult({
+  result,
+  styles,
+  style,
+}: {
+  result: RollResult;
+  styles?: DiceStyles | null;
+  style?: DiceStyle | null;
+}) {
   const groups = displayGroups(result);
   const joiner = result.notation.includes(" + ") ? " + " : " vs ";
+  const isSumNotation = !result.notation.includes(" vs ") && result.notation.includes(" + ");
+  const grandTotal =
+    isSumNotation && groups.length > 1 && typeof result.outcome !== "string"
+      ? groups.reduce(
+          (sum, g) =>
+            sum +
+            (g.total ?? g.rolls.reduce((s, r) => s + r.value, 0) + (g.modifier ?? 0)),
+          0,
+        )
+      : undefined;
 
   return (
     <span className="history-result">
-      {groups.map((group, gi) => (
-        <span key={`${group.name}-${gi}`}>
-          {gi > 0 && <span>{joiner}</span>}
-          {/* Tres pools de d6 iguais (Forbidden Lands) viravam tres arrays
-              anonimos na linha do historico — sem o nome nao da pra saber
-              qual "= 1" veio de onde. Grupo unico continua sem rotulo. */}
-          {groups.length > 1 && (
-            <span className="history-group-name">{groupLabel(group.name)} </span>
-          )}
-          {group.rolls.length === 0 ? (
-            // Pool zerado: o motor rola e descarta um dado so pra ter
-            // notacao valida (zero_dice_fallback) — "[]" parece bug.
-            <span>—</span>
-          ) : (
-            <>
-              <span>[</span>
-              {group.rolls.map((roll, ri) => (
-                <span key={ri}>
-                  {ri > 0 && <span>, </span>}
-                  {roll.card ? (
-                    <span className={`history-card${roll.isRed ? " is-red" : ""}`}>
-                      {dieFaceLabel(roll.value, roll.fudge, roll.card)}{roll.symbol ?? ""}
+      {groups.map((group, gi) => {
+        const groupTotal =
+          group.total ??
+          (isSumNotation && typeof result.outcome !== "string"
+            ? group.rolls.reduce((sum, r) => sum + r.value, 0) + (group.modifier ?? 0)
+            : undefined);
+
+        return (
+          <span key={`${group.name}-${gi}`}>
+            {gi > 0 && <span>{joiner}</span>}
+            {/* Tres pools de d6 iguais (Forbidden Lands) viravam tres arrays
+                anonimos na linha do historico — sem o nome nao da pra saber
+                qual "= 1" veio de onde. Grupo unico continua sem rotulo. */}
+            {groups.length > 1 && (
+              <span className="history-group-name">{groupLabel(group.name)} </span>
+            )}
+            {group.rolls.length === 0 ? (
+              // Pool zerado: o motor rola e descarta um dado so pra ter
+              // notacao valida (zero_dice_fallback) — "[]" parece bug.
+              <span>—</span>
+            ) : (
+              <>
+                <span>[</span>
+                {group.rolls.map((roll, ri) => {
+                  const slotStyle = roll.slot
+                    ? styles?.[String(roll.slot)] ??
+                      (roll.slot === 1 ? style : undefined)
+                    : undefined;
+                  const inlineStyle = slotStyle
+                    ? {
+                        background: slotStyle.body,
+                        color: slotStyle.number,
+                        borderColor: slotStyle.outline,
+                      }
+                    : undefined;
+
+                  return (
+                    <span key={ri}>
+                      {ri > 0 && <span>, </span>}
+                      {roll.card ? (
+                        <span className={`history-card${roll.isRed ? " is-red" : ""}`}>
+                          {dieFaceLabel(roll.value, roll.fudge, roll.card)}{roll.symbol ?? ""}
+                        </span>
+                      ) : roll.slot ? (
+                        <span
+                          className={`history-die history-die-slot-${roll.slot}`}
+                          style={inlineStyle}
+                        >
+                          {dieFaceLabel(roll.value, roll.fudge, roll.card)}
+                        </span>
+                      ) : roll.theme ? (
+                        <span className={`history-die history-die-${roll.theme}`}>
+                          {dieFaceLabel(roll.value, roll.fudge, roll.card)}
+                        </span>
+                      ) : (
+                        dieFaceLabel(roll.value, roll.fudge, roll.card)
+                      )}
                     </span>
-                  ) : (
-                    dieFaceLabel(roll.value, roll.fudge, roll.card)
-                  )}
-                </span>
-              ))}
-              <span>]</span>
-            </>
-          )}
-          {group.modifier !== undefined && group.modifier !== 0 && (
-            <span>
-              {group.modifier > 0 ? ` + ${group.modifier}` : ` − ${Math.abs(group.modifier)}`}
-            </span>
-          )}
-          {group.total !== undefined && <span> = {group.total}</span>}
-        </span>
-      ))}
+                  );
+                })}
+                <span>]</span>
+              </>
+            )}
+            {group.modifier !== undefined && group.modifier !== 0 && (
+              <span>
+                {group.modifier > 0 ? ` + ${group.modifier}` : ` − ${Math.abs(group.modifier)}`}
+              </span>
+            )}
+            {groupTotal !== undefined && <span> = {groupTotal}</span>}
+          </span>
+        );
+      })}
+      {grandTotal !== undefined && <span> = {grandTotal}</span>}
     </span>
   );
 }
@@ -59,7 +112,11 @@ function entryDetail(entry: HistoryEntry) {
       return (
         <>
           <span className="history-notation">{entry.result.notation}</span>
-          <HistoryRollResult result={entry.result} />
+          <HistoryRollResult
+            result={entry.result}
+            styles={entry.styles}
+            style={entry.style}
+          />
           {/* Outcome separado dos numeros justamente pra poder ir vermelho
               sem levar os dados junto. */}
           {typeof entry.result.outcome === "string" && (

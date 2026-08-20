@@ -74,6 +74,8 @@ private val OUTCOME_LABELS: Map<String, String> = mapOf(
     "yze_dano_equipamento_x3" to "3+ danos de equipamento",
     "yze_panico" to "pânico!",
     "yze_descontrole" to "descontrole!",
+    // trophy (trophy_dark / trophy_gold)
+    "trophy_ruina_aumenta" to "ruína aumenta (+1)",
 )
 
 fun outcomeLabel(outcome: String): String = OUTCOME_LABELS[outcome] ?: outcome

@@ -37,14 +37,17 @@ fields:
     modifier: "{input.sucessos_anteriores}"
     compare_individually: true
     success_rule: ">=6"
+    slot: 1
   - id: pericia
     dice: "{input.pericia}d6"
     compare_individually: true
     success_rule: ">=6"
+    slot: 2
   - id: equipamento
     dice: "{input.equipamento}d6"
     compare_individually: true
     success_rule: ">=6"
+    slot: 3
 # Tres pools de d6 INDEPENDENTES (nao competem — por isso multi): Base
 # (atributo), Perícia e Equipamento. 6 e sucesso em qualquer um dos tres, e
 # os sucessos somam.

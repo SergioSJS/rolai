@@ -24,6 +24,8 @@ class RollGroup(BaseModel):
     dropped: list[int] | None = None
     modifier: int | None = None
     total: int | None = None
+    slot: int | None = None
+    theme: str | None = None
 
 
 class RollResult(BaseModel):
@@ -116,11 +118,15 @@ class DiceStyle(BaseModel):
     material: str = Field(max_length=16, pattern=r"^[a-z]+$")
 
 
+DiceStyles = dict[str, DiceStyle]
+
+
 class RosterMember(BaseModel):
     """Quem esta na sala, com a aparencia dos dados dessa pessoa."""
 
     name: str
     style: DiceStyle | None = None
+    styles: DiceStyles | None = None
 
 
 class RollHistoryEntry(BaseModel):
@@ -131,6 +137,7 @@ class RollHistoryEntry(BaseModel):
     player: str
     result: RollResult
     style: DiceStyle | None = None
+    styles: DiceStyles | None = None
 
 
 class DeckDrawHistoryEntry(BaseModel):

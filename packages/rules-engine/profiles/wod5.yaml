@@ -16,9 +16,11 @@ fields:
   - id: regular
     dice: "{input.regular}d10"
     compare_individually: true
+    slot: 1
   - id: hunger
     dice: "{input.hunger}d10"
     compare_individually: true
+    slot: 2
 # Mecanica compartilhada por toda a linha v5 (Vampiro, Lobisomem, Caçador...)
 # — os dados de Fome/Ira SUBSTITUEM parte do pool regular, entao ambos os
 # campos exigem >=1 dado cada (limite do parser de notacao: "0d10" nao e

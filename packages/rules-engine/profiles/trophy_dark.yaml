@@ -1,0 +1,59 @@
+# Perfil de sistema: Trophy Dark (Hedgemaze Press / The Gauntlet)
+#
+# No Trophy Dark, todo teste de risco (Risk Roll) usa um pool de dados d6 de
+# duas cores: dados Claros (perícias e Devil's Bargains) e dados Escuros
+# (arriscar a mente/corpo, rituais ou forçar).
+#
+# O maior dado geral decide o resultado da ação:
+#   6: Sucesso completo
+#   4-5: Sucesso parcial / com complicação
+#   1-3: Falha / desastre
+#
+# Se o maior dado da rolagem estiver em um Dado Escuro E for maior ou igual à
+# sua Ruína atual, sua Ruína aumenta em +1.
+
+system: trophy_dark
+label: "Trophy Dark"
+roll_type: multi
+
+inputs:
+  - id: claros
+    label: "Dados Claros"
+    type: number
+    required: true
+    default: "1"
+  - id: escuros
+    label: "Dados Escuros"
+    type: number
+    required: true
+    default: "0"
+  - id: ruina
+    label: "Sua Ruína"
+    type: number
+    required: true
+    default: "1"
+
+fields:
+  - id: claros
+    dice: "{input.claros}d6"
+    compare_individually: true
+    zero_dice_fallback: "0d6"
+    slot: 1
+  - id: escuros
+    dice: "{input.escuros}d6"
+    compare_individually: true
+    zero_dice_fallback: "0d6"
+    slot: 2
+
+outcome_rules:
+  # Outcome principal pelo maior dado entre claros e escuros
+  - condition: "max(claros, escuros) == 6"
+    result: "success"
+  - condition: "max(claros, escuros) >= 4 and max(claros, escuros) <= 5"
+    result: "weak_hit"
+  - condition: "max(claros, escuros) <= 3"
+    result: "miss"
+
+  # Aumento de Ruína: se o maior dado for escuro e bater/superar a Ruína atual
+  - condition: "count(escuros, '>=1') > 0 and max(escuros) >= max(claros) and max(escuros) >= {input.ruina}"
+    result: "trophy_ruina_aumenta"

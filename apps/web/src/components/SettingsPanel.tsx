@@ -1,15 +1,14 @@
-// Conteudo de Preferencias (renderizado dentro do modal pela App):
-// aparencia dos dados, qualidade de render e tema visual. Dados vem
-// primeiro: e a preferencia que o jogador mais mexe.
-
+import { useState } from "react";
 import type { SystemProfile } from "@rolai/rules-engine";
 import type { DeckConfig } from "@rolai/deck-engine";
 import type {
   DiceStyle,
+  DiceStyles,
   QualityTier,
   ThemeName,
 } from "../settings";
 import {
+  DEFAULT_DICE_STYLES,
   DICE_MATERIALS,
   DICE_MATERIAL_LABELS,
   DICE_PRESETS,
@@ -28,14 +27,16 @@ import { CardsIcon, DiceSectionIcon, RenderIcon, RulesIcon, StreamIcon } from ".
 interface SettingsPanelProps {
   tier: QualityTier;
   theme: ThemeName;
-  diceStyle: DiceStyle;
+  diceStyles?: DiceStyles;
+  diceStyle?: DiceStyle;
   diceScale: number;
   system: string;
   profiles: SystemProfile[];
   deckConfig: DeckConfig;
   onTierChange: (tier: QualityTier) => void;
   onThemeChange: (theme: ThemeName) => void;
-  onDiceStyleChange: (style: DiceStyle) => void;
+  onDiceStylesChange?: (styles: DiceStyles) => void;
+  onDiceStyleChange?: (style: DiceStyle) => void;
   onDiceScaleChange: (scale: number) => void;
   onSystemChange: (system: string) => void;
   onDeckConfigChange: (changes: Partial<DeckConfig>) => void;
@@ -49,6 +50,7 @@ function outlineShadow(color: string): string {
 export function SettingsPanel({
   tier,
   theme,
+  diceStyles,
   diceStyle,
   diceScale,
   system,
@@ -56,26 +58,57 @@ export function SettingsPanel({
   deckConfig,
   onTierChange,
   onThemeChange,
+  onDiceStylesChange,
   onDiceStyleChange,
   onDiceScaleChange,
   onSystemChange,
   onDeckConfigChange,
 }: SettingsPanelProps) {
-  const textureFile = DICE_TEXTURE_FILES[diceStyle.texture];
+  const [activeSlot, setActiveSlot] = useState<"1" | "2" | "3">("1");
+
+  const styles: DiceStyles = diceStyles ?? {
+    "1": diceStyle ?? DEFAULT_DICE_STYLES["1"],
+    "2": DEFAULT_DICE_STYLES["2"],
+    "3": DEFAULT_DICE_STYLES["3"],
+  };
+
+  const currentDiceStyle = styles[activeSlot] ?? DEFAULT_DICE_STYLES[activeSlot];
   const activePreset = DICE_PRESETS.find(
     (p) =>
-      p.style.body === diceStyle.body &&
-      p.style.number === diceStyle.number &&
-      p.style.texture === diceStyle.texture &&
-      p.style.material === diceStyle.material,
+      p.style.body === currentDiceStyle.body &&
+      p.style.number === currentDiceStyle.number &&
+      p.style.texture === currentDiceStyle.texture &&
+      p.style.material === currentDiceStyle.material,
   );
+
+  const handleCurrentStyleChange = (next: DiceStyle) => {
+    const updated: DiceStyles = { ...styles, [activeSlot]: next };
+    onDiceStylesChange?.(updated);
+    if (activeSlot === "1") {
+      onDiceStyleChange?.(next);
+    }
+  };
 
   // Profiles que sao member de alguma familia (ex.: os 3 modos do
   // Infaernum) nao aparecem soltos no dropdown principal — so a familia,
   // uma vez. Selecionar a familia escolhe o PRIMEIRO member; o sub-seletor
   // abaixo troca entre os modos sem sair da familia.
   const grouped = familyMemberSystems();
-  const standalone = profiles.filter((p) => !grouped.has(p.system));
+  const standalone = profiles
+    .filter((p) => !grouped.has(p.system))
+    .map((p) => ({
+      key: p.system,
+      label: p.label,
+      targetSystem: p.system,
+    }));
+  const families = PROFILE_FAMILIES.map((family) => ({
+    key: family.key,
+    label: family.label,
+    targetSystem: family.members[0]!.system,
+  }));
+  const sortedSystems = [...standalone, ...families].sort((a, b) =>
+    a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" }),
+  );
   const activeFamily = familyFor(system);
 
   return (
@@ -90,25 +123,20 @@ export function SettingsPanel({
           <select
             value={activeFamily?.key ?? system}
             onChange={(e) => {
-              const family = PROFILE_FAMILIES.find((f) => f.key === e.target.value);
-              onSystemChange(family ? family.members[0]!.system : e.target.value);
+              const selected = sortedSystems.find((item) => item.key === e.target.value);
+              onSystemChange(selected ? selected.targetSystem : e.target.value);
             }}
           >
             <option value="">Notação livre</option>
-            {standalone.map((p) => (
-              <option key={p.system} value={p.system}>
-                {p.label}
-              </option>
-            ))}
-            {PROFILE_FAMILIES.map((family) => (
-              <option key={family.key} value={family.key}>
-                {family.label}
+            {sortedSystems.map((item) => (
+              <option key={item.key} value={item.key}>
+                {item.label}
               </option>
             ))}
           </select>
         </label>
         {/* Sub-modo da familia (Year Zero: Genérico/Forbidden Lands/Alien/
-            Walking Dead; Infaernum: acao/sim-ou-nao/ideias). */}
+            Walking Dead; Infaernum: acao/sim-ou-nao/ideias; Trophy: Dark/Gold). */}
         {activeFamily && (
           <label>
             Modo
@@ -125,55 +153,85 @@ export function SettingsPanel({
 
       <h3>
         <DiceSectionIcon />
-        Dados
+        Dados (Slots de Cores)
       </h3>
-      {/* Previa com as MESMAS cores e textura (o proprio .webp estampado no
-          dado 3D). Mudou algo com o modal aberto? O dado de verdade tambem
-          rola no palco, atras da janela. */}
+
+      <div className="dice-slots-nav" role="tablist" aria-label="Slots de cores dos dados">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSlot === "1"}
+          className={`dice-slot-btn${activeSlot === "1" ? " is-active" : ""}`}
+          onClick={() => setActiveSlot("1")}
+        >
+          <span className="dice-slot-indicator" style={{ background: styles["1"].body }} />
+          1 · Primário (Padrão)
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSlot === "2"}
+          className={`dice-slot-btn${activeSlot === "2" ? " is-active" : ""}`}
+          onClick={() => setActiveSlot("2")}
+        >
+          <span className="dice-slot-indicator" style={{ background: styles["2"].body }} />
+          2 · Secundário
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSlot === "3"}
+          className={`dice-slot-btn${activeSlot === "3" ? " is-active" : ""}`}
+          onClick={() => setActiveSlot("3")}
+        >
+          <span className="dice-slot-indicator" style={{ background: styles["3"].body }} />
+          3 · Terciário
+        </button>
+      </div>
+
+      {/* Previa com os 3 dados lado a lado no feltro. Clicar em qualquer dado seleciona o slot. */}
       <div className="dice-preview" aria-hidden>
-        <div
-          className="die-preview"
-          style={{
-            background: diceStyle.body,
-            transform: `rotate(-8deg) scale(${diceScale})`,
-          }}
-        >
-          {textureFile !== null && (
-            <span
-              className="die-preview-tex"
-              style={{ backgroundImage: `url(/textures/${textureFile})` }}
-            />
-          )}
-          <span
-            className="die-preview-num"
-            style={{ color: diceStyle.number, textShadow: outlineShadow(diceStyle.outline) }}
-          >
-            20
-          </span>
-        </div>
-        <div
-          className="die-preview die-preview-small"
-          style={{
-            background: diceStyle.body,
-            transform: `rotate(11deg) scale(${diceScale})`,
-          }}
-        >
-          {textureFile !== null && (
-            <span
-              className="die-preview-tex"
-              style={{ backgroundImage: `url(/textures/${textureFile})` }}
-            />
-          )}
-          <span
-            className="die-preview-num"
-            style={{ color: diceStyle.number, textShadow: outlineShadow(diceStyle.outline) }}
-          >
-            6
-          </span>
-        </div>
+        {(["1", "2", "3"] as const).map((slot) => {
+          const s = styles[slot];
+          const tex = DICE_TEXTURE_FILES[s.texture];
+          const isSelected = activeSlot === slot;
+          return (
+            <div
+              key={slot}
+              className={`die-preview-container${isSelected ? " is-selected" : ""}`}
+              onClick={() => setActiveSlot(slot)}
+              title={`Configurar Cor ${slot}`}
+              style={{ cursor: "pointer" }}
+            >
+              <div
+                className={`die-preview ${slot === "1" ? "" : "die-preview-small"}`}
+                style={{
+                  background: s.body,
+                  transform: `rotate(${slot === "1" ? -8 : slot === "2" ? 11 : -4}deg) scale(${diceScale})`,
+                  outline: isSelected ? "2px solid var(--accent, #38bdf8)" : undefined,
+                  outlineOffset: "4px",
+                }}
+              >
+                {tex !== null && (
+                  <span
+                    className="die-preview-tex"
+                    style={{ backgroundImage: `url(/textures/${tex})` }}
+                  />
+                )}
+                <span
+                  className="die-preview-num"
+                  style={{ color: s.number, textShadow: outlineShadow(s.outline) }}
+                >
+                  {slot === "1" ? "20" : slot === "2" ? "6" : "6"}
+                </span>
+              </div>
+              <span className="die-preview-slot-badge">Cor {slot}</span>
+            </div>
+          );
+        })}
       </div>
       <p className="settings-hint dice-preview-hint">
-        Mexeu em algo? O dado de verdade rola no palco, atrás desta janela.
+        Notação: use <code>1[3d6]</code>, <code>2[2d6]</code> ou <code>3[1d6]</code> para misturar cores na mesma rolagem.
       </p>
 
       <div className="settings-row">
@@ -183,7 +241,7 @@ export function SettingsPanel({
             value={activePreset?.id ?? ""}
             onChange={(e) => {
               const preset = DICE_PRESETS.find((p) => p.id === e.target.value);
-              if (preset) onDiceStyleChange(preset.style);
+              if (preset) handleCurrentStyleChange(preset.style);
             }}
           >
             {activePreset === undefined && (
@@ -214,9 +272,9 @@ export function SettingsPanel({
           Corpo
           <input
             type="color"
-            value={diceStyle.body}
+            value={currentDiceStyle.body}
             onChange={(e) =>
-              onDiceStyleChange({ ...diceStyle, body: e.target.value })
+              handleCurrentStyleChange({ ...currentDiceStyle, body: e.target.value })
             }
           />
         </label>
@@ -224,9 +282,9 @@ export function SettingsPanel({
           Número
           <input
             type="color"
-            value={diceStyle.number}
+            value={currentDiceStyle.number}
             onChange={(e) =>
-              onDiceStyleChange({ ...diceStyle, number: e.target.value })
+              handleCurrentStyleChange({ ...currentDiceStyle, number: e.target.value })
             }
           />
         </label>
@@ -234,9 +292,9 @@ export function SettingsPanel({
           Contorno
           <input
             type="color"
-            value={diceStyle.outline}
+            value={currentDiceStyle.outline}
             onChange={(e) =>
-              onDiceStyleChange({ ...diceStyle, outline: e.target.value })
+              handleCurrentStyleChange({ ...currentDiceStyle, outline: e.target.value })
             }
           />
         </label>
@@ -246,10 +304,10 @@ export function SettingsPanel({
         <label>
           Textura
           <select
-            value={diceStyle.texture}
+            value={currentDiceStyle.texture}
             onChange={(e) =>
-              onDiceStyleChange({
-                ...diceStyle,
+              handleCurrentStyleChange({
+                ...currentDiceStyle,
                 texture: e.target.value as DiceTexture,
               })
             }
@@ -264,10 +322,10 @@ export function SettingsPanel({
         <label>
           Material
           <select
-            value={diceStyle.material}
+            value={currentDiceStyle.material}
             onChange={(e) =>
-              onDiceStyleChange({
-                ...diceStyle,
+              handleCurrentStyleChange({
+                ...currentDiceStyle,
                 material: e.target.value as DiceMaterial,
               })
             }

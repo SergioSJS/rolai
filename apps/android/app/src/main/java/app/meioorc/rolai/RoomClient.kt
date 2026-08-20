@@ -32,7 +32,7 @@ class RoomClient(private val listener: Listener) {
          * `styleJson` e a aparencia de dado de QUEM ROLOU (null = sem estilo):
          * o palco anima com a cor de quem rolou, nao com a nossa.
          */
-        fun onRoll(player: String, resultJson: String, styleJson: String?)
+        fun onRoll(player: String, resultJson: String, styleJson: String?, stylesJson: String? = null)
         /**
          * Broadcast de puxada de baralho (specs/08-baralho.md), inclusive
          * eco da nossa: `cardsJson` e um array JSON de Card.
@@ -201,7 +201,8 @@ class RoomClient(private val listener: Listener) {
                     val player = message.optString("player", "?")
                     val result = message.optJSONObject("result")?.toString() ?: return
                     val style = message.optJSONObject("style")?.toString()
-                    handler.post { listener.onRoll(player, result, style) }
+                    val styles = message.optJSONObject("styles")?.toString()
+                    handler.post { listener.onRoll(player, result, style, styles) }
                 }
                 "deck_draw" -> {
                     val player = message.optString("player", "?")
@@ -297,7 +298,8 @@ class RoomClient(private val listener: Listener) {
             }
             val name = URLEncoder.encode(RolaiSettings.sanitizeName(playerName), "UTF-8")
             val styleParam = style?.let {
-                "&style=" + URLEncoder.encode(styleJson(it), "UTF-8")
+                "&style=" + URLEncoder.encode(styleJson(it), "UTF-8") +
+                "&styles=" + URLEncoder.encode(stylesJson(it), "UTF-8")
             } ?: ""
             return "${wsBaseUrl.trimEnd('/')}/rooms/$roomCode?name=$name$styleParam"
         }
@@ -309,13 +311,22 @@ class RoomClient(private val listener: Listener) {
          * handshake, entao o formato aqui e exatamente esse.
          */
         fun styleJson(settings: RolaiSettings): String =
+            singleSlotJson(settings.slotStyle("1")).toString()
+
+        fun stylesJson(settings: RolaiSettings): String =
             JSONObject()
-                .put("body", hex(settings.diceBody))
-                .put("number", hex(settings.diceNumber))
-                .put("outline", hex(settings.diceOutline))
-                .put("texture", settings.diceTexture.lowercase())
-                .put("material", settings.diceMaterial.lowercase())
+                .put("1", singleSlotJson(settings.slotStyle("1")))
+                .put("2", singleSlotJson(settings.slotStyle("2")))
+                .put("3", singleSlotJson(settings.slotStyle("3")))
                 .toString()
+
+        fun singleSlotJson(slot: DiceSlotStyle): JSONObject =
+            JSONObject()
+                .put("body", hex(slot.body))
+                .put("number", hex(slot.number))
+                .put("outline", hex(slot.outline))
+                .put("texture", slot.texture.lowercase())
+                .put("material", slot.material.lowercase())
 
         private fun hex(color: String): String {
             val bare = color.removePrefix("#").lowercase()

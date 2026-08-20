@@ -12,7 +12,8 @@
 
 import type { RollResult } from "@rolai/rules-engine";
 import type { DiceColorset } from "@3d-dice/dice-box-threejs";
-import type { DiceStyle } from "../settings";
+import { DEFAULT_DICE_STYLES } from "../settings";
+import type { DiceStyle, DiceStyles } from "../settings";
 import type { RenderedDie, RollRenderer } from "./types";
 import { diceFromResult } from "./types";
 
@@ -29,6 +30,7 @@ export interface DiceBoxOptions {
   lightIntensity: number;
   // Aparencia dos dados (Preferencias -> Dados). Cores em hex.
   style: DiceStyle;
+  styles?: DiceStyles;
   // Tamanho do dado (1 = padrao do motor). Preferencias -> Tamanho.
   scale: number;
   // Som de impacto da lib. Desligado no overlay do Android: audio de WebView
@@ -48,6 +50,13 @@ interface DiceMaterial {
 type DiceFactoryLike = {
   createMaterials: (...args: unknown[]) => DiceMaterial[];
   createTextMaterial?: (...args: unknown[]) => unknown;
+  applyColorSet: (colorset: unknown) => void;
+  setMaterialInfo: (arg?: unknown) => void;
+  create: (type: string, colorData?: unknown) => unknown;
+};
+
+type DiceColorsLike = {
+  makeColorSet: (colorset: DiceColorset) => Promise<unknown>;
 };
 
 // Quanto engrossar o contorno do numero (ver makeOutlineVisible).
@@ -130,6 +139,9 @@ export interface CollideEvent {
 
 type DiceBoxInstance = {
   DiceFactory?: DiceFactoryLike;
+  DiceColors?: DiceColorsLike;
+  colorData?: unknown;
+  spawnDice: (vector: unknown, rethrow?: boolean) => void;
   initialize(): Promise<unknown>;
   roll(notation: string): Promise<unknown>;
   clearDice(): void;
@@ -156,8 +168,15 @@ type DiceBoxInstance = {
 
 // Colorset da lib a partir das preferencias. material "auto" = nao
 // sobrescrever: vale o acabamento natural da textura (gelo -> vidro etc).
-export function toColorset(style: DiceStyle): DiceColorset {
+export function toColorset(style: DiceStyle, id?: string): DiceColorset {
+  const name =
+    id ??
+    `custom_${style.body}_${style.number}_${style.outline}_${style.texture}_${style.material}`.replace(
+      /#/g,
+      "",
+    );
   const colorset: DiceColorset = {
+    name,
     background: style.body,
     foreground: style.number,
     outline: style.outline,
@@ -165,6 +184,42 @@ export function toColorset(style: DiceStyle): DiceColorset {
   };
   if (style.material !== "auto") colorset.material = style.material;
   return colorset;
+}
+
+// Organiza os dados na exata mesma ordem em que buildBoxNotation agrupa os tipos
+export function orderDiceForBox(dice: RenderedDie[]): RenderedDie[] {
+  const byType = new Map<string, RenderedDie[]>();
+  const push = (type: string, die: RenderedDie) => {
+    let list = byType.get(type);
+    if (!list) {
+      list = [];
+      byType.set(type, list);
+    }
+    list.push(die);
+  };
+  for (const die of dice) {
+    if (die.fudge) {
+      push("df", die);
+    } else if (die.sides === 100) {
+      push("d100", die);
+      push("d10", die);
+    } else if (die.sides === 66) {
+      push("d6", die);
+      push("d6", die);
+    } else if (die.sides === 3) {
+      push("d6", die);
+    } else if ([2, 4, 6, 8, 10, 12, 20].includes(die.sides)) {
+      push(`d${die.sides}`, die);
+    } else {
+      const fallbackSides = die.sides > 12 ? 20 : die.sides > 8 ? 10 : die.sides > 6 ? 8 : 6;
+      push(`d${fallbackSides}`, die);
+    }
+  }
+  const ordered: RenderedDie[] = [];
+  for (const list of byType.values()) {
+    ordered.push(...list);
+  }
+  return ordered;
 }
 
 // Monta a notacao da dice-box a partir dos dados do resultado.
@@ -631,37 +686,90 @@ export class DiceBoxRenderer implements RollRenderer {
     }
   }
 
-  async roll(result: RollResult, style?: DiceStyle | null): Promise<void> {
+  async roll(
+    result: RollResult,
+    style?: DiceStyle | null,
+    styles?: DiceStyles | null,
+  ): Promise<void> {
     if (!this.box) return;
     const dice = diceFromResult(result);
     if (dice.length === 0) return;
-    // Rolagem de outro jogador vem com a aparencia dele: troca o colorset
-    // antes de criar os dados, pra mesa toda ver o dado de quem rolou.
-    const wanted = style ?? this.options.style;
-    if (JSON.stringify(wanted) !== JSON.stringify(this.currentStyle)) {
-      // Trocar a cor NAO pode custar a animacao — e aqui `try/catch` nao
-      // basta, precisa de relogio.
-      //
-      // updateConfig chama loadTheme -> makeColorSet, que CARREGA A IMAGEM
-      // da textura. Se esse carregamento nao resolve, a promise fica
-      // pendente pra sempre: nao ha excecao pra pegar, o `await` simplesmente
-      // nunca volta e a rolagem nunca e desenhada. Como so rolagem de OUTRO
-      // jogador troca o colorset, o sintoma e exatamente "so aparece o meu
-      // dado" — e so depois de customizar a aparencia, que e o que faz o
-      // estilo dos outros passar a divergir do meu.
-      const trocou = await Promise.race([
-        this.box.updateConfig({ theme_customColorset: toColorset(wanted) }).then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), THEME_SWAP_TIMEOUT_MS)),
-      ]).catch(() => false);
-      if (trocou) {
-        this.currentStyle = wanted;
-      } else {
-        console.warn("[rolai] troca de estilo nao completou; rolando com a cor atual");
+
+    // Resolve os estilos ativos pros slots 1, 2 e 3:
+    const activeStyles: DiceStyles =
+      styles ??
+      (style
+        ? {
+            "1": style,
+            "2": this.options.styles?.["2"] ?? DEFAULT_DICE_STYLES["2"],
+            "3": this.options.styles?.["3"] ?? DEFAULT_DICE_STYLES["3"],
+          }
+        : (this.options.styles ?? {
+            "1": this.options.style,
+            "2": DEFAULT_DICE_STYLES["2"],
+            "3": DEFAULT_DICE_STYLES["3"],
+          }));
+
+    // Pre-carrega colorsets dos slots usados nesta rolagem:
+    const neededSlots = new Set<number>(dice.map((d) => d.slot ?? 1));
+    const slotColorSets: Record<number, unknown> = {};
+
+    if (this.box.DiceColors) {
+      for (const slot of neededSlots) {
+        const slotKey = String(slot) as "1" | "2" | "3";
+        const s =
+          activeStyles[slotKey] ??
+          DEFAULT_DICE_STYLES[slotKey] ??
+          activeStyles["1"] ??
+          this.options.style;
+        const cs = toColorset(
+          s,
+          `slot_${slot}_${s.body}_${s.number}_${s.outline}_${s.texture}_${s.material}`,
+        );
+        try {
+          const loaded = await Promise.race([
+            this.box.DiceColors.makeColorSet(cs),
+            new Promise<null>((resolve) =>
+              setTimeout(() => resolve(null), THEME_SWAP_TIMEOUT_MS),
+            ),
+          ]);
+          if (loaded) {
+            slotColorSets[slot] = loaded;
+          }
+        } catch {
+          // segue com fallback
+        }
       }
     }
-    // Teto de sons e por ROLAGEM: zera aqui.
-    this.soundsThisRoll = 0;
-    await this.box.roll(buildBoxNotation(dice));
+
+    // Intercepta DiceFactory.create para injetar o material do slot específico de cada dado
+    const factory = this.box.DiceFactory;
+    const originalCreate = factory?.create?.bind(factory);
+    const orderedDice = orderDiceForBox(dice);
+    let spawnIndex = 0;
+
+    if (factory && originalCreate) {
+      factory.create = (type: string, colorData?: unknown) => {
+        const targetDie = orderedDice[spawnIndex++];
+        const slotNum = targetDie?.slot ?? 1;
+        const targetColorSet = slotColorSets[slotNum] ?? slotColorSets[1];
+        if (targetColorSet && factory.applyColorSet) {
+          factory.applyColorSet(targetColorSet);
+          factory.setMaterialInfo();
+        }
+        return originalCreate(type, colorData);
+      };
+    }
+
+    try {
+      // Teto de sons e por ROLAGEM: zera aqui.
+      this.soundsThisRoll = 0;
+      await this.box.roll(buildBoxNotation(dice));
+    } finally {
+      if (factory && originalCreate) {
+        factory.create = originalCreate;
+      }
+    }
   }
 
   clear(): void {

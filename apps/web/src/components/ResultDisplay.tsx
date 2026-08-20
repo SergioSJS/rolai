@@ -4,7 +4,7 @@
 // mostram a composicao em qualquer caso.
 
 import type { RollResult } from "@rolai/rules-engine";
-import type { DiceStyle } from "../settings";
+import type { DiceStyle, DiceStyles } from "../settings";
 import { dieFaceLabel, displayGroups, groupLabel, outcomeLabel, outcomeTone } from "../format";
 import { isYzeSystem } from "../yzePush";
 import { PlayerTag } from "./PlayerTag";
@@ -16,6 +16,7 @@ export function ResultDisplay({
   // Ausente = rolagem local (nao ha "outro" pra desambiguar).
   player,
   playerStyle,
+  playerStyles,
   // Modo stream/OBS: ninguem clica pra dispensar (some sozinho), entao o
   // hint nao faz sentido na saida da stream.
   showDismissHint = true,
@@ -23,6 +24,7 @@ export function ResultDisplay({
   result: RollResult | null;
   player?: string | null;
   playerStyle?: DiceStyle | null;
+  playerStyles?: DiceStyles | null;
   showDismissHint?: boolean;
 }) {
   // Sem resultado, nada: este overlay fica FIXO acima de toda a UI, entao
@@ -42,6 +44,19 @@ export function ResultDisplay({
       ? (single.total ??
         single.rolls.reduce((sum, r) => sum + r.value, 0) + (single.modifier ?? 0))
       : undefined;
+
+  // Notação com múltiplos grupos somados com "+" (ex: "1[1d6] + 2[2d6] + 3[3d6]" ou "{1d6} + {2d6}"):
+  const isSumNotation = !result.notation.includes(" vs ") && result.notation.includes(" + ");
+  const grandTotal =
+    isSumNotation && groups.length > 1
+      ? groups.reduce(
+          (sum, g) =>
+            sum +
+            (g.total ?? g.rolls.reduce((s, r) => s + r.value, 0) + (g.modifier ?? 0)),
+          0,
+        )
+      : undefined;
+
   // Year Zero de varios pools (Base/Perícia/Equipamento, Base/Estresse): os
   // sucessos estao espalhados em "= 1" por grupo e o numero que a mesa usa
   // e a SOMA — sem esta linha o jogador soma de cabeca justo no sistema que
@@ -54,9 +69,13 @@ export function ResultDisplay({
   const headline =
     typeof result.outcome === "string"
       ? outcomeLabel(result.outcome)
-      : singleTotal !== undefined
-        ? String(singleTotal)
-        : result.notation;
+      : yzeSuccesses !== null
+        ? `${yzeSuccesses} ${yzeSuccesses === 1 ? "sucesso" : "sucessos"}`
+        : singleTotal !== undefined
+          ? String(singleTotal)
+          : grandTotal !== undefined
+            ? String(grandTotal)
+            : result.notation;
 
   return (
     // A caixa existe pro resultado sobreviver a fundo claro/colorido: o
@@ -144,47 +163,93 @@ export function ResultDisplay({
               {group.rolls.length === 0 && (
                 <span className="result-empty">sem dados</span>
               )}
-              {group.rolls.map((roll, i) => (
-                <span
-                  key={i}
-                  className={`die-chip${roll.card ? ` card-chip${roll.isRed ? " is-red" : ""}` : ""}`}
-                >
-                  {dieFaceLabel(roll.value, roll.fudge, roll.card)}
-                  {roll.symbol ?? ""}
-                  {roll.sides !== null && (
-                    <span className="die-chip-sides">
-                      {roll.card ? "carta" : roll.fudge ? "dF" : `d${roll.sides}`}
-                    </span>
-                  )}
-                </span>
-              ))}
+              {group.rolls.map((roll, i) => {
+                const slotStyle =
+                  roll.slot
+                    ? playerStyles?.[String(roll.slot)] ??
+                      (roll.slot === 1 ? playerStyle : undefined)
+                    : undefined;
+                const inlineStyle = slotStyle
+                  ? {
+                      background: slotStyle.body,
+                      color: slotStyle.number,
+                      borderColor: slotStyle.outline,
+                    }
+                  : undefined;
+                return (
+                  <span
+                    key={i}
+                    className={`die-chip${roll.card ? ` card-chip${roll.isRed ? " is-red" : ""}` : ""}${roll.slot ? ` die-chip-slot-${roll.slot}` : ""}${roll.theme ? ` die-chip-${roll.theme}` : ""}`}
+                    style={inlineStyle}
+                  >
+                    {dieFaceLabel(roll.value, roll.fudge, roll.card)}
+                    {roll.symbol ?? ""}
+                    {roll.sides !== null && (
+                      <span
+                        className="die-chip-sides"
+                        style={slotStyle ? { color: slotStyle.outline } : undefined}
+                      >
+                        {roll.card ? "carta" : roll.fudge ? "dF" : `d${roll.sides}`}
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
               {/* Descartados: mesma cara, apagados. A ordem (mantidos
                   primeiro) mantem o total facil de conferir. */}
               {group.rolls.length > 0 &&
-                group.dropped?.map((roll, i) => (
-                <span
-                  key={`d${i}`}
-                  className={`die-chip is-dropped${roll.card ? ` card-chip${roll.isRed ? " is-red" : ""}` : ""}`}
-                  title="descartado"
-                >
-                  {dieFaceLabel(roll.value, roll.fudge, roll.card)}
-                  {roll.symbol ?? ""}
-                  {roll.sides !== null && (
-                    <span className="die-chip-sides">
-                      {roll.card ? "carta" : roll.fudge ? "dF" : `d${roll.sides}`}
+                group.dropped?.map((roll, i) => {
+                  const slotStyle =
+                    roll.slot
+                      ? playerStyles?.[String(roll.slot)] ??
+                        (roll.slot === 1 ? playerStyle : undefined)
+                      : undefined;
+                  const inlineStyle = slotStyle
+                    ? {
+                        background: slotStyle.body,
+                        color: slotStyle.number,
+                        borderColor: slotStyle.outline,
+                      }
+                    : undefined;
+                  return (
+                    <span
+                      key={`d${i}`}
+                      className={`die-chip is-dropped${roll.card ? ` card-chip${roll.isRed ? " is-red" : ""}` : ""}${roll.slot ? ` die-chip-slot-${roll.slot}` : ""}${roll.theme ? ` die-chip-${roll.theme}` : ""}`}
+                      style={inlineStyle}
+                      title="descartado"
+                    >
+                      {dieFaceLabel(roll.value, roll.fudge, roll.card)}
+                      {roll.symbol ?? ""}
+                      {roll.sides !== null && (
+                        <span
+                          className="die-chip-sides"
+                          style={slotStyle ? { color: slotStyle.outline } : undefined}
+                        >
+                          {roll.card ? "carta" : roll.fudge ? "dF" : `d${roll.sides}`}
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-              ))}
+                  );
+                })}
               {group.modifier !== undefined && group.modifier !== 0 && (
                 <span className="die-chip die-chip-mod">
                   {group.modifier > 0 ? `+${group.modifier}` : group.modifier}
                 </span>
               )}
             </span>
-            {group.total !== undefined && (
-              <span className="result-group-total">= {group.total}</span>
-            )}
+            {(() => {
+              const groupTotal =
+                group.total ??
+                (isSumNotation && typeof result.outcome !== "string"
+                  ? group.rolls.reduce((sum, r) => sum + r.value, 0) +
+                    (group.modifier ?? 0)
+                  : undefined);
+              return (
+                groupTotal !== undefined && (
+                  <span className="result-group-total">= {groupTotal}</span>
+                )
+              );
+            })()}
           </div>
         ))}
       </div>

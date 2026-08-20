@@ -4,7 +4,7 @@
 import type { RollResult } from "@rolai/rules-engine";
 import type { Card, DeckConfig } from "@rolai/deck-engine";
 import { apiBaseUrl, roomWsUrl } from "../config";
-import type { DiceStyle } from "../settings";
+import type { DiceStyle, DiceStyles } from "../settings";
 import type { HistoryEntry, RoomEvent, RosterMember } from "./reducer";
 
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -30,15 +30,17 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
-// Roster do servidor: [{name, style|null}]. Tolera a forma antiga (lista de
+// Roster do servidor: [{name, style|null, styles|null}]. Tolera a forma antiga (lista de
 // strings) pra nao quebrar com um backend defasado.
 function parseRoster(raw: unknown[]): RosterMember[] {
   return raw.map((item) => {
     if (typeof item === "string") return { name: item };
     if (isRecord(item) && typeof item["name"] === "string") {
       const style = item["style"];
+      const styles = item["styles"];
       const member: RosterMember = { name: item["name"] };
       if (isRecord(style)) member.style = style as unknown as DiceStyle;
+      if (isRecord(styles)) member.styles = styles as unknown as DiceStyles;
       return member;
     }
     return { name: String(item) };
@@ -69,12 +71,14 @@ function parseDataEvent(data: unknown): HistoryEntry | null {
       const result = data["result"];
       if (typeof player !== "string" || !isRecord(result)) return null;
       const style = data["style"];
+      const styles = data["styles"];
       const entry: HistoryEntry = {
         type: "roll",
         player,
         result: result as unknown as RollResult,
       };
       if (isRecord(style)) entry.style = style as unknown as DiceStyle;
+      if (isRecord(styles)) entry.styles = styles as unknown as DiceStyles;
       return entry;
     }
     case "deck_draw": {
@@ -195,6 +199,7 @@ export class RoomClient {
     // (rooms.py) — desistir so trocaria "reconecta sozinho" por "trava até
     // alguem notar", que e o proprio bug reportado.
     private readonly maxReconnectAttempts: number = MAX_RECONNECT_ATTEMPTS,
+    private readonly styles?: DiceStyles,
   ) {}
 
   connect(): void {
@@ -257,7 +262,9 @@ export class RoomClient {
   }
 
   private open(): void {
-    const ws = new WebSocket(roomWsUrl(this.code, this.name, this.style, this.spectator));
+    const ws = new WebSocket(
+      roomWsUrl(this.code, this.name, this.style, this.spectator, this.styles),
+    );
     this.ws = ws;
 
     ws.onmessage = (msg: MessageEvent) => {

@@ -15,6 +15,10 @@ export interface RollGroup {
   dropped?: number[];
   modifier?: number;
   total?: number;
+  /** Slot de cor do grupo de dados (1 = primário, 2 = secundário, 3 = terciário). */
+  slot?: number;
+  /** Tema/cor visual legado ou customizado do grupo. */
+  theme?: string;
 }
 
 export interface RollResult {

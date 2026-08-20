@@ -47,6 +47,8 @@ export interface GroupSpec {
   dice: DiceSpec;
   // Termos de dado em ordem. Sempre presente: grupo simples tem 1 termo.
   terms: DiceTerm[];
+  /** Slot de cor do dado (1 = primário, 2 = secundário, 3 = terciário). */
+  slot?: number;
 }
 
 export interface NotationAST {
@@ -63,11 +65,12 @@ export class NotationError extends Error {
 const MAX_DICE = 100;
 const MAX_SIDES = 1000;
 
-const GROUP_PATTERN = /^\{([^{}]+)\}\s*vs\s*\{([^{}]+)\}$/i;
-// N grupos independentes ("nao competem entre si", roll_type "multi" dos
-// profiles — docs/system-profiles.md): "{2d10} + {2d10}". Sem "vs": os
-// grupos aqui nunca sao comparados um com o outro pela gramatica.
-const PLUS_GROUP_PATTERN = /^\{[^{}]+\}(?:\s*\+\s*\{[^{}]+\})+$/;
+// Bloco de grupo individual: "{2d6}", "[2d6]", "1[3d6]", "2{2d6}", "3[1d6]".
+const GROUP_BLOCK_STR = "(?:([1-9]\\d*)?(?:\\{([^{}]+)\\}|\\[([^\\[\\]]+)\\]))";
+const GROUP_BLOCK_PATTERN = new RegExp(`^${GROUP_BLOCK_STR}$`);
+const VS_PATTERN = new RegExp(`^${GROUP_BLOCK_STR}\\s+vs\\s+${GROUP_BLOCK_STR}$`, "i");
+const PLUS_GROUPS_TEST = new RegExp(`^${GROUP_BLOCK_STR}(?:\\s*\\+\\s*${GROUP_BLOCK_STR})+$`);
+const PLUS_GROUPS_EXTRACT = new RegExp(GROUP_BLOCK_STR, "g");
 // "2d6", "d20", "4dF", "2c" (cartas de baralho).
 const DICE_HEAD = /^(\d*)(?:d(\d+|f)|c)/i;
 const NUMBER = /^(\d+)/;
@@ -254,44 +257,47 @@ function parseGroupDice(expr: string): { dice: DiceSpec; terms: DiceTerm[] } {
   }
 }
 
-// Grupos "+" (PLUS_GROUP_PATTERN ja garantiu o formato inteiro da string —
-// so blocos {...} separados por "+", nada mais): extrai cada bloco na
-// ordem em que aparece. Nomes genericos ("group0", "group1", ...) bastam
-// porque quem consome (rollWithProfile, displayGroups, diceFromResult)
-// sempre zipa pelo INDICE do array, nunca pelo nome.
-function parsePlusGroups(trimmed: string): NotationAST {
-  const blocks = [...trimmed.matchAll(/\{([^{}]+)\}/g)].map((m) => m[1]!);
-  return {
-    groups: blocks.map((expr, i) => ({ name: `group${i}`, ...parseGroupDice(expr) })),
-  };
-}
-
 // Parseia a notacao camada 1 completa.
 //
-// - Expressao unica ("2d6+3", "2d6+1d4+3") vira um unico grupo "roll".
-// - "{...} vs {...}" produz dois grupos: "action" (esquerda) e
-//   "challenge" (direita), resolvidos em arrays separados — a gramatica
-//   nunca soma um grupo contra o outro.
-// - "{...} + {...} + ..." produz N grupos independentes (roll_type "multi"
-//   dos profiles) — tambem nunca somados entre si.
+// - Expressao unica ("2d6+3", "2d6+1d4+3", "1[2d6+3]", "2[1d20]") vira um unico grupo "roll".
+// - "{...} vs {...}" ou "1[...] vs 2[...]" produz dois grupos: "action" e
+//   "challenge", resolvidos em arrays separados.
+// - "1[3d6] + 2[2d6] + ..." produz N grupos independentes com slot de cor por grupo.
 export function parseNotation(notation: string): NotationAST {
   const trimmed = notation.trim();
   if (trimmed === "") {
     throw new NotationError("notacao vazia");
   }
-  const vs = GROUP_PATTERN.exec(trimmed);
+  const vs = VS_PATTERN.exec(trimmed);
   if (vs) {
+    const slot1 = vs[1] ? Number(vs[1]) : undefined;
+    const expr1 = (vs[2] ?? vs[3])!.trim();
+    const slot2 = vs[4] ? Number(vs[4]) : undefined;
+    const expr2 = (vs[5] ?? vs[6])!.trim();
     return {
       groups: [
-        { name: "action", ...parseGroupDice(vs[1]!) },
-        { name: "challenge", ...parseGroupDice(vs[2]!) },
+        { name: "action", ...(slot1 !== undefined ? { slot: slot1 } : {}), ...parseGroupDice(expr1) },
+        { name: "challenge", ...(slot2 !== undefined ? { slot: slot2 } : {}), ...parseGroupDice(expr2) },
       ],
     };
   }
-  if (PLUS_GROUP_PATTERN.test(trimmed)) {
-    return parsePlusGroups(trimmed);
+  if (PLUS_GROUPS_TEST.test(trimmed)) {
+    const matches = [...trimmed.matchAll(PLUS_GROUPS_EXTRACT)];
+    return {
+      groups: matches.map((m, i) => {
+        const slot = m[1] ? Number(m[1]) : undefined;
+        const expr = (m[2] ?? m[3])!.trim();
+        return { name: `group${i}`, ...(slot !== undefined ? { slot } : {}), ...parseGroupDice(expr) };
+      }),
+    };
   }
-  if (/[{}]|\bvs\b/i.test(trimmed)) {
+  const singleBlock = GROUP_BLOCK_PATTERN.exec(trimmed);
+  if (singleBlock) {
+    const slot = singleBlock[1] ? Number(singleBlock[1]) : undefined;
+    const expr = (singleBlock[2] ?? singleBlock[3])!.trim();
+    return { groups: [{ name: "roll", ...(slot !== undefined ? { slot } : {}), ...parseGroupDice(expr) }] };
+  }
+  if (/[{}\[\]]|\bvs\b/i.test(trimmed)) {
     throw new NotationError(`sintaxe de grupo invalida: "${notation}"`);
   }
   return { groups: [{ name: "roll", ...parseGroupDice(trimmed) }] };

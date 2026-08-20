@@ -5,6 +5,7 @@ import {
   clearRoomCode,
   DEFAULT_DECK_CONFIG,
   DEFAULT_DICE_STYLE,
+  DEFAULT_DICE_STYLES,
   DEFAULT_QUALITY_TIER,
   DICE_MATERIALS,
   DICE_PRESETS,
@@ -13,12 +14,14 @@ import {
   loadDeckConfig,
   loadDiceScale,
   loadDiceStyle,
+  loadDiceStyles,
   loadQualityTier,
   loadRoomCode,
   loadTheme,
   saveDeckConfig,
   saveDiceScale,
   saveDiceStyle,
+  saveDiceStyles,
   saveQualityTier,
   saveRoomCode,
   saveTheme,
@@ -121,6 +124,22 @@ describe("estilo dos dados", () => {
     expect(loadDiceStyle(makeStorage({ "rolai.dice-style": "{{" }))).toEqual(
       DEFAULT_DICE_STYLE,
     );
+  });
+
+  it("loadDiceStyles e saveDiceStyles gerenciam slots 1, 2 e 3", () => {
+    const storage = makeStorage();
+    const initial = loadDiceStyles(storage);
+    expect(initial["1"]).toEqual(DEFAULT_DICE_STYLE);
+    expect(initial["2"]).toEqual(DEFAULT_DICE_STYLES["2"]);
+    expect(initial["3"]).toEqual(DEFAULT_DICE_STYLES["3"]);
+
+    const custom = {
+      ...initial,
+      "2": { ...initial["2"], body: "#00ffcc" },
+    };
+    saveDiceStyles(storage, custom);
+    const loaded = loadDiceStyles(storage);
+    expect(loaded["2"].body).toBe("#00ffcc");
   });
 });
 

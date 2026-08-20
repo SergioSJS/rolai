@@ -363,18 +363,36 @@ function evaluate(node: Node, scope: ExpressionScope): Value {
           return arr.filter((v) => matchesCondition(v, condNode.value)).length;
         }
         case "max": {
-          const arr = asArray(evaluate(args[0]!, scope), "max");
-          if (args.length !== 1 || arr.length === 0) {
-            throw new ExpressionError("max(field) exige array nao vazio");
+          if (args.length === 0) {
+            throw new ExpressionError("max(...) exige ao menos 1 argumento");
           }
-          return Math.max(...arr);
+          const nums: number[] = [];
+          for (const arg of args) {
+            const val = evaluate(arg, scope);
+            if (Array.isArray(val)) {
+              nums.push(...val);
+            } else if (typeof val === "number") {
+              nums.push(val);
+            }
+          }
+          if (nums.length === 0) return 0;
+          return Math.max(...nums);
         }
         case "min": {
-          const arr = asArray(evaluate(args[0]!, scope), "min");
-          if (args.length !== 1 || arr.length === 0) {
-            throw new ExpressionError("min(field) exige array nao vazio");
+          if (args.length === 0) {
+            throw new ExpressionError("min(...) exige ao menos 1 argumento");
           }
-          return Math.min(...arr);
+          const nums: number[] = [];
+          for (const arg of args) {
+            const val = evaluate(arg, scope);
+            if (Array.isArray(val)) {
+              nums.push(...val);
+            } else if (typeof val === "number") {
+              nums.push(val);
+            }
+          }
+          if (nums.length === 0) return 0;
+          return Math.min(...nums);
         }
         default:
           throw new ExpressionError(`funcao nao permitida: "${node.fn}"`);

@@ -5,23 +5,29 @@
 
 import { parseNotation } from "@rolai/rules-engine";
 import type { RollResult } from "@rolai/rules-engine";
-import type { DiceStyle } from "../settings";
+import type { DiceStyle, DiceStyles } from "../settings";
 
 export interface RenderedDie {
   sides: number;
   value: number;
   // Dado Fudge (4dF): o valor ja vem como -1, 0 ou +1.
   fudge?: boolean;
+  // Slot de cor (1, 2, 3) do dado.
+  slot?: number;
 }
 
 export interface RollRenderer {
   // Prepara o renderer dentro do container (criar canvas/WebGL, etc).
   init(container: HTMLElement): Promise<void>;
   // Anima o resultado ja decidido. Resolve quando a animacao termina
-  // (texto puro resolve imediatamente). `style` e a aparencia dos dados de
-  // QUEM ROLOU (vem junto da rolagem pela sala) — sem ela, vale a do dono
+  // (texto puro resolve imediatamente). `style` / `styles` sao a aparencia dos dados de
+  // QUEM ROLOU (vem junto da rolagem pela sala) — sem eles, vale a do dono
   // da tela.
-  roll(result: RollResult, style?: DiceStyle | null): Promise<void>;
+  roll(
+    result: RollResult,
+    style?: DiceStyle | null,
+    styles?: DiceStyles | null,
+  ): Promise<void>;
   // Tira os dados da tela sem destruir o renderer (clique pra dispensar).
   clear(): void;
   // Avisa que o container mudou de tamanho (a faixa reservada no pe do palco
@@ -86,12 +92,18 @@ export function cardsFromResult(result: RollResult): Card[] {
 // roller concatenou). Termos de carta (card: true) sao pulados — cartas
 // animam no palco de cartas, nao como dados 3D na mesa.
 export function diceFromResult(result: RollResult): RenderedDie[] {
-  const ast = parseNotation(result.notation);
+  let ast;
+  try {
+    ast = parseNotation(result.notation);
+  } catch {
+    return [];
+  }
   const groups = Object.values(result.groups);
   const dice: RenderedDie[] = [];
   ast.groups.forEach((groupSpec, i) => {
     const rolled = groups[i];
     if (!rolled) return;
+    const slot = rolled.slot ?? groupSpec.slot;
     let cursor = 0;
     for (const term of groupSpec.terms) {
       const count = keptCount(term.dice);
@@ -99,6 +111,7 @@ export function diceFromResult(result: RollResult): RenderedDie[] {
         for (const value of rolled.rolls.slice(cursor, cursor + count)) {
           const die: RenderedDie = { sides: term.dice.sides, value };
           if (term.dice.fudge) die.fudge = true;
+          if (slot !== undefined) die.slot = slot;
           dice.push(die);
         }
       }
@@ -114,6 +127,7 @@ export function diceFromResult(result: RollResult): RenderedDie[] {
       for (const value of dropped) {
         const die: RenderedDie = { sides: primeiro.sides, value };
         if (primeiro.fudge) die.fudge = true;
+        if (slot !== undefined) die.slot = slot;
         dice.push(die);
       }
     }

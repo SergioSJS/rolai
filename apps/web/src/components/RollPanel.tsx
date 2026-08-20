@@ -18,6 +18,7 @@ import type { FormEvent } from "react";
 import type { RollResult, SystemProfile } from "@rolai/rules-engine";
 import { rollFromNotation, rollFromOverlay, rollFromProfile } from "../roll";
 import { isYzeSystem, planYzePush } from "../yzePush";
+import { isTrophy, planTrophyPush } from "../trophyPush";
 import { ComposerBar } from "./ComposerBar";
 import { TimesIcon } from "./Glyphs";
 import { StepperInput } from "./StepperInput";
@@ -304,22 +305,44 @@ export function RollPanel({ profile, onRoll, disabled }: RollPanelProps) {
   //
   // Nada impede forcar de novo o que ja foi forcado: a regra de "so uma
   // vez" varia por jogo da linha, e quem decide isso e a mesa, nao o app.
-  const pushPlan =
+  const yzePush =
     profile !== undefined && isYzeSystem(profile.system) && lastOwn !== null
       ? planYzePush(profile.system, lastOwn, rawInputs)
       : null;
 
+  const trophyPush =
+    profile !== undefined && isTrophy(profile.system) && lastOwn !== null
+      ? planTrophyPush(lastOwn, rawInputs)
+      : null;
+
+  const canPush = yzePush !== null || trophyPush !== null;
+
   async function handlePush() {
-    if (pushPlan === null) return;
-    setRawInputs(() => pushPlan.inputs);
-    const travados = pushPlan.sucessosTravados;
-    const rerrolados = pushPlan.dadosRerrolados;
-    const result = await runProfileRoll(pushPlan.inputs);
-    if (result === null) return;
-    setPushHint(
-      `Forçou: ${travados} ${travados === 1 ? "sucesso garantido" : "sucessos garantidos"}, ` +
-        `${rerrolados} ${rerrolados === 1 ? "dado rerrolado" : "dados rerrolados"}.`,
-    );
+    if (yzePush !== null) {
+      setRawInputs(() => yzePush.inputs);
+      const travados = yzePush.sucessosTravados;
+      const rerrolados = yzePush.dadosRerrolados;
+      const result = await runProfileRoll(yzePush.inputs);
+      if (result === null) return;
+      setPushHint(
+        `Forçou: ${travados} ${travados === 1 ? "sucesso garantido" : "sucessos garantidos"}, ` +
+          `${rerrolados} ${rerrolados === 1 ? "dado rerrolado" : "dados rerrolados"}.`,
+      );
+    } else if (trophyPush !== null) {
+      const inputsStr: Record<string, string> = {
+        claros: String(trophyPush["claros"]),
+        escuros: String(trophyPush["escuros"]),
+        ruina: String(trophyPush["ruina"]),
+      };
+      setRawInputs(() => inputsStr);
+      const result = await runProfileRoll(inputsStr);
+      if (result === null) return;
+      setPushHint(
+        `Forçou: +1 dado escuro (${trophyPush["escuros"]} ${
+          trophyPush["escuros"] === 1 ? "dado escuro" : "dados escuros"
+        }).`,
+      );
+    }
   }
 
   return (
@@ -340,7 +363,7 @@ export function RollPanel({ profile, onRoll, disabled }: RollPanelProps) {
           >
             Rolar
           </button>
-          {pushPlan !== null && (
+          {canPush && (
             <button
               type="button"
               className="push-button"

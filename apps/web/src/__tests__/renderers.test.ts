@@ -164,3 +164,18 @@ describe("pool vazio (0dX)", () => {
   });
 });
 
+describe("slots de dados (orderDiceForBox e diceFromResult)", () => {
+  it("extrai slots 1, 2 e 3 e mapeia corretamente para cada dado", () => {
+    const res = roll("1[2d6] + 2[1d6] + 3[1d20]", {
+      deterministic: [4, 5, 2, 18],
+    });
+    const dice = diceFromResult(res);
+    expect(dice).toEqual([
+      { sides: 6, value: 4, slot: 1 },
+      { sides: 6, value: 5, slot: 1 },
+      { sides: 6, value: 2, slot: 2 },
+      { sides: 20, value: 18, slot: 3 },
+    ]);
+  });
+});
+

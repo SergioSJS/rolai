@@ -82,6 +82,8 @@ describe("bundle headless (WebView Android)", () => {
       "pbta2d10",
       "pool_d6",
       "roll_under",
+      "trophy_dark",
+      "trophy_gold",
       "wod5",
       "yze",
       "yze_alien",
@@ -231,7 +233,33 @@ describe("bundle headless (WebView Android)", () => {
     expect(delivery.result.outcome_flags).toContain("yze_dano_atributo_x1");
   });
 
-  it("rollPush() recusa rolagem de sistema que nao e Year Zero", async () => {
+  it("rollPush() empurra rolagem de Trophy acrescentando +1 dado escuro", async () => {
+    const capture = installBridge();
+    const previous = await rollWithProfile(
+      getProfile("trophy_dark")!,
+      { claros: 1, escuros: 0, ruina: 2 },
+      { deterministic: [3] },
+    );
+    await globalThis.rolai.rollPush(
+      "trophy_dark",
+      JSON.stringify(previous),
+      JSON.stringify({ claros: 1, escuros: 0, ruina: 2 }),
+      "cb-push-trophy",
+      JSON.stringify({ deterministic: [4, 5] }),
+    );
+    const delivery = await waitDelivery(capture, "cb-push-trophy");
+    expect(delivery.ok).toBe(true);
+    if (!delivery.ok) return;
+    expect(delivery.pushInputs).toEqual({
+      claros: "1",
+      escuros: "1",
+      ruina: "2",
+    });
+    expect(delivery.result.outcome).toBe("weak_hit");
+    expect(delivery.result.outcome_flags).toContain("trophy_ruina_aumenta");
+  });
+
+  it("rollPush() recusa rolagem de sistema que nao suporta push", async () => {
     const capture = installBridge();
     const previous = await rollWithProfile(getProfile("pbta")!, { mode: "", mod: 0 }, {
       deterministic: [3, 4],

@@ -60,6 +60,10 @@ export interface ProfileField {
   // notacao normal quebraria ("0d6" nao e valido). FitD: pool 0 rola
   // "2d6kl1" (2d6, mantem o menor) em vez de nao rolar nada.
   zeroDiceFallback: string | null;
+  // Slot de cor do grupo (1 = primario, 2 = secundario, 3 = terciario).
+  slot: number | null;
+  // Tema/cor visual do grupo de dados (ex: 'light', 'dark', 'gold', 'stress', 'hunger', 'gear').
+  theme: string | null;
 }
 
 export interface OutcomeRule {
@@ -190,6 +194,14 @@ function validateFields(raw: unknown): ProfileField[] {
     ) {
       throw new ProfileError(`${where}: "zero_dice_fallback" deve ser string ou null`);
     }
+    const slot = item["slot"];
+    if (slot !== undefined && slot !== null && (!Number.isInteger(slot) || (slot as number) < 1)) {
+      throw new ProfileError(`${where}: "slot" deve ser um inteiro positivo (ex: 1, 2, 3)`);
+    }
+    const theme = item["theme"];
+    if (theme !== undefined && theme !== null && typeof theme !== "string") {
+      throw new ProfileError(`${where}: "theme" deve ser string ou null`);
+    }
     return {
       id: requireString(item, "id", where),
       dice: requireString(item, "dice", where),
@@ -197,6 +209,8 @@ function validateFields(raw: unknown): ProfileField[] {
       compareIndividually: compare ?? false,
       successRule: successRule ?? null,
       zeroDiceFallback: zeroDiceFallback ?? null,
+      slot: (slot as number) ?? null,
+      theme: theme ?? null,
     };
   });
 }
@@ -505,6 +519,12 @@ export async function rollWithProfile(
       // sem modificador; true mantem o array pra comparacao elemento a
       // elemento (docs/system-profiles.md).
       group.total = group.rolls.reduce((sum, v) => sum + v, 0) + (group.modifier ?? 0);
+    }
+    if (field.slot) {
+      group.slot = field.slot;
+    }
+    if (field.theme) {
+      group.theme = field.theme;
     }
     groups[field.id] = group;
     notations.push(notation);

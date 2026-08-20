@@ -92,4 +92,9 @@
     <string name="label_material">Material</string>
     <string name="label_harmony">Combinar automaticamente</string>
     <string name="label_harmony_explain">O número e o contorno saem da cor do corpo, com contraste garantido. Escolher um deles à mão desliga.</string>
+    <string name="label_dice_slots">Slots de Cores</string>
+    <string name="slot_1_label">1 · Primário</string>
+    <string name="slot_2_label">2 · Secundário</string>
+    <string name="slot_3_label">3 · Terciário</string>
+    <string name="slot_hint">Notação: use 1[3d6], 2[2d6] ou 3[1d6] para misturar cores na mesma rolagem.</string>
 </resources>

@@ -7,6 +7,15 @@ import android.content.Context
  * As funcoes de validacao do companion sao puras (sem Context) justamente
  * pra serem cobertas por teste JVM local.
  */
+data class DiceSlotStyle(
+    val body: String,
+    val number: String,
+    val outline: String,
+    val texture: String,
+    val material: String,
+    val preset: String,
+)
+
 data class RolaiSettings(
     val roomCode: String,
     val playerName: String,
@@ -20,26 +29,57 @@ data class RolaiSettings(
     // Origem do apps/web — o palco de dados do overlay carrega
     // `<webBaseUrl>/?room=...&stream=1` (ver DiceStageWindow).
     val webBaseUrl: String,
-    // Id do preset de dado (mesmos ids de DICE_PRESETS no apps/web) — vai na
-    // URL do palco (`&style=`), ja que a WebView do overlay tem localStorage
-    // proprio e nunca veria a escolha feita no navegador.
-    val dicePreset: String,
+    // Slot 1 (Primário)
+    val dicePreset: String = DEFAULT_DICE_PRESET,
     // Tamanho do dado em % (70..160) e tier de qualidade do palco — tambem
     // viajam pela URL do modo stream (`&scale=`, `&quality=`).
-    val diceScalePercent: Int,
-    val quality: String,
-    // Aparencia custom do dado (hex "#rrggbb" + ids de textura/material,
-    // os mesmos do apps/web). Vao na URL do palco (&body=&number=...).
-    val diceBody: String,
-    val diceNumber: String,
-    val diceOutline: String,
-    val diceTexture: String,
-    val diceMaterial: String,
+    val diceScalePercent: Int = DEFAULT_SCALE_PERCENT,
+    val quality: String = DEFAULT_QUALITY,
+    val diceBody: String = DEFAULT_BODY,
+    val diceNumber: String = DEFAULT_NUMBER,
+    val diceOutline: String = DEFAULT_OUTLINE,
+    val diceTexture: String = DEFAULT_TEXTURE,
+    val diceMaterial: String = DEFAULT_MATERIAL,
+    // Slot 2 (Secundário)
+    val dice2Preset: String = DEFAULT_2_DICE_PRESET,
+    val dice2Body: String = DEFAULT_2_BODY,
+    val dice2Number: String = DEFAULT_2_NUMBER,
+    val dice2Outline: String = DEFAULT_2_OUTLINE,
+    val dice2Texture: String = DEFAULT_2_TEXTURE,
+    val dice2Material: String = DEFAULT_2_MATERIAL,
+    // Slot 3 (Terciário)
+    val dice3Preset: String = DEFAULT_3_DICE_PRESET,
+    val dice3Body: String = DEFAULT_3_BODY,
+    val dice3Number: String = DEFAULT_3_NUMBER,
+    val dice3Outline: String = DEFAULT_3_OUTLINE,
+    val dice3Texture: String = DEFAULT_3_TEXTURE,
+    val dice3Material: String = DEFAULT_3_MATERIAL,
     // Config do baralho (espelha DeckConfig de @rolai/deck-engine).
     val deckIncludeJokers: Boolean = false,
     val deckRemovalMode: String = "permanent",
     val deckAutoReshuffle: Boolean = false,
 ) {
+    fun slotStyle(slot: String): DiceSlotStyle = when (slot) {
+        "2" -> DiceSlotStyle(dice2Body, dice2Number, dice2Outline, dice2Texture, dice2Material, dice2Preset)
+        "3" -> DiceSlotStyle(dice3Body, dice3Number, dice3Outline, dice3Texture, dice3Material, dice3Preset)
+        else -> DiceSlotStyle(diceBody, diceNumber, diceOutline, diceTexture, diceMaterial, dicePreset)
+    }
+
+    fun withSlotStyle(slot: String, style: DiceSlotStyle): RolaiSettings = when (slot) {
+        "2" -> copy(
+            dice2Body = style.body, dice2Number = style.number, dice2Outline = style.outline,
+            dice2Texture = style.texture, dice2Material = style.material, dice2Preset = style.preset,
+        )
+        "3" -> copy(
+            dice3Body = style.body, dice3Number = style.number, dice3Outline = style.outline,
+            dice3Texture = style.texture, dice3Material = style.material, dice3Preset = style.preset,
+        )
+        else -> copy(
+            diceBody = style.body, diceNumber = style.number, diceOutline = style.outline,
+            diceTexture = style.texture, diceMaterial = style.material, dicePreset = style.preset,
+        )
+    }
+
     companion object {
         const val PREFS_NAME = "rolai_settings"
 
@@ -57,6 +97,17 @@ data class RolaiSettings(
             "Esmeralda", "Osso", "Obsidiana", "Sangue", "Abissal", "Gelo", "Escamas", "Taverna",
         )
         const val DEFAULT_DICE_PRESET = "esmeralda"
+
+        val PRESET_STYLES: Map<String, DiceSlotStyle> = mapOf(
+            "esmeralda" to DiceSlotStyle("#1d9e75", "#f4f7f5", "#0c3527", "none", "plastic", "esmeralda"),
+            "osso" to DiceSlotStyle("#e8e0cd", "#3a3226", "#3a3226", "marble", "auto", "osso"),
+            "obsidiana" to DiceSlotStyle("#14171c", "#e5c07b", "#e5c07b", "speckles", "metal", "obsidiana"),
+            "sangue" to DiceSlotStyle("#8c1f2b", "#f7e8e2", "#2b0a0e", "marble", "plastic", "sangue"),
+            "abissal" to DiceSlotStyle("#0c1929", "#56b6c2", "#56b6c2", "stars", "glass", "abissal"),
+            "gelo" to DiceSlotStyle("#2a86b8", "#ffffff", "#0e3852", "ice", "glass", "gelo"),
+            "escamas" to DiceSlotStyle("#2d5a27", "#d19a66", "#142b11", "dragon", "metal", "escamas"),
+            "madeira" to DiceSlotStyle("#5a3825", "#f4e8c1", "#2d1b11", "wood", "wood", "madeira"),
+        )
 
         // Mesma faixa do apps/web (MIN/MAX_DICE_SCALE em settings.ts).
         const val MIN_SCALE_PERCENT = 70
@@ -86,16 +137,9 @@ data class RolaiSettings(
         val MATERIAL_LABELS = listOf("Automático", "Plástico", "Metal", "Madeira", "Vidro", "Fosco")
 
         /**
-         * Paleta dos seletores de cor, com ordem proposital (a lista
-         * anterior era um apanhado das cores dos presets, sem logica):
-         *
-         *  1. NEUTROS, do claro pro escuro — sao o que se usa em numero e
-         *     contorno na maioria das combinacoes legiveis;
-         *  2. ESPECTRO, 12 matizes dando a volta no circulo cromatico com
-         *     saturacao e luminosidade constantes, entao nenhuma cor "pula"
-         *     e qualquer uma serve de corpo do dado.
-         *
-         * O verde da marca (#1d9e75) e o esmeralda do espectro.
+         * Paleta dos seletores de cor, com ordem proposital:
+         *  1. NEUTROS, do claro pro escuro;
+         *  2. ESPECTRO, 12 matizes com S/L constantes.
          */
         val PALETTE = listOf(
             // neutros
@@ -105,16 +149,30 @@ data class RolaiSettings(
             "#199e93", "#2a86b8", "#2b5fc4", "#4a3fb8", "#7a3fb8", "#b83a94",
         )
 
-        // Defaults = preset "esmeralda" do apps/web.
+        // Defaults = presets dos 3 slots do apps/web.
         const val DEFAULT_BODY = "#1d9e75"
         const val DEFAULT_NUMBER = "#f4f7f5"
         const val DEFAULT_OUTLINE = "#0c3527"
         const val DEFAULT_TEXTURE = "none"
         const val DEFAULT_MATERIAL = "plastic"
+
+        const val DEFAULT_2_BODY = "#8c1f2b"
+        const val DEFAULT_2_NUMBER = "#f7e8e2"
+        const val DEFAULT_2_OUTLINE = "#2b0a0e"
+        const val DEFAULT_2_TEXTURE = "marble"
+        const val DEFAULT_2_MATERIAL = "plastic"
+        const val DEFAULT_2_DICE_PRESET = "sangue"
+
+        const val DEFAULT_3_BODY = "#2a86b8"
+        const val DEFAULT_3_NUMBER = "#ffffff"
+        const val DEFAULT_3_OUTLINE = "#0e3852"
+        const val DEFAULT_3_TEXTURE = "ice"
+        const val DEFAULT_3_MATERIAL = "glass"
+        const val DEFAULT_3_DICE_PRESET = "gelo"
+
         const val DEFAULT_NAME = "overlay"
 
-        // Mesmo formato validado no backend (docs/security.md) — validar
-        // aqui evita abrir WS com codigo que o servidor rejeitaria (4404).
+        // Mesmo formato validado no backend (docs/security.md).
         private val ROOM_CODE_REGEX = Regex("[A-Za-z0-9_-]{4,32}")
 
         // Teto do apelido no servidor (MAX_NAME_LENGTH, app/limits.py).
@@ -122,15 +180,6 @@ data class RolaiSettings(
 
         fun isValidRoomCode(code: String): Boolean = ROOM_CODE_REGEX.matches(code)
 
-        // O "Copiar link"/"Copiar link pro OBS" da web gera a URL inteira
-        // (`https://rolai.app/?room=CODIGO...`), nao so o codigo — colar
-        // isso direto no campo aqui tinha que funcionar tambem, senao o
-        // unico jeito de levar uma sala da web pro app era digitar o codigo
-        // a mao, letra por letra. `android.net.Uri` fica de fora de proposito:
-        // sob `isReturnDefaultValues=true` (testOptions do modulo) ele vira
-        // stub e devolve null sem parsear nada — string pura e o que da pra
-        // cobrir de verdade em teste JVM local (mesmo espirito do resto do
-        // arquivo).
         fun extractRoomCode(raw: String): String {
             val trimmed = raw.trim()
             if (!trimmed.startsWith("http://", ignoreCase = true) &&
@@ -152,19 +201,12 @@ data class RolaiSettings(
             return trimmed
         }
 
-        // Mao inversa do extractRoomCode: gerar o link pra colar em outro
-        // aparelho/navegador ou na Browser Source do OBS. Mesmo formato que
-        // RoomPanel.tsx monta na web (`?room=CODIGO`, `&stream=1&scale=`) —
-        // tem que abrir na MESMA sala dos dois lados.
         fun roomShareUrl(webBaseUrl: String, code: String): String {
             val base = webBaseUrl.trim().trimEnd('/').ifEmpty { DEFAULT_WEB_BASE_URL }
             return "$base/?room=$code"
         }
 
         fun roomObsShareUrl(webBaseUrl: String, code: String, scalePercent: Int): String {
-            // /100.0 sempre fecha limpo (70..160 de 5 em 5): Double.toString
-            // no JVM devolve a representacao mais curta que da roundtrip,
-            // igual ao toString() do JS que a web usa pro mesmo numero.
             val scale = clampScalePercent(scalePercent) / 100.0
             return "${roomShareUrl(webBaseUrl, code)}&stream=1&scale=$scale"
         }
@@ -175,17 +217,11 @@ data class RolaiSettings(
         fun isValidWsBaseUrl(url: String): Boolean =
             url.startsWith("wss://") || url.startsWith("ws://")
 
-        // Sala e opcional: sem codigo valido o overlay rola so local.
         fun hasRoom(settings: RolaiSettings): Boolean = isValidRoomCode(settings.roomCode)
 
-        // Piso de entropia do codigo escolhido a mao. ESPELHO de
-        // is_valid_custom_code (services/backend/app/rooms.py) e de
-        // apps/web/src/room/code.ts. Quem manda e o backend; isto existe pra
-        // dizer o motivo antes de gastar conexao e levar um 4404 seco.
         const val CUSTOM_CODE_MIN_LENGTH = 16
         const val CUSTOM_CODE_MIN_DISTINCT = 8
 
-        /** `null` = pode virar sala. Senao, o motivo pro usuario. */
         fun customCodeIssue(code: String): String? {
             val c = code.trim()
             return when {
@@ -201,11 +237,6 @@ data class RolaiSettings(
             }
         }
 
-        /**
-         * Base HTTP derivada da base WS — o REST (criar sala) e o WS moram
-         * no mesmo host. Uma config so pro usuario: quem troca o servidor
-         * troca um campo, nao dois.
-         */
         fun httpBaseUrl(wsBaseUrl: String): String {
             val base = wsBaseUrl.trimEnd('/')
             return when {
@@ -227,13 +258,14 @@ data class RolaiSettings(
                     ?: DEFAULT_WS_BASE_URL,
                 webBaseUrl = prefs.getString("web_base_url", DEFAULT_WEB_BASE_URL)
                     ?: DEFAULT_WEB_BASE_URL,
-                dicePreset = prefs.getString("dice_preset", DEFAULT_DICE_PRESET)
-                    ?: DEFAULT_DICE_PRESET,
                 diceScalePercent = clampScalePercent(
                     prefs.getInt("dice_scale_percent", DEFAULT_SCALE_PERCENT),
                 ),
                 quality = prefs.getString("quality", DEFAULT_QUALITY)
                     .let { if (it in QUALITY_IDS) it!! else DEFAULT_QUALITY },
+                // Slot 1
+                dicePreset = prefs.getString("dice_preset", DEFAULT_DICE_PRESET)
+                    ?: DEFAULT_DICE_PRESET,
                 diceBody = prefs.getString("dice_body", DEFAULT_BODY) ?: DEFAULT_BODY,
                 diceNumber = prefs.getString("dice_number", DEFAULT_NUMBER) ?: DEFAULT_NUMBER,
                 diceOutline = prefs.getString("dice_outline", DEFAULT_OUTLINE) ?: DEFAULT_OUTLINE,
@@ -241,6 +273,27 @@ data class RolaiSettings(
                     .let { if (it in TEXTURE_IDS) it!! else DEFAULT_TEXTURE },
                 diceMaterial = prefs.getString("dice_material", DEFAULT_MATERIAL)
                     .let { if (it in MATERIAL_IDS) it!! else DEFAULT_MATERIAL },
+                // Slot 2
+                dice2Preset = prefs.getString("dice_2_preset", DEFAULT_2_DICE_PRESET)
+                    ?: DEFAULT_2_DICE_PRESET,
+                dice2Body = prefs.getString("dice_2_body", DEFAULT_2_BODY) ?: DEFAULT_2_BODY,
+                dice2Number = prefs.getString("dice_2_number", DEFAULT_2_NUMBER) ?: DEFAULT_2_NUMBER,
+                dice2Outline = prefs.getString("dice_2_outline", DEFAULT_2_OUTLINE) ?: DEFAULT_2_OUTLINE,
+                dice2Texture = prefs.getString("dice_2_texture", DEFAULT_2_TEXTURE)
+                    .let { if (it in TEXTURE_IDS) it!! else DEFAULT_2_TEXTURE },
+                dice2Material = prefs.getString("dice_2_material", DEFAULT_2_MATERIAL)
+                    .let { if (it in MATERIAL_IDS) it!! else DEFAULT_2_MATERIAL },
+                // Slot 3
+                dice3Preset = prefs.getString("dice_3_preset", DEFAULT_3_DICE_PRESET)
+                    ?: DEFAULT_3_DICE_PRESET,
+                dice3Body = prefs.getString("dice_3_body", DEFAULT_3_BODY) ?: DEFAULT_3_BODY,
+                dice3Number = prefs.getString("dice_3_number", DEFAULT_3_NUMBER) ?: DEFAULT_3_NUMBER,
+                dice3Outline = prefs.getString("dice_3_outline", DEFAULT_3_OUTLINE) ?: DEFAULT_3_OUTLINE,
+                dice3Texture = prefs.getString("dice_3_texture", DEFAULT_3_TEXTURE)
+                    .let { if (it in TEXTURE_IDS) it!! else DEFAULT_3_TEXTURE },
+                dice3Material = prefs.getString("dice_3_material", DEFAULT_3_MATERIAL)
+                    .let { if (it in MATERIAL_IDS) it!! else DEFAULT_3_MATERIAL },
+                // Baralho
                 deckIncludeJokers = prefs.getBoolean("deck_include_jokers", false),
                 deckRemovalMode = prefs.getString("deck_removal_mode", "permanent") ?: "permanent",
                 deckAutoReshuffle = prefs.getBoolean("deck_auto_reshuffle", false),
@@ -256,14 +309,30 @@ data class RolaiSettings(
                 .putString("system", settings.system)
                 .putString("inputs_json", settings.inputsJson.trim())
                 .putString("ws_base_url", settings.wsBaseUrl.trim())
-                .putString("dice_preset", settings.dicePreset)
                 .putInt("dice_scale_percent", clampScalePercent(settings.diceScalePercent))
                 .putString("quality", settings.quality)
+                // Slot 1
+                .putString("dice_preset", settings.dicePreset)
                 .putString("dice_body", settings.diceBody)
                 .putString("dice_number", settings.diceNumber)
                 .putString("dice_outline", settings.diceOutline)
                 .putString("dice_texture", settings.diceTexture)
                 .putString("dice_material", settings.diceMaterial)
+                // Slot 2
+                .putString("dice_2_preset", settings.dice2Preset)
+                .putString("dice_2_body", settings.dice2Body)
+                .putString("dice_2_number", settings.dice2Number)
+                .putString("dice_2_outline", settings.dice2Outline)
+                .putString("dice_2_texture", settings.dice2Texture)
+                .putString("dice_2_material", settings.dice2Material)
+                // Slot 3
+                .putString("dice_3_preset", settings.dice3Preset)
+                .putString("dice_3_body", settings.dice3Body)
+                .putString("dice_3_number", settings.dice3Number)
+                .putString("dice_3_outline", settings.dice3Outline)
+                .putString("dice_3_texture", settings.dice3Texture)
+                .putString("dice_3_material", settings.dice3Material)
+                // Baralho
                 .putBoolean("deck_include_jokers", settings.deckIncludeJokers)
                 .putString("deck_removal_mode", settings.deckRemovalMode)
                 .putBoolean("deck_auto_reshuffle", settings.deckAutoReshuffle)
