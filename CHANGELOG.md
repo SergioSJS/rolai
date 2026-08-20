@@ -4,6 +4,41 @@ Todas as mudanças notáveis neste projeto estão documentadas aqui.
 Formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/)
 e o projeto adere a [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Mudado
+- **Fatiamento dos arquivos grandes** (sem mudança de comportamento):
+  - Android: a leitura do resultado saiu da view e do service para
+    `ResultFormat.kt` (JSON -> texto), `RichTextPlan.kt` (o que pintar,
+    como dado puro) e `ResultSpans.kt` (aplica os spans). `OverlayPalette.kt`
+    e `DieIconDrawable.kt` também saíram da `OverlayView`.
+  - Backend: `rooms.py` (790 linhas) virou `room_store.py`, `room_deps.py`,
+    `room_export.py` e `room_ws.py`, com o handshake do WebSocket extraído
+    em `_admit()`.
+  - Web: `styles.css` (2856 linhas) virou 13 arquivos em `src/styles/` —
+    o CSS compilado saiu byte a byte idêntico; a sala do `App.tsx` virou o
+    hook `useRoomSession`.
+- **Catálogo de apresentação do Android agora é gerado**: rótulos de
+  outcome, tons e famílias de sistema saem de `apps/web/src` para
+  `OutcomeCatalog.kt` no `build:headless`. Eram tabelas copiadas à mão em
+  Kotlin, cujo esquecimento não dava erro nenhum — só id cru na tela do
+  overlay. O CI falha se o gerado divergir do commitado.
+- **Profiles varridos do diretório**: `apps/web/src/profiles.ts` usa
+  `import.meta.glob` em vez de 21 imports escritos à mão.
+
+### Corrigido
+- Trocar a cor dos dados dentro de uma sala reconectava mandando só o
+  estilo do slot 1 no handshake — a mesa continuava vendo os dados 2 e 3 na
+  cor antiga até o próximo join.
+
+### Desempenho
+- **three.js fora do chunk de entrada**: o palco 3D de cartas passou a ser
+  import dinâmico. Entrada de 1,39 MB -> 915 KB (419 KB -> 293 KB gzip).
+
+### Testes
+- 18 casos novos de JVM cobrindo a formatação rica do overlay
+  (`RichTextPlanTest`), que antes só dava pra conferir olhando o celular.
+
 ## [1.2.0] — 2026-08-20
 
 ### Adicionado

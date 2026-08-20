@@ -84,6 +84,13 @@ agora — só não fechar.
   - **3D completo/leve — implementado de verdade**:
     `components/CardStage3D.tsx` monta uma cena three.js própria
     (`cardScene3D.ts`) num `<canvas>`, independente do `dice-box-threejs`.
+    Entra por `LazyCardStage3D` (import dinâmico, desde 2026-08-20): o
+    three inteiro estava no chunk de entrada por causa deste import, e quem
+    só rolava dado baixava a cena do baralho junto — 126KB gzip a menos no
+    primeiro load. Enquanto o chunk não chega, o fallback é o próprio flip
+    2D (`CardStack`), o mesmo pro qual o palco já caía sem WebGL; o chunk é
+    aquecido quando a aba Baralho abre e, no modo stream, já na montagem
+    (no OBS a carta chega sem aviso).
     `BoxGeometry` fina (não plano) com a face da carta de um lado e o
     verso do outro — rotacionar o mesh 180° troca o que a câmera vê, sem
     trocar material. Textura vem de `cardTexture.tsx`: rasteriza o

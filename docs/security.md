@@ -16,7 +16,7 @@ importa pra este projeto.
   adivinhável nem enumerável.
 - **Código escolhido pelo usuário (trade-off aceito, 2026-08-06)**: entrar
   numa URL de sala inexistente **cria** a sala com aquele código, desde que
-  ele passe no piso de entropia (`is_valid_custom_code` em `rooms.py`:
+  ele passe no piso de entropia (`is_valid_custom_code` em `room_ws.py`:
   ≥16 caracteres, ≥8 distintos). Motivação: mesa fixa para OBS (a Browser
   Source aponta pro mesmo endereço para sempre, sobrevivendo ao TTL) e link
   compartilhado expirado (todos caem na **mesma** sala, em vez de cada um

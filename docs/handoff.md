@@ -462,8 +462,8 @@ Um percalço que vale lembrar: `pip install .` no CI deixa cópia do pacote em
   `ResultDisplayLines` divide o resultado em headline (grande, colorida
   pelo tom do outcome) + linha de detalhe (menor, pools nomeados
   separados por `•`) + parâmetros testados (muted). Implementado via
-  `formatDisplayLines` em `OverlayService.kt` e `formatRichResult` /
-  `applyDetailSpans` em `OverlayView.kt`.
+  `formatDisplayLines` em `ResultFormat.kt` e o plano de spans em
+  `RichTextPlan.kt` (aplicado por `ResultSpans.kt`).
 - **Cores de dado 3D corrigidas**: a segunda rolagem após trocar de modo
   (ex.: Vampiro → livre → Vampiro) resetava todos os dados pra uma cor
   só. `diceBox.updateConfig` não reaplicava os estilos de slot.
@@ -483,7 +483,7 @@ Um percalço que vale lembrar: `pip install .` no CI deixa cópia do pacote em
     dourado 10); outcomes como "fracasso bestial" e "crítico manchado"
     classificados corretamente no destaque.
   - `wod5Successes` em `format.ts` (web) e cálculo equivalente em
-    `OverlayService.kt` (Android) — apresentação, não regra do motor.
+    `ResultFormat.kt` (Android) — apresentação, não regra do motor.
   - Exemplo documentado em `docs/system-profiles.md`.
   - 8 testes no `wod5.test.ts` (rules-engine) + 2 testes novos em
     `OverlayServiceFormatTest.kt`.
