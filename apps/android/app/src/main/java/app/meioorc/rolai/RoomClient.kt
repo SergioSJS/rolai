@@ -245,6 +245,7 @@ class RoomClient(private val listener: Listener) {
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            android.util.Log.d("rolai", "sala fechou: code=$code reason='$reason'")
             webSocket.close(1000, null)
             if (code == CLOSE_ROOM_NOT_FOUND) {
                 // Sala inexistente e erro permanente — reconectar seria loop.
@@ -262,6 +263,16 @@ class RoomClient(private val listener: Listener) {
             // Rede caiu, servidor fora, handshake rejeitado: reconecta com
             // backoff (o teto do backoff respeita o rate limit de conexao
             // do backend — 30/min por IP, docs/security.md).
+            //
+            // O MOTIVO precisa aparecer. Sem este log, "conectando…" ->
+            // "reconectando…" em loop era tudo que dava pra ver: nem quem
+            // derrubou, nem por que. Custou uma sessao inteira de
+            // diagnostico com o servidor ja provado inocente.
+            android.util.Log.w(
+                "rolai",
+                "sala caiu: ${t.javaClass.simpleName}: ${t.message} (http=${response?.code})",
+                t,
+            )
             scheduleReconnect()
         }
     }

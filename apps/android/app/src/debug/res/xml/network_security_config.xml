@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SO PRA BUILD DE DEBUG. Substitui o arquivo de mesmo nome de src/main por
+  variante — o APK de release NAO vê este arquivo e continua exigindo TLS
+  para tudo que não seja loopback.
+
+  Motivo: o campo "Servidor (avançado)" existe pra apontar o app pra um
+  backend próprio, e na prática ele só funcionava via `adb reverse` — o
+  único cleartext liberado era loopback. Apontar pro IP do Mac na rede
+  (ws://192.168.x.x:8420), que é o jeito natural de testar sem cabo,
+  morria com:
+
+    UnknownServiceException: CLEARTEXT communication to 192.168.x.x
+    not permitted by network security policy
+
+  e o app só mostrava "conectando… / reconectando…" em loop. Não dá pra
+  listar a faixa da rede aqui (a config aceita domínio/IP, não CIDR), e
+  fixar um IP pessoal no repositório seria pior — então o debug libera
+  cleartext e ponto.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
