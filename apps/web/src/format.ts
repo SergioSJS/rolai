@@ -7,7 +7,7 @@ import type { RollResult } from "@rolai/rules-engine";
 // Labels pt-BR pros outcomes conhecidos dos profiles versionados
 // (packages/rules-engine/profiles/*.yaml). Outcome desconhecido (profile
 // custom) cai no id cru.
-const OUTCOME_LABELS: Record<string, string> = {
+export const OUTCOME_LABELS: Record<string, string> = {
   strong_hit: "sucesso completo",
   weak_hit: "sucesso parcial",
   miss: "falha",
@@ -82,7 +82,7 @@ export function outcomeLabel(outcome: string): string {
   return OUTCOME_LABELS[outcome] ?? outcome;
 }
 
-const GROUP_LABELS: Record<string, string> = {
+export const GROUP_LABELS: Record<string, string> = {
   action: "ação",
   challenge: "desafio",
   verb: "verbo",
@@ -129,7 +129,7 @@ export function groupLabel(name: string): string {
  */
 export type OutcomeTone = "success" | "partial" | "failure" | "neutral";
 
-const OUTCOME_TONES: Record<string, OutcomeTone> = {
+export const OUTCOME_TONES: Record<string, OutcomeTone> = {
   // Falha: e o que precisava de vermelho.
   miss: "failure",
   fail: "failure",

@@ -14,6 +14,7 @@ import type { RollOptions, RollResult } from "@rolai/rules-engine";
 import { createDeck, draw, reshuffleDeck, updateConfig } from "@rolai/deck-engine";
 import type { DeckConfig, DeckState } from "@rolai/deck-engine";
 import { availableProfiles, getProfile } from "./profiles.js";
+import { catalog } from "./catalog.js";
 import { applyInputQuirks } from "./profileInputQuirks.js";
 import { isYzeSystem, planYzePush } from "./yzePush.js";
 import { isTrophy, planTrophyPush } from "./trophyPush.js";
@@ -53,6 +54,15 @@ export interface RolaiSystemInfo {
 export interface RolaiHeadlessApi {
   /** JSON com os sistemas disponiveis (id, rotulo, inputs) — sincrono. */
   systems(): string;
+  /**
+   * JSON com o catalogo de apresentacao (rotulos de outcome/pool, tom de
+   * cada outcome, familias de profile) — sincrono.
+   *
+   * Nao e usado em runtime pela WebView: existe pro install-headless.mjs
+   * gerar OutcomeCatalog.kt a partir da mesma fonte que a web usa, em vez
+   * de manter as tabelas copiadas em Kotlin (ver src/catalog.ts).
+   */
+  catalog(): string;
   /** Rola notacao camada 1. Resultado chega via bridge no callbackId. */
   roll(notation: string, callbackId: string, optionsJson?: string): Promise<void>;
   /** Rola via profile de sistema com inputs do jogador (JSON). */
@@ -184,6 +194,10 @@ const api: RolaiHeadlessApi = {
       })),
     }));
     return JSON.stringify(infos);
+  },
+
+  catalog(): string {
+    return JSON.stringify(catalog());
   },
 
   async roll(notation, callbackId, optionsJson) {

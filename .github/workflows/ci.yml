@@ -73,6 +73,22 @@ jobs:
       # estatico nem em imagem). Bump major do vite fica como decisao separada.
       - run: npm audit --omit=dev --audit-level=high
         working-directory: .
+      # Os artefatos que o Android consome saem DESTE bundle (systems.json e
+      # OutcomeCatalog.kt). Eles ficam defasados em silencio: a web mostra o
+      # comportamento novo e o APK segue com o rotulo antigo, sem erro em
+      # lugar nenhum. Aqui o esquecimento vira build vermelho.
+      - run: npm run build:headless -w @rolai/web
+        working-directory: .
+      - name: catálogo do Android está atualizado?
+        working-directory: .
+        run: |
+          git diff --exit-code -- \
+            apps/android/app/src/main/assets/headless/systems.json \
+            apps/android/app/src/main/java/app/meioorc/rolai/OutcomeCatalog.kt \
+          || {
+            echo "::error::rode 'npm run build:headless -w @rolai/web' e commite o resultado"
+            exit 1
+          }
 
   android:
     runs-on: ubuntu-latest

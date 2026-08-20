@@ -120,9 +120,11 @@ object ResultFormat {
         }
 
     /**
-     * Nome do grupo em pt-BR. Espelha `GROUP_LABELS` de
-     * `apps/web/src/format.ts` — id desconhecido cai nele mesmo, igual
-     * na web.
+     * Nome do pool em pt-BR ("pericia" -> "perícia"). Id desconhecido cai
+     * nele mesmo, igual na web.
+     *
+     * A tabela e GERADA de `apps/web/src/format.ts` (ver OutcomeCatalog.kt);
+     * so a regra do `group1`/`group2` fica aqui, porque e codigo e nao dado.
      */
     internal fun groupLabel(name: String): String {
         val lower = name.lowercase()
@@ -131,26 +133,7 @@ object ResultFormat {
             val num = (groupMatch.groupValues[1].toIntOrNull() ?: 0) + 1
             return "grupo $num"
         }
-        return when (lower) {
-            "action" -> "ação"
-            "challenge" -> "desafio"
-            "verb" -> "verbo"
-            "noun" -> "substantivo"
-            "regular" -> "regulares"
-            "hunger" -> "fome/ira"
-            "pool" -> "pool"
-            "roll" -> "rolagem"
-            // year zero
-            "base" -> "base"
-            "pericia" -> "perícia"
-            "equipamento" -> "equipamento"
-            "estresse" -> "estresse"
-            // trophy
-            "claros" -> "claros"
-            "escuros" -> "escuros"
-            "ruina" -> "ruína"
-            else -> name
-        }
+        return OutcomeCatalog.GROUP_LABELS[lower] ?: name
     }
 
     /**
