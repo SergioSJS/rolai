@@ -1979,12 +1979,26 @@ class OverlayView(context: Context) {
                 ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
 
-            // 4. Bracketed dice numbers [x, y, z] -> números em negrito
+            // 4. Bracketed dice numbers [x, y, z] -> números em negrito com destaque para acertos (>= 6) e 10 (crítico)
             val bracketRegex = Regex("""\[([^\]]+)\]""")
             for (m in bracketRegex.findAll(text)) {
                 val s = start + m.range.first
                 val e = start + m.range.last + 1
                 ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+                val inner = m.groupValues[1]
+                val innerStart = start + m.range.first + 1
+                val numRegex = Regex("""\b(\d+)\b""")
+                for (nm in numRegex.findAll(inner)) {
+                    val nVal = nm.value.toIntOrNull() ?: continue
+                    val ns = innerStart + nm.range.first
+                    val ne = innerStart + nm.range.last + 1
+                    if (nVal == 10) {
+                        ssb.setSpan(ForegroundColorSpan(PARTIAL_TEXT), ns, ne, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    } else if (nVal >= 6) {
+                        ssb.setSpan(ForegroundColorSpan(ACCENT_BRIGHT), ns, ne, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
             }
 
             // 5. Cartas vermelhas (♥ e ♦)
@@ -2095,6 +2109,20 @@ class OverlayView(context: Context) {
                 val ms = bodyStart + m.range.first
                 val me = bodyStart + m.range.last + 1
                 ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+                val inner = m.groupValues[1]
+                val innerStart = bodyStart + m.range.first + 1
+                val numRegex = Regex("""\b(\d+)\b""")
+                for (nm in numRegex.findAll(inner)) {
+                    val nVal = nm.value.toIntOrNull() ?: continue
+                    val ns = innerStart + nm.range.first
+                    val ne = innerStart + nm.range.last + 1
+                    if (nVal == 10) {
+                        ssb.setSpan(ForegroundColorSpan(PARTIAL_TEXT), ns, ne, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    } else if (nVal >= 6) {
+                        ssb.setSpan(ForegroundColorSpan(ACCENT_BRIGHT), ns, ne, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
             }
 
             // 4. Destaca cartas vermelhas (♥ e ♦)
@@ -2109,13 +2137,16 @@ class OverlayView(context: Context) {
             // 5. Destaca outcome / resultado (após " — "):
             val outcomeIdx = content.indexOf(" — ")
             if (outcomeIdx != -1) {
-                var outcomeEndIdx = content.indexOf(" (", outcomeIdx)
+                var outcomeEndIdx = content.indexOf(" (Dificuldade:", outcomeIdx)
+                if (outcomeEndIdx == -1) outcomeEndIdx = content.indexOf(" (Limiar:", outcomeIdx)
                 if (outcomeEndIdx == -1) outcomeEndIdx = content.length
                 val outcomeText = content.substring(outcomeIdx + 3, outcomeEndIdx)
                 val outStart = bodyStart + outcomeIdx + 3
                 val outEnd = bodyStart + outcomeEndIdx
 
                 val isFailure = outcomeText.contains("falha", ignoreCase = true) ||
+                    outcomeText.contains("fracasso", ignoreCase = true) ||
+                    outcomeText.contains("bestial", ignoreCase = true) ||
                     outcomeText.contains("dano", ignoreCase = true) ||
                     outcomeText.contains("desgraça", ignoreCase = true) ||
                     outcomeText.contains("desgraca", ignoreCase = true) ||
@@ -2124,6 +2155,7 @@ class OverlayView(context: Context) {
                     outcomeText.contains("descontrole", ignoreCase = true)
 
                 val isPartial = outcomeText.contains("parcial", ignoreCase = true) ||
+                    outcomeText.contains("manchado", ignoreCase = true) ||
                     outcomeText.contains("vislumbre", ignoreCase = true) ||
                     outcomeText.contains("complicada", ignoreCase = true)
 

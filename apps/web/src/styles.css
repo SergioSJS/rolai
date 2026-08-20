@@ -1587,6 +1587,29 @@ button:disabled {
   font-size: 1rem;
 }
 
+/* Destaque de acertos/críticos em sistemas de pool (Vampiro/WOD5, Year Zero, etc) */
+.die-chip.die-chip-success {
+  box-shadow: 0 0 10px rgba(37, 196, 143, 0.45), inset 0 0 4px rgba(37, 196, 143, 0.2);
+  border: 1.5px solid #25c48f !important;
+}
+
+.die-chip.die-chip-crit {
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.6), inset 0 0 6px rgba(251, 191, 36, 0.3);
+  border: 2px solid #fbbf24 !important;
+  color: #fbbf24;
+  font-weight: 800;
+}
+
+.die-chip.die-chip-bestial {
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.6), inset 0 0 6px rgba(239, 68, 68, 0.3);
+  border: 2px solid #ef4444 !important;
+  color: #fca5a5 !important;
+}
+
+.die-chip.die-chip-miss {
+  opacity: 0.55;
+}
+
 /* Slots de dados genéricos (1 = Primário, 2 = Secundário, 3 = Terciário) */
 .die-chip.die-chip-slot-1 {
   background: var(--dice-1-body, #1d9e75);

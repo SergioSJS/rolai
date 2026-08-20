@@ -269,6 +269,18 @@ export function summarizeResult(result: RollResult): string {
     : base;
 }
 
+export function wod5Successes(result: RollResult): number {
+  const regRolls = result.groups["regular"]?.rolls ?? [];
+  const hungRolls = result.groups["hunger"]?.rolls ?? [];
+  const regTens = regRolls.filter((r) => r === 10).length;
+  const hungTens = hungRolls.filter((r) => r === 10).length;
+  const totalTens = regTens + hungTens;
+  const baseSuccesses =
+    regRolls.filter((r) => r >= 6).length + hungRolls.filter((r) => r >= 6).length;
+  const critBonus = Math.floor(totalTens / 2) * 2;
+  return baseSuccesses + critBonus;
+}
+
 import { cardFromRollValue, isRedSuit, SUIT_SYMBOL } from "./cardFormat";
 
 export interface DisplayRoll {

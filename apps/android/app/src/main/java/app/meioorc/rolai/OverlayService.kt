@@ -1371,6 +1371,33 @@ class OverlayService : Service() {
                     keys.sumOf { groupsObj.optJSONObject(it)?.optInt("total", 0) ?: 0 }
                 } else null
 
+                val isWod5 = profile == "wod5"
+                val wod5Successes = if (isWod5 && groupsObj != null) {
+                    val regRolls = groupsObj.optJSONObject("regular")?.optJSONArray("rolls")
+                    val hungRolls = groupsObj.optJSONObject("hunger")?.optJSONArray("rolls")
+                    var regSuccess = 0
+                    var hungSuccess = 0
+                    var totalTens = 0
+                    if (regRolls != null) {
+                        for (i in 0 until regRolls.length()) {
+                            val v = regRolls.getInt(i)
+                            if (v >= 6) regSuccess++
+                            if (v == 10) totalTens++
+                        }
+                    }
+                    if (hungRolls != null) {
+                        for (i in 0 until hungRolls.length()) {
+                            val v = hungRolls.getInt(i)
+                            if (v >= 6) hungSuccess++
+                            if (v == 10) totalTens++
+                        }
+                    }
+                    val critBonus = (totalTens / 2) * 2
+                    regSuccess + hungSuccess + critBonus
+                } else null
+
+                val poolSuccesses = yzeSuccesses ?: wod5Successes
+
                 val tested = result.optJSONArray("tested")?.let { arr ->
                     (0 until arr.length()).joinToString(", ") { i ->
                         val item = arr.getJSONObject(i)
@@ -1379,7 +1406,12 @@ class OverlayService : Service() {
                 }
 
                 if (outcomeList.isNotEmpty()) {
-                    val headline = outcomeList.joinToString(", ") { it.first }
+                    val outcomeStr = outcomeList.joinToString(", ") { it.first }
+                    val headline = if (wod5Successes != null) {
+                        "$outcomeStr ($wod5Successes ${if (wod5Successes == 1) "sucesso" else "sucessos"})"
+                    } else {
+                        outcomeStr
+                    }
                     val detail = if (groupStrings.isNotEmpty()) {
                         val isMultiNamedGroup = groupsObj != null && groupsObj.length() > 1
                         if (!isMultiNamedGroup) {
@@ -1389,8 +1421,8 @@ class OverlayService : Service() {
                         }
                     } else null
                     ResultDisplayLines(headline, tested, detail, outcomeList)
-                } else if (yzeSuccesses != null) {
-                    val headline = "$yzeSuccesses ${if (yzeSuccesses == 1) "sucesso" else "sucessos"}"
+                } else if (poolSuccesses != null) {
+                    val headline = "$poolSuccesses ${if (poolSuccesses == 1) "sucesso" else "sucessos"}"
                     val detail = if (groupStrings.isNotEmpty()) groupStrings.joinToString(joiner) else null
                     ResultDisplayLines(headline, tested, detail, emptyList())
                 } else if (isVs && groupStrings.size == 2) {
@@ -1424,6 +1456,7 @@ class OverlayService : Service() {
                 val result = JSONObject(resultJson)
                 val notation = result.optString("notation", "?")
                 val groupsObj = result.optJSONObject("groups")
+                val profile = result.optString("profile", "")
 
                 // Sub-notações para cada grupo (ex: "{2d6+mod} vs {2c}" -> ["2d6+mod", "2c"])
                 val groupNotations = Regex("""\{([^}]+)\}""").findAll(notation)
@@ -1431,6 +1464,8 @@ class OverlayService : Service() {
                     .toList()
 
                 val isVs = notation.contains(" vs ")
+                val isYze = listOf("yze", "yze_fbl", "yze_alien", "yze_wdu").contains(profile)
+                val isWod5 = profile == "wod5"
                 val joiner = if (isVs) " vs " else " + "
 
                 // Mais de uma flag bateu (Infaernum: "1 milagre" + "2
@@ -1443,9 +1478,33 @@ class OverlayService : Service() {
                     result.optString("outcome", "").let { if (it.isEmpty()) it else outcomeLabel(it) }
                 }
 
+                val wod5Successes = if (isWod5 && groupsObj != null) {
+                    val regRolls = groupsObj.optJSONObject("regular")?.optJSONArray("rolls")
+                    val hungRolls = groupsObj.optJSONObject("hunger")?.optJSONArray("rolls")
+                    var regSuccess = 0
+                    var hungSuccess = 0
+                    var totalTens = 0
+                    if (regRolls != null) {
+                        for (i in 0 until regRolls.length()) {
+                            val v = regRolls.getInt(i)
+                            if (v >= 6) regSuccess++
+                            if (v == 10) totalTens++
+                        }
+                    }
+                    if (hungRolls != null) {
+                        for (i in 0 until hungRolls.length()) {
+                            val v = hungRolls.getInt(i)
+                            if (v >= 6) hungSuccess++
+                            if (v == 10) totalTens++
+                        }
+                    }
+                    val critBonus = (totalTens / 2) * 2
+                    regSuccess + hungSuccess + critBonus
+                } else null
+
                 var totalCardIndex = 0
                 val groupStrings = mutableListOf<String>()
-                var grandTotal: Int? = if (!isVs && outcome.isEmpty()) 0 else null
+                var grandTotal: Int? = if (!isVs && outcome.isEmpty() && !isYze && !isWod5) 0 else null
 
                 if (groupsObj != null) {
                     val groupKeys = orderedGroupKeys(resultJson, groupsObj)
@@ -1503,7 +1562,7 @@ class OverlayService : Service() {
 
                 val allGroupsText = buildString {
                     append(groupStrings.joinToString(joiner))
-                    if (!isVs && outcome.isEmpty() && groupStrings.size > 1 && grandTotal != null) {
+                    if (!isVs && outcome.isEmpty() && !isYze && !isWod5 && groupStrings.size > 1 && grandTotal != null) {
                         append(" = $grandTotal")
                     }
                 }
@@ -1515,10 +1574,20 @@ class OverlayService : Service() {
                     }
                 } ?: ""
 
+                val finalOutcome = if (wod5Successes != null) {
+                    if (outcome.isNotEmpty()) {
+                        "$outcome ($wod5Successes ${if (wod5Successes == 1) "sucesso" else "sucessos"})"
+                    } else {
+                        "$wod5Successes ${if (wod5Successes == 1) "sucesso" else "sucessos"}"
+                    }
+                } else {
+                    outcome
+                }
+
                 buildString {
                     append(notation)
                     if (allGroupsText.isNotEmpty()) append(" $allGroupsText")
-                    if (outcome.isNotEmpty()) append(" — $outcome")
+                    if (finalOutcome.isNotEmpty()) append(" — $finalOutcome")
                     if (tested.isNotEmpty()) append(" ($tested)")
                 }
             } catch (e: Exception) {

@@ -214,4 +214,34 @@ class OverlayServiceFormatTest {
         assertEquals("2d6 [3, 4] = 7", lines.detail)
         assertNull(lines.tested)
     }
+
+    @Test
+    fun `formatDisplayLines calcula sucessos totais e dobro de 10s para vampiro wod5`() {
+        // Regulares [10, 8, 3] -> 2 sucessos (1 dez). Fome [10, 1] -> 1 sucesso (1 dez).
+        // Total de 10s = 2 -> 1 par -> +2 bônus -> 2 + 1 + 2 = 5 sucessos
+        val json = """{"notation":"{3d10} + {2d10}","profile":"wod5",
+            "groups":{"regular":{"rolls":[10,8,3],"total":2},"hunger":{"rolls":[10,1],"total":1}},
+            "outcome":"messy_critical","outcome_flags":["messy_critical","success"],
+            "tested":[{"label":"Dificuldade","value":2}]}"""
+        val lines = OverlayService.formatDisplayLines(json)
+        assertEquals("crítico manchado, sucesso (5 sucessos)", lines.headline)
+        assertEquals("regulares [10, 8, 3] = 2 • fome/ira [10, 1] = 1", lines.detail)
+        assertEquals("Dificuldade: 2", lines.tested)
+
+        val formatted = OverlayService.formatResult(json)
+        assertEquals(
+            "{3d10} + {2d10} regulares [10, 8, 3] = 2 + fome/ira [10, 1] = 1 — crítico manchado, sucesso (5 sucessos) (Dificuldade: 2)",
+            formatted,
+        )
+    }
+
+    @Test
+    fun `formatDisplayLines vampiro wod5 sem dificuldade mostra total de sucessos`() {
+        val json = """{"notation":"{2d10} + {1d10}","profile":"wod5",
+            "groups":{"regular":{"rolls":[7,8],"total":2},"hunger":{"rolls":[2],"total":0}}}"""
+        val lines = OverlayService.formatDisplayLines(json)
+        assertEquals("2 sucessos", lines.headline)
+        assertEquals("regulares [7, 8] = 2 • fome/ira [2] = 0", lines.detail)
+        assertNull(lines.tested)
+    }
 }

@@ -16,10 +16,12 @@ fields:
   - id: regular
     dice: "{input.regular}d10"
     compare_individually: true
+    success_rule: ">=6"
     slot: 1
   - id: hunger
     dice: "{input.hunger}d10"
     compare_individually: true
+    success_rule: ">=6"
     slot: 2
 # Mecanica compartilhada por toda a linha v5 (Vampiro, Lobisomem, Caçador...)
 # — os dados de Fome/Ira SUBSTITUEM parte do pool regular, entao ambos os
@@ -37,7 +39,8 @@ outcome_rules:
     result: critical
   - condition: "(count(regular, '>=6') + count(hunger, '>=6')) == 0 and count(hunger, '==1') >= 1"
     result: bestial_failure
-  - condition: "(count(regular, '>=6') + count(hunger, '>=6')) >= {input.difficulty}"
+  - condition: "((count(regular, '>=6') + count(hunger, '>=6')) + ((count(regular, '==10') + count(hunger, '==10')) >= 2) * 2 + ((count(regular, '==10') + count(hunger, '==10')) >= 4) * 2) >= {input.difficulty}"
     result: success
-  - condition: "(count(regular, '>=6') + count(hunger, '>=6')) < {input.difficulty}"
+  - condition: "((count(regular, '>=6') + count(hunger, '>=6')) + ((count(regular, '==10') + count(hunger, '==10')) >= 2) * 2 + ((count(regular, '==10') + count(hunger, '==10')) >= 4) * 2) < {input.difficulty}"
     result: fail
+

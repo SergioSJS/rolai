@@ -5,7 +5,7 @@
 
 import type { RollResult } from "@rolai/rules-engine";
 import type { DiceStyle, DiceStyles } from "../settings";
-import { dieFaceLabel, displayGroups, groupLabel, outcomeLabel, outcomeTone } from "../format";
+import { dieFaceLabel, displayGroups, groupLabel, outcomeLabel, outcomeTone, wod5Successes } from "../format";
 import { isYzeSystem } from "../yzePush";
 import { PlayerTag } from "./PlayerTag";
 
@@ -47,7 +47,7 @@ export function ResultDisplay({
 
   // Notação com múltiplos grupos somados (ex: "1[1d6] + 2[2d6]", "1[2d12]+2[1d20+2d12]", "{1d6} + {2d6}"):
   const isVsNotation = result.notation.includes(" vs ");
-  const isSumNotation = !isVsNotation && !isYzeSystem(result.profile);
+  const isSumNotation = !isVsNotation && !isYzeSystem(result.profile) && result.profile !== "wod5";
   const grandTotal =
     isSumNotation && groups.length > 1
       ? groups.reduce(
@@ -64,20 +64,20 @@ export function ResultDisplay({
       ? `${groups[0]?.total ?? groups[0]?.rolls.reduce((s, r) => s + r.value, 0) ?? 0} vs ${groups[1]?.total ?? groups[1]?.rolls.reduce((s, r) => s + r.value, 0) ?? 0}`
       : undefined;
 
-  // Year Zero de varios pools (Base/Perícia/Equipamento, Base/Estresse): os
-  // sucessos estao espalhados em "= 1" por grupo e o numero que a mesa usa
-  // e a SOMA — sem esta linha o jogador soma de cabeca justo no sistema que
-  // ganhou success_rule pra nao ter que contar dado na mao. Pool unico nao
-  // precisa: o total do proprio grupo ja e a resposta.
-  const yzeSuccesses =
+  // Year Zero e Vampiro (WOD5): os sucessos estao espalhados em "= X" por grupo
+  // e o numero que a mesa usa e o TOTAL de sucessos.
+  const isWod5 = result.profile === "wod5";
+  const wod5Total = isWod5 ? wod5Successes(result) : null;
+  const poolSuccesses =
     isYzeSystem(result.profile) && groups.length > 1
       ? groups.reduce((sum, g) => sum + (g.total ?? 0), 0)
-      : null;
+      : wod5Total;
+
   const headline =
     typeof result.outcome === "string"
       ? outcomeLabel(result.outcome)
-      : yzeSuccesses !== null
-        ? `${yzeSuccesses} ${yzeSuccesses === 1 ? "sucesso" : "sucessos"}`
+      : poolSuccesses !== null
+        ? `${poolSuccesses} ${poolSuccesses === 1 ? "sucesso" : "sucessos"}`
         : singleTotal !== undefined
           ? String(singleTotal)
           : grandTotal !== undefined
@@ -134,9 +134,9 @@ export function ResultDisplay({
           >
             {headline}
           </div>
-          {yzeSuccesses !== null && (
+          {poolSuccesses !== null && typeof result.outcome === "string" && (
             <div className="result-yze-total">
-              {yzeSuccesses} {yzeSuccesses === 1 ? "sucesso" : "sucessos"}
+              {poolSuccesses} {poolSuccesses === 1 ? "sucesso" : "sucessos"}
             </div>
           )}
           {result.outcome_flags
@@ -188,10 +188,39 @@ export function ResultDisplay({
                       borderColor: slotStyle.outline,
                     }
                   : undefined;
+
+                let statusClass = "";
+                if (result.profile === "wod5") {
+                  if (roll.value === 10) {
+                    statusClass = " die-chip-crit die-chip-success";
+                  } else if (roll.value >= 6) {
+                    statusClass = " die-chip-success";
+                  } else if (group.name === "hunger" && roll.value === 1) {
+                    statusClass = " die-chip-bestial";
+                  } else {
+                    statusClass = " die-chip-miss";
+                  }
+                } else if (isYzeSystem(result.profile)) {
+                  if (roll.value >= 6) {
+                    statusClass = " die-chip-success";
+                  } else if (
+                    roll.value === 1 &&
+                    (group.name === "base" || group.name === "equipamento" || group.name === "estresse")
+                  ) {
+                    statusClass = " die-chip-bestial";
+                  }
+                } else if (result.profile === "pool_d6") {
+                  if (roll.value >= 5) {
+                    statusClass = " die-chip-success";
+                  } else if (roll.value === 1) {
+                    statusClass = " die-chip-bestial";
+                  }
+                }
+
                 return (
                   <span
                     key={i}
-                    className={`die-chip${roll.card ? ` card-chip${roll.isRed ? " is-red" : ""}` : ""}${roll.slot ? ` die-chip-slot-${roll.slot}` : ""}${roll.theme ? ` die-chip-${roll.theme}` : ""}`}
+                    className={`die-chip${statusClass}${roll.card ? ` card-chip${roll.isRed ? " is-red" : ""}` : ""}${roll.slot ? ` die-chip-slot-${roll.slot}` : ""}${roll.theme ? ` die-chip-${roll.theme}` : ""}`}
                     style={inlineStyle}
                   >
                     {dieFaceLabel(roll.value, roll.fudge, roll.card)}

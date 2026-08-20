@@ -16,7 +16,9 @@ describe("profile: wod5", () => {
     expect(result.profile).toBe("wod5");
     expect(result.notation).toBe("{3d10} + {2d10}");
     expect(result.groups["regular"]!.rolls).toEqual([10, 10, 2]);
+    expect(result.groups["regular"]!.total).toBe(2);
     expect(result.groups["hunger"]!.rolls).toEqual([3, 4]);
+    expect(result.groups["hunger"]!.total).toBe(0);
     expect(result.outcome).toBe("critical");
     expect(result.outcome_flags).toEqual(["critical"]);
   });
@@ -27,8 +29,21 @@ describe("profile: wod5", () => {
       { regular: 3, hunger: 2 },
       { deterministic: [10, 2, 3, 10, 1] },
     );
+    expect(result.groups["regular"]!.total).toBe(1);
+    expect(result.groups["hunger"]!.total).toBe(1);
     expect(result.outcome).toBe("messy_critical");
     expect(result.outcome_flags).toEqual(["messy_critical"]);
+  });
+
+  it("critico dobra sucessos dos 10s para bater dificuldade 4", async () => {
+    // 2 dez = 4 sucessos (2 base + 2 bonus de par de 10) -> bate dificuldade 4
+    const result = await rollWithProfile(
+      "wod5",
+      { regular: 2, hunger: 1, difficulty: 4 },
+      { deterministic: [10, 10, 2] },
+    );
+    expect(result.outcome).toBe("critical");
+    expect(result.outcome_flags).toEqual(["critical", "success"]);
   });
 
   it("fracasso bestial: zero sucessos com 1 na fome", async () => {
