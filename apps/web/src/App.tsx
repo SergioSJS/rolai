@@ -60,7 +60,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { HistoryList } from "./components/HistoryList";
 import { ResultDisplay } from "./components/ResultDisplay";
 import { CardStack } from "./components/CardStack";
-import { CardStage3D } from "./components/CardStage3D";
+import { LazyCardStage3D, preloadCardStage3D } from "./components/LazyCardStage3D";
 import { PlayerTag } from "./components/PlayerTag";
 import { cardLabel, isRedSuit } from "./cardFormat";
 import { useStageFloor } from "./stage/floor";
@@ -617,7 +617,13 @@ export function App() {
               role="tab"
               aria-selected={sidebarView === "deck"}
               className={sidebarView === "deck" ? "family-tab is-active" : "family-tab"}
-              onClick={() => setSidebarView("deck")}
+              onClick={() => {
+                setSidebarView("deck");
+                // Aquece o chunk do palco 3D: quem abriu o baralho vai
+                // puxar carta em seguida, e a animacao nao pode parar pra
+                // baixar three.js (ver LazyCardStage3D).
+                if (tier === "3d-full" || tier === "3d-light") preloadCardStage3D();
+              }}
             >
               Baralho
             </button>
@@ -654,7 +660,7 @@ export function App() {
           {tier === "2d" ? (
             <CardStack cards={lastCards} />
           ) : (
-            <CardStage3D cards={lastCards} />
+            <LazyCardStage3D cards={lastCards} />
           )}
         </div>
       )}

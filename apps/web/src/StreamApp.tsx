@@ -24,7 +24,7 @@ import { RoomClient } from "./room/client";
 import type { RoomEvent } from "./room/reducer";
 import { ResultDisplay } from "./components/ResultDisplay";
 import { CardStack } from "./components/CardStack";
-import { CardStage3D } from "./components/CardStage3D";
+import { LazyCardStage3D, preloadCardStage3D } from "./components/LazyCardStage3D";
 import { cardLabel, isRedSuit } from "./cardFormat";
 import { useStageFloor } from "./stage/floor";
 import type { StreamOptions } from "./stream";
@@ -289,6 +289,15 @@ export function StreamApp({ options }: { options: StreamOptions }) {
     ? options.quality
     : loadQualityTier(window.localStorage);
 
+  // No OBS a carta chega sem aviso: ninguem esta olhando a tela pra abrir
+  // um painel antes. Entao o palco 3D e aquecido ja na montagem — continua
+  // fora do chunk de entrada (a pagina pinta primeiro), mas sem risco de a
+  // primeira puxada da sessao pegar o flip 2D no lugar da malha.
+  const wantsCardStage3D = cardTier === "3d-full" || cardTier === "3d-light";
+  useEffect(() => {
+    if (wantsCardStage3D) preloadCardStage3D();
+  }, [wantsCardStage3D]);
+
   return (
     <main className="stream-root">
       {options.scrim > 0 && shown !== null && (
@@ -307,7 +316,7 @@ export function StreamApp({ options }: { options: StreamOptions }) {
           {cardTier === "2d" ? (
             <CardStack cards={shownCards.cards} />
           ) : (
-            <CardStage3D cards={shownCards.cards} />
+            <LazyCardStage3D cards={shownCards.cards} />
           )}
         </div>
       )}
