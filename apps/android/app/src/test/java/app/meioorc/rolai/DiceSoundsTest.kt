@@ -76,4 +76,47 @@ class DiceSoundsTest {
         assertEquals(1, ResultFormat.diceCountOf("""{"notation":"2d6"}"""))
         assertEquals(1, ResultFormat.diceCountOf("nao e json"))
     }
+
+    // ---------- carta ----------
+
+    @Test
+    fun `uma carta toca uma vez, na hora`() {
+        assertEquals(listOf(0L), DiceSounds.cardDelays(1))
+    }
+
+    @Test
+    fun `cartas da mesma puxada saem em ritmo, nao juntas`() {
+        // Tres cartas tocando no mesmo instante viram um estalo so.
+        val atrasos = DiceSounds.cardDelays(3)
+        assertEquals(3, atrasos.size)
+        assertEquals(0L, atrasos[0])
+        assertTrue("cada carta depois da anterior", atrasos[1] > atrasos[0])
+        assertTrue(atrasos[2] > atrasos[1])
+    }
+
+    @Test
+    fun `ritmo de carta e fixo, sem sorteio`() {
+        // Ao contrario do dado: carta pousando e um gesto so.
+        assertEquals(DiceSounds.cardDelays(4), DiceSounds.cardDelays(4))
+    }
+
+    @Test
+    fun `puxada gigante e capada no teto de vozes do SoundPool`() {
+        // Pedir mais que o teto tocaria MENOS, nao mais.
+        assertTrue(DiceSounds.cardDelays(50).size <= 6)
+    }
+
+    @Test
+    fun `contagem invalida ainda toca uma carta`() {
+        assertEquals(listOf(0L), DiceSounds.cardDelays(0))
+        assertEquals(listOf(0L), DiceSounds.cardDelays(-3))
+    }
+
+    @Test
+    fun `contagem de cartas do evento da sala`() {
+        // Alimenta a dosagem acima; JSON quebrado nao pode silenciar a carta.
+        assertEquals(2, ResultFormat.cardCountOf("""[{"rank":"A"},{"rank":"K"}]"""))
+        assertEquals(1, ResultFormat.cardCountOf("""[]"""))
+        assertEquals(1, ResultFormat.cardCountOf("nao e json"))
+    }
 }

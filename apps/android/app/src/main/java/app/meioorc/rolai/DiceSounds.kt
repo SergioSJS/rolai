@@ -83,8 +83,7 @@ class DiceSounds(context: Context) {
      */
     fun card(count: Int = 1) {
         if (cardSamples.isEmpty()) return
-        for (i in 0 until count.coerceIn(1, MAX_STREAMS)) {
-            val atraso = i * CARD_GAP_MS
+        for (atraso in cardDelays(count)) {
             handler.postDelayed({
                 val id = cardSamples[random.nextInt(cardSamples.size)]
                 pool.play(id, CARD_VOLUME, CARD_VOLUME, 1, 0, 1f)
@@ -134,6 +133,17 @@ class DiceSounds(context: Context) {
 
         /** Respiro entre cartas de uma mesma puxada. */
         private const val CARD_GAP_MS = 90L
+
+        /**
+         * Quando tocar cada carta de uma puxada, em ms a partir de agora.
+         *
+         * Ritmo fixo (ao contrario do dado, que sorteia): carta pousando na
+         * mesa e um gesto so, e aleatoriedade aqui soaria desleixo. Capado
+         * em MAX_STREAMS porque e o teto de vozes simultaneas do SoundPool —
+         * pedir mais tocaria menos, nao mais.
+         */
+        fun cardDelays(count: Int): List<Long> =
+            List(count.coerceIn(1, MAX_STREAMS)) { i -> i * CARD_GAP_MS }
 
         /** Carta e mais discreta que dado batendo na mesa. */
         private const val CARD_VOLUME = 0.7f
