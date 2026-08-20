@@ -23,10 +23,21 @@ import { ComposerBar } from "./ComposerBar";
 import { TimesIcon } from "./Glyphs";
 import { StepperInput } from "./StepperInput";
 
+export const INFAERNUM_ACTIONS = [
+  { system: "infaernum", label: "Ação" },
+  { system: "infaernum_sim_ou_nao", label: "Sim ou Não" },
+  { system: "infaernum_ideias", label: "Ideias" },
+];
+
+export function isInfaernum(system?: string): boolean {
+  return system !== undefined && system.startsWith("infaernum");
+}
+
 interface RollPanelProps {
   // undefined = notacao livre
   profile?: SystemProfile | undefined;
   onRoll: (result: RollResult) => void;
+  onSystemChange?: ((system: string) => void) | undefined;
   disabled?: boolean;
 }
 
@@ -204,8 +215,14 @@ function ProfileInputRow({
   );
 }
 
-export function RollPanel({ profile, onRoll, disabled }: RollPanelProps) {
+export function RollPanel({
+  profile,
+  onRoll,
+  onSystemChange,
+  disabled,
+}: RollPanelProps) {
   const isOverlay = profile?.rollType === "overlay";
+  const infaernum = profile ? isInfaernum(profile.system) : false;
   const [rawInputs, setRawInputs] = useState<Record<string, string>>(() =>
     defaultInputs(profile),
   );
@@ -349,6 +366,22 @@ export function RollPanel({ profile, onRoll, disabled }: RollPanelProps) {
     <div className="roll-panel-stack">
       {twoForms && (
         <form className="panel roll-panel" onSubmit={handleProfileSubmit}>
+          {infaernum && onSystemChange !== undefined && (
+            <div className="family-tabs" role="tablist" aria-label="Ações de Infaernum">
+              {INFAERNUM_ACTIONS.map((action) => (
+                <button
+                  key={action.system}
+                  type="button"
+                  role="tab"
+                  aria-selected={action.system === profile.system}
+                  className={action.system === profile.system ? "family-tab is-active" : "family-tab"}
+                  onClick={() => onSystemChange(action.system)}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
           <h2>{profile.label}</h2>
           <ProfileInputFields
             profile={profile}

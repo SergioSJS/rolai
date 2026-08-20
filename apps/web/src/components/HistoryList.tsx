@@ -120,17 +120,30 @@ function entryDetail(entry: HistoryEntry) {
           />
           {/* Outcome separado dos numeros justamente pra poder ir vermelho
               sem levar os dados junto. */}
-          {typeof entry.result.outcome === "string" && (
-            <span className={`history-outcome tone-${outcomeTone(entry.result.outcome)}`}>
-              {outcomeLabel(entry.result.outcome)}
+          {entry.result.profile === "infaernum_ideias" ? (
+            <span className="history-ideias">
+              <span className="history-dash">—</span>
+              {entry.result.outcome_flags?.map((flag) => (
+                <span key={flag} className={`history-flag tone-${outcomeTone(flag)}`}>
+                  {outcomeLabel(flag)}
+                </span>
+              ))}
             </span>
-          )}
-          {entry.result.outcome_flags?.map((flag) =>
-            flag === entry.result.outcome ? null : (
-              <span key={flag} className={`history-flag tone-${outcomeTone(flag)}`}>
-                {outcomeLabel(flag)}
-              </span>
-            ),
+          ) : (
+            <>
+              {typeof entry.result.outcome === "string" && (
+                <span className={`history-outcome tone-${outcomeTone(entry.result.outcome)}`}>
+                  {outcomeLabel(entry.result.outcome)}
+                </span>
+              )}
+              {entry.result.outcome_flags?.map((flag) =>
+                flag === entry.result.outcome ? null : (
+                  <span key={flag} className={`history-flag tone-${outcomeTone(flag)}`}>
+                    {outcomeLabel(flag)}
+                  </span>
+                ),
+              )}
+            </>
           )}
         </>
       );

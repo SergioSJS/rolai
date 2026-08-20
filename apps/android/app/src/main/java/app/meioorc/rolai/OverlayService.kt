@@ -185,6 +185,7 @@ class OverlayService : Service() {
         overlay.onRollWithInputs = ::rollWithInputs
         overlay.onRollOverlay = ::rollOverlayNow
         overlay.onOpenComposer = ::openComposer
+        overlay.onSelectFamilyMember = ::selectFamilyMember
         overlay.onForcePush = ::forcePush
         overlay.onPersistSystemInputs = ::persistSystemInputs
         overlay.onComposedNotation = { notation ->
@@ -747,6 +748,24 @@ class OverlayService : Service() {
         overlay.setQuickNotation(settings.notation)
         val info = systems[settings.system]
         overlay.openComposer(info, ProfileForm.fromJson(settings.inputsJson))
+        updatePushAvailability()
+    }
+
+    /**
+     * Aba de modo tocada dentro da caixa (Infaernum: Acao/Sim ou Nao/Ideias, Trophy: Dark/Gold,
+     * Year Zero: Generico/Forbidden/Alien/Walking Dead) — troca o sistema ativo pra outro membro
+     * da MESMA familia e reabre o compositor ja com os campos do novo modo.
+     */
+    private fun selectFamilyMember(system: String) {
+        val settings = RolaiSettings.load(this)
+        RolaiSettings.save(this, settings.copy(system = system, inputsJson = "{}"))
+        lastRollAction = null
+        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_LAST_ROLL)
+            .apply()
+        val info = systems[system]
+        overlay.openComposer(info, ProfileForm.fromJson("{}"))
         updatePushAvailability()
     }
 

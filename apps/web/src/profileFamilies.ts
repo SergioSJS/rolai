@@ -26,7 +26,7 @@ export const PROFILE_FAMILIES: ProfileFamily[] = [
     key: "infaernum",
     label: "Infaernum",
     members: [
-      { system: "infaernum", subLabel: "Ação (3d6)" },
+      { system: "infaernum", subLabel: "Ação" },
       { system: "infaernum_sim_ou_nao", subLabel: "Sim ou Não" },
       { system: "infaernum_ideias", subLabel: "Ideias" },
     ],
@@ -49,8 +49,8 @@ export const PROFILE_FAMILIES: ProfileFamily[] = [
     key: "trophy",
     label: "Trophy",
     members: [
-      { system: "trophy_dark", subLabel: "Trophy Dark" },
-      { system: "trophy_gold", subLabel: "Trophy Gold" },
+      { system: "trophy_dark", subLabel: "Dark" },
+      { system: "trophy_gold", subLabel: "Gold" },
     ],
   },
 ];

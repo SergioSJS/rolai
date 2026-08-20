@@ -2374,6 +2374,16 @@ input[type="range"]:focus {
   font-weight: 600;
 }
 
+.history-ideias {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.history-dash {
+  color: var(--muted);
+}
+
 .history-outcome.tone-failure {
   color: var(--error);
 }

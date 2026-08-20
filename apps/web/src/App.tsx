@@ -628,6 +628,7 @@ export function App() {
               key={system}
               profile={profiles.find((p) => p.system === system)}
               onRoll={handleRoll}
+              onSystemChange={setSystem}
             />
           ) : (
             <DeckPanel

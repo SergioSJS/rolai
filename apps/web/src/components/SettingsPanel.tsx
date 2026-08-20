@@ -207,7 +207,7 @@ export function SettingsPanel({
                 className={`die-preview ${slot === "1" ? "" : "die-preview-small"}`}
                 style={{
                   background: s.body,
-                  transform: `rotate(${slot === "1" ? -8 : slot === "2" ? 11 : -4}deg) scale(${diceScale})`,
+                  transform: `rotate(${slot === "1" ? -8 : slot === "2" ? 11 : -4}deg)`,
                   outline: isSelected ? "2px solid var(--accent, #38bdf8)" : undefined,
                   outlineOffset: "4px",
                 }}

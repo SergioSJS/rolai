@@ -27,7 +27,7 @@ object ProfileFamilies {
             key = "infaernum",
             label = "Infaernum",
             members = listOf(
-                ProfileFamilyMember("infaernum", "Ação (3d6)"),
+                ProfileFamilyMember("infaernum", "Ação"),
                 ProfileFamilyMember("infaernum_sim_ou_nao", "Sim ou Não"),
                 ProfileFamilyMember("infaernum_ideias", "Ideias"),
             ),
@@ -41,7 +41,7 @@ object ProfileFamilies {
             shortLabel = "YZ",
             members = listOf(
                 ProfileFamilyMember("yze", "Genérico"),
-                ProfileFamilyMember("yze_fbl", "Forbidden"),
+                ProfileFamilyMember("yze_fbl", "Forbidden Lands"),
                 ProfileFamilyMember("yze_alien", "Alien"),
                 ProfileFamilyMember("yze_wdu", "Walking Dead"),
             ),
@@ -51,8 +51,8 @@ object ProfileFamilies {
             label = "Trophy",
             shortLabel = "Trophy",
             members = listOf(
-                ProfileFamilyMember("trophy_dark", "Trophy Dark"),
-                ProfileFamilyMember("trophy_gold", "Trophy Gold"),
+                ProfileFamilyMember("trophy_dark", "Dark"),
+                ProfileFamilyMember("trophy_gold", "Gold"),
             ),
         ),
     )

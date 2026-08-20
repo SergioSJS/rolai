@@ -169,6 +169,8 @@ class OverlayView(context: Context) {
     /** Aba de modo tocada dentro da caixa (ex.: Infaernum "Ideias") — troca
      *  o sistema ativo sem sair pras configuracoes. Espelha as
      *  `family-tabs` do RollPanel da web. */
+    var onSelectFamilyMember: ((String) -> Unit)? = null
+
     /**
      * Forçar (o push do Year Zero): recalcula o pool a partir da rolagem
      * anterior e rola de novo — um toque, como na mesa. A conta nao mora
@@ -203,6 +205,7 @@ class OverlayView(context: Context) {
     private lateinit var tabSystemButton: TextView
     private lateinit var tabDiceButton: TextView
     private lateinit var tabDeckButton: TextView
+    private lateinit var familyTabsRow: LinearLayout
     private lateinit var systemContainer: LinearLayout
     private lateinit var diceContainer: LinearLayout
     private lateinit var deckContainer: LinearLayout
@@ -211,6 +214,9 @@ class OverlayView(context: Context) {
     private lateinit var systemFields: LinearLayout
     private lateinit var profileRollButton: TextView
     private lateinit var pushButton: TextView
+    private lateinit var overlaySystemSection: LinearLayout
+    private lateinit var overlaySystemTitle: TextView
+    private lateinit var overlaySystemFields: LinearLayout
     private var activeOverlayInfo: SystemInfo? = null
     private val systemInputViews = LinkedHashMap<String, Pair<ProfileInput, View>>()
     private val resultFlash: TextView
@@ -392,22 +398,26 @@ class OverlayView(context: Context) {
         }
         modeTabsRow.addView(
             tabSystemButton,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            LinearLayout.LayoutParams(0, 32.dp(), 1f),
         )
         modeTabsRow.addView(
             tabDiceButton,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            LinearLayout.LayoutParams(0, 32.dp(), 1f).apply {
                 marginStart = 4.dp()
             },
         )
         modeTabsRow.addView(
             tabDeckButton,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            LinearLayout.LayoutParams(0, 32.dp(), 1f).apply {
                 marginStart = 4.dp()
             },
         )
 
         // ---------- ABA 1: SISTEMA ----------
+        familyTabsRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            visibility = View.GONE
+        }
         systemTitle = TextView(context).apply {
             setTextColor(MUTED)
             textSize = 11f
@@ -431,7 +441,17 @@ class OverlayView(context: Context) {
                 },
             )
             setPadding(0, 10.dp(), 0, 10.dp())
-            setOnClickListener { onRollWithInputs?.invoke(currentInputsJson()) }
+            setOnClickListener {
+                val overlay = activeOverlayInfo
+                if (overlay != null) {
+                    val not = notationInput.text.toString().trim().ifEmpty {
+                        quickNotation.ifEmpty { "1d20" }
+                    }
+                    onRollOverlay?.invoke(not, currentInputsJson())
+                } else {
+                    onRollWithInputs?.invoke(currentInputsJson())
+                }
+            }
         }
         // Botao secundario de proposito (contorno, nao preenchido): quem
         // rola do zero continua sendo o ROLAR acima. So aparece quando ha
@@ -458,13 +478,29 @@ class OverlayView(context: Context) {
         systemContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             visibility = if (currentPanelTab == PanelTab.SYSTEM) View.VISIBLE else View.GONE
-            addView(systemTitle, vParams(topMargin = 2))
+            addView(familyTabsRow, vParams(topMargin = 2))
+            addView(systemTitle, vParams(topMargin = 4))
             addView(systemFields, vParams(topMargin = 4))
             addView(profileRollButton, vParams(topMargin = 8))
             addView(pushButton, vParams(topMargin = 6))
         }
 
-        // ---------- ABA 2: DADOS LIVRES ----------
+        // ---------- ABA 2: DADOS LIVRES & SISTEMA OVERLAY ----------
+        overlaySystemTitle = TextView(context).apply {
+            setTextColor(MUTED)
+            textSize = 11f
+            isAllCaps = true
+            letterSpacing = 0.06f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        overlaySystemFields = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        overlaySystemSection = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            addView(overlaySystemTitle, vParams(topMargin = 2))
+            addView(overlaySystemFields, vParams(topMargin = 4))
+        }
+
         val rowTop = chipRow(context, DICE_KEYS.take(6))
         val rowBottom = chipRow(context, DICE_KEYS.drop(6))
 
@@ -524,7 +560,8 @@ class OverlayView(context: Context) {
         diceContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             visibility = if (currentPanelTab == PanelTab.DICE) View.VISIBLE else View.GONE
-            addView(rowTop, vParams(topMargin = 6))
+            addView(overlaySystemSection)
+            addView(rowTop, vParams(topMargin = 4))
             addView(rowBottom, vParams(topMargin = 4))
             addView(notationRow, vParams(topMargin = 6))
             addView(rollButton, vParams(topMargin = 8))
@@ -850,33 +887,103 @@ class OverlayView(context: Context) {
      */
     fun openComposer(info: SystemInfo?, saved: Map<String, String>) {
         activeOverlayInfo = info?.takeIf { it.isOverlay }
-        val family = info?.let { ProfileFamilies.familyFor(it.system) }
-        val hasSystem = info != null && (info.needsForm || family != null)
+        val isOverlay = info?.isOverlay == true
+        val isInfaernum = info?.system?.startsWith("infaernum") == true
+        val hasSystem = info != null && (info.needsForm || isInfaernum || isOverlay)
+
+        systemInputViews.clear()
+
         if (!hasSystem) {
             tabSystemButton.visibility = View.GONE
             systemContainer.visibility = View.GONE
-            systemInputViews.clear()
+            overlaySystemSection.visibility = View.GONE
+            familyTabsRow.visibility = View.GONE
+            tabDiceButton.text = tabDiceButton.context.getString(R.string.overlay_tab_dice)
             if (currentPanelTab == PanelTab.SYSTEM) {
                 setPanelTab(PanelTab.DICE)
             }
+            updateRollButton()
+        } else if (isOverlay) {
+            // Sistema tipo "overlay" (ex.: Roll Under): os dados e a configuracao
+            // ficam JUNTOS na mesma aba de Dados, sem necessidade de alternar abas!
+            tabSystemButton.visibility = View.GONE
+            systemContainer.visibility = View.GONE
+            familyTabsRow.visibility = View.GONE
+            tabDiceButton.visibility = View.VISIBLE
+            tabDiceButton.text = systemShortLabel(info)
+
+            val context = overlaySystemFields.context
+            overlaySystemSection.visibility = View.VISIBLE
+            overlaySystemTitle.text = info?.label
+            overlaySystemFields.removeAllViews()
+
+            val inputs = info?.formInputs.orEmpty()
+            var i = 0
+            while (i < inputs.size) {
+                val input1 = inputs[i]
+                val input2 = if (i + 1 < inputs.size) inputs[i + 1] else null
+
+                if (input2 != null) {
+                    val row = LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    val col1 = buildInputFieldColumn(context, input1, saved)
+                    val col2 = buildInputFieldColumn(context, input2, saved)
+                    row.addView(col1, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    row.addView(col2, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        marginStart = 8.dp()
+                    })
+                    overlaySystemFields.addView(row, vParams(topMargin = if (i == 0) 2 else 6))
+                    i += 2
+                } else {
+                    val col = buildInputFieldColumn(context, input1, saved)
+                    overlaySystemFields.addView(col, vParams(topMargin = if (i == 0) 2 else 6))
+                    i += 1
+                }
+            }
+
+            if (notationInput.text.isEmpty()) {
+                notationInput.setText(quickNotation.ifEmpty { "1d20" })
+            }
+            setPanelTab(PanelTab.DICE)
+            updateRollButton()
         } else {
+            // Sistema padrao com rolagem propria (Infaernum, Year Zero, Trophy, PbtA, etc.)
+            overlaySystemSection.visibility = View.GONE
             tabSystemButton.visibility = View.VISIBLE
-            tabSystemButton.text = systemShortLabel(info)
+            tabSystemButton.text = if (isInfaernum) "Infaernum" else systemShortLabel(info)
+            tabDiceButton.text = tabDiceButton.context.getString(R.string.overlay_tab_dice)
             val context = systemFields.context
-            // O MODO da familia (Year Zero: Genérico/Forbidden/Alien/Walking
-            // Dead; Infaernum: acao/sim ou nao/ideias) e escolhido em
-            // configuracoes, igual na web — a caixa de rolar mostra so o
-            // sistema ATIVO. Ja foram botoes aqui: com quatro modos a
-            // fileira comia metade do painel e ainda quebrava o rotulo no
-            // meio da palavra, e o app passou a ter duas experiencias
-            // diferentes pra mesma escolha.
+
+            familyTabsRow.removeAllViews()
+            if (isInfaernum) {
+                familyTabsRow.visibility = View.VISIBLE
+                val actions = listOf(
+                    Pair("infaernum", "Ação"),
+                    Pair("infaernum_sim_ou_nao", "Sim ou Não"),
+                    Pair("infaernum_ideias", "Ideias"),
+                )
+                for ((i, action) in actions.withIndex()) {
+                    val (actionSystem, actionLabel) = action
+                    val isActive = actionSystem == info?.system
+                    familyTabsRow.addView(
+                        familyTabButton(context, actionLabel, isActive) {
+                            onSelectFamilyMember?.invoke(actionSystem)
+                        },
+                        LinearLayout.LayoutParams(0, 32.dp(), 1f).apply {
+                            marginStart = if (i == 0) 0 else 4.dp()
+                        },
+                    )
+                }
+            } else {
+                familyTabsRow.visibility = View.GONE
+            }
+
             systemTitle.visibility = View.VISIBLE
             systemTitle.text = info?.label
             systemFields.removeAllViews()
-            systemInputViews.clear()
 
-            // formInputs, nao inputs: a escrituracao do Forçar ("push_*")
-            // e preenchida pelo proprio botao — ver ProfileInput.
             val inputs = info?.formInputs.orEmpty()
             var i = 0
             while (i < inputs.size) {
@@ -903,12 +1010,9 @@ class OverlayView(context: Context) {
                 }
             }
 
-            profileRollButton.text = "ROLAR ${systemShortLabel(info).uppercase()}"
-            // Trocou de sistema/modo: a rolagem anterior nao serve de base
-            // pra forcar. Quem reabilita e o Service, quando uma rolagem
-            // DESTE sistema sai (ver setPushAvailable).
+            profileRollButton.visibility = View.VISIBLE
+            profileRollButton.text = "ROLAR ${if (isInfaernum) "INFAERNUM" else systemShortLabel(info).uppercase()}"
             pushButton.visibility = View.GONE
-            profileRollButton.visibility = if (info?.isOverlay == true) View.GONE else View.VISIBLE
             setPanelTab(PanelTab.SYSTEM)
         }
         setMode(Mode.PANEL)
@@ -1230,13 +1334,9 @@ class OverlayView(context: Context) {
             letterSpacing = 0.03f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
-            maxLines = 2
-            // O painel tem largura fixa (300dp) e a fileira divide igual
-            // entre os modos: com quatro (Year Zero), "FORBIDDEN" nao cabia
-            // em 10sp e o Android quebrava NO MEIO da palavra — "FORBIDDE"
-            // numa linha e "N" na outra. Deixa o proprio texto encolher ate
-            // caber em vez de escolher um rotulo mutilado.
-            setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, TypedValue.COMPLEX_UNIT_SP)
+            setSingleLine()
+            maxLines = 1
+            setAutoSizeTextTypeUniformWithConfiguration(7, 11, 1, TypedValue.COMPLEX_UNIT_SP)
             background = rippled(
                 GradientDrawable().apply {
                     cornerRadius = 8.dp().toFloat()
@@ -1244,7 +1344,7 @@ class OverlayView(context: Context) {
                     setStroke(1.dp(), if (active) ACCENT else BORDER)
                 },
             )
-            setPadding(4.dp(), 8.dp(), 4.dp(), 8.dp())
+            setPadding(4.dp(), 0, 4.dp(), 0)
             isClickable = true
             setOnClickListener { onClick() }
         }
@@ -1331,7 +1431,10 @@ class OverlayView(context: Context) {
 
     private fun updateRollButton() {
         val typed = notationInput.text.toString().trim()
+        val overlay = activeOverlayInfo
         rollButton.text = when {
+            overlay != null && typed.isNotEmpty() -> "ROLAR $typed"
+            overlay != null -> "ROLAR ${systemShortLabel(overlay).uppercase()}"
             typed.isNotEmpty() -> "ROLAR $typed"
             quickNotation.isNotEmpty() -> "ROLAR $quickNotation"
             else -> rollButton.context.getString(R.string.roll_button)
@@ -1341,17 +1444,17 @@ class OverlayView(context: Context) {
     /**
      * Rola o que esta no campo; vazio = rolagem rapida das configuracoes.
      *
-     * Sistema "overlay" ativo (roll_under): nao ha rolagem rapida
-     * alternativa — sem notacao no campo nao ha o que aplicar a regra
-     * "<= valor testado" em cima, entao so ignora o toque (mesma guarda do
-     * botao desabilitado no apps/web, RollPanel.tsx).
+     * Sistema "overlay" ativo (roll_under): usa a notacao do campo ou
+     * o fallback (quickNotation / 1d20) aplicando a regra do profile
+     * com o valor testado.
      */
     private fun rollCurrent() {
         hideKeyboard()
         val notation = notationInput.text.toString().trim()
         val overlay = activeOverlayInfo
         if (overlay != null) {
-            if (notation.isNotEmpty()) onRollOverlay?.invoke(notation, currentInputsJson())
+            val not = notation.ifEmpty { quickNotation.ifEmpty { "1d20" } }
+            onRollOverlay?.invoke(not, currentInputsJson())
             return
         }
         if (notation.isEmpty()) onRollClicked?.invoke() else onRollNotation?.invoke(notation)
@@ -1433,7 +1536,7 @@ class OverlayView(context: Context) {
             // Fechar o painel com o sistema aberto agora conta como "eu
             // configurei isto", igual a tela de configuracoes ja faz a cada
             // toque.
-            if (::systemContainer.isInitialized && systemContainer.visibility == View.VISIBLE) {
+            if (activeOverlayInfo != null || (::systemContainer.isInitialized && systemContainer.visibility == View.VISIBLE)) {
                 val overlayNotation = if (activeOverlayInfo != null) composto else null
                 onPersistSystemInputs?.invoke(currentInputsJson(), overlayNotation)
             }
