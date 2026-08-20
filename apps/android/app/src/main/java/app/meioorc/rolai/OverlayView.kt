@@ -1026,15 +1026,23 @@ class OverlayView(context: Context) {
         val col = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
         }
+        val labelRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
         val labelView = TextView(context).apply {
             text = input.label
             setTextColor(MUTED)
             textSize = 11f
             setTypeface(typeface, Typeface.BOLD)
         }
-        col.addView(labelView)
+        labelRow.addView(
+            labelView,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
 
         if (input.isSelect) {
+            col.addView(labelRow)
             val spinner = Spinner(context).apply {
                 adapter = object : ArrayAdapter<String>(
                     context,
@@ -1089,11 +1097,39 @@ class OverlayView(context: Context) {
                     setColor(CHIP)
                     setStroke(1.dp(), BORDER)
                 }
-                setPadding(4.dp(), 4.dp(), 4.dp(), 4.dp())
+                setPadding(2.dp(), 2.dp(), 2.dp(), 2.dp())
                 setText(saved[input.id] ?: input.default.orEmpty())
             }
             systemInputViews[input.id] = input to editText
-            val stepper = numberFieldRow(context, editText, input.required)
+
+            if (!input.required) {
+                val clearBtn = TextView(context).apply {
+                    text = "×"
+                    contentDescription = "limpar"
+                    setTextColor(MUTED)
+                    textSize = 13f
+                    setTypeface(typeface, Typeface.BOLD)
+                    gravity = Gravity.CENTER
+                    setPadding(4.dp(), 0, 4.dp(), 0)
+                    isClickable = true
+                    setOnClickListener { editText.setText("") }
+                }
+                fun refreshClearState() {
+                    clearBtn.visibility = if (editText.text.isNotEmpty()) View.VISIBLE else View.INVISIBLE
+                }
+                editText.addTextChangedListener(
+                    object : TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                        override fun afterTextChanged(s: Editable?) = refreshClearState()
+                    },
+                )
+                refreshClearState()
+                labelRow.addView(clearBtn)
+            }
+            col.addView(labelRow)
+
+            val stepper = numberFieldRow(context, editText)
             col.addView(stepper, vParams(topMargin = 3))
         }
         return col
@@ -1248,53 +1284,27 @@ class OverlayView(context: Context) {
             },
         )
 
-    /**
-     * Campo numerico de sistema com +/- (espelha StepperInput da web) e,
-     * quando o input e OPCIONAL, um botao "limpar" depois do "+" (roll_under
-     * "valor testado", fate "dificuldade"...) — sem isto o unico jeito de
-     * esvaziar era apagar dígito por dígito, e no apk nao existia NEM o
-     * +/- nem o limpar: so um EditText cru, diferente da web.
-     */
-    private fun numberFieldRow(context: Context, editText: EditText, required: Boolean): LinearLayout {
+    /** Campo numerico de sistema com +/- compacto (espelha StepperInput da web). */
+    private fun numberFieldRow(context: Context, editText: EditText): LinearLayout {
         fun step(delta: Int) {
             val current = editText.text.toString().toIntOrNull() ?: 0
             editText.setText((current + delta).toString())
         }
         val minus = stepperGlyphButton(context, "−", "diminuir") { step(-1) }
         val plus = stepperGlyphButton(context, "+", "aumentar") { step(1) }
-        val row = LinearLayout(context).apply {
+        return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(minus, LinearLayout.LayoutParams(34.dp(), 34.dp()))
+            addView(minus, LinearLayout.LayoutParams(28.dp(), 30.dp()))
             addView(
                 editText,
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    marginStart = 6.dp()
-                    marginEnd = 6.dp()
+                LinearLayout.LayoutParams(0, 30.dp(), 1f).apply {
+                    marginStart = 4.dp()
+                    marginEnd = 4.dp()
                 },
             )
-            addView(plus, LinearLayout.LayoutParams(34.dp(), 34.dp()))
+            addView(plus, LinearLayout.LayoutParams(28.dp(), 30.dp()))
         }
-        if (!required) {
-            val clear = stepperGlyphButton(context, "×", "limpar") { editText.setText("") }
-            fun refreshClearState() {
-                clear.isEnabled = editText.text.isNotEmpty()
-                clear.alpha = if (clear.isEnabled) 1f else 0.4f
-            }
-            editText.addTextChangedListener(
-                object : TextWatcher {
-                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-                    override fun afterTextChanged(s: Editable?) = refreshClearState()
-                },
-            )
-            refreshClearState()
-            row.addView(
-                clear,
-                LinearLayout.LayoutParams(34.dp(), 34.dp()).apply { marginStart = 6.dp() },
-            )
-        }
-        return row
     }
 
     private fun stepperGlyphButton(context: Context, glyph: String, label: String, onClick: () -> Unit): TextView =
