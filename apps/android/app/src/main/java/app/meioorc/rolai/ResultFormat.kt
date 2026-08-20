@@ -189,6 +189,129 @@ object ResultFormat {
         return if (outcome.isEmpty()) OutcomeTone.NEUTRAL else outcomeTone(outcome)
     }
 
+    /** Perfis Year Zero: pool de d6 onde o 6 e sucesso, sem total somavel. */
+    private val YZE_PROFILES = listOf("yze", "yze_fbl", "yze_alien", "yze_wdu")
+
+    /** Sub-notacao de cada grupo: "{2d6+mod} vs {2c}" -> ["2d6+mod", "2c"]. */
+    private fun groupNotationsOf(notation: String): List<String> =
+        Regex("""\{([^}]+)\}""").findAll(notation).map { it.groupValues[1] }.toList()
+
+    /** Pools ja formatados, na ordem do JSON, mais a soma quando ela existe. */
+    private data class GroupWalk(val groupStrings: List<String>, val grandTotal: Int?)
+
+    /**
+     * Percorre os grupos montando "perícia [6, 2] + 1 = 2" pra cada um.
+     *
+     * Era o mesmo bloco de ~70 linhas copiado em formatDisplayLines e em
+     * formatResult; a unica diferenca real entre as duas leituras e a
+     * semente do total (`seedTotal`) e o separador que o chamador escolhe
+     * depois. Manter duas copias fazia cada correcao de exibicao (o "—" do
+     * pool vazio, a carta que nao soma, o nome do pool) precisar ser feita
+     * duas vezes — e a segunda era esquecida.
+     *
+     * `seedTotal` nulo = esta rolagem nao tem soma que faca sentido (vs,
+     * pool de sucessos, ou desfecho ja resolvido pelo profile).
+     */
+    private fun walkGroups(
+        resultJson: String,
+        notation: String,
+        groupsObj: JSONObject?,
+        isVs: Boolean,
+        seedTotal: Int?,
+    ): GroupWalk {
+        val groupStrings = mutableListOf<String>()
+        var grandTotal: Int? = seedTotal
+        if (groupsObj == null) return GroupWalk(groupStrings, grandTotal)
+
+        val groupNotations = groupNotationsOf(notation)
+        val groupKeys = orderedGroupKeys(resultJson, groupsObj)
+        var totalCardIndex = 0
+
+        for (gi in groupKeys.indices) {
+            val groupKey = groupKeys[gi]
+            val group = groupsObj.optJSONObject(groupKey) ?: continue
+            val subNotation = groupNotations.getOrNull(gi) ?: notation
+            val isCardGroup = Regex("""\b\d*c\b""").containsMatchIn(subNotation)
+            val isFudgeGroup = Regex("""\b\d*dF\b""").containsMatchIn(subNotation)
+
+            val rolls = group.optJSONArray("rolls")
+            val rollsFormatted = if (rolls != null && rolls.length() > 0) {
+                (0 until rolls.length()).joinToString(", ") { ri ->
+                    val v = rolls.getInt(ri)
+                    when {
+                        isCardGroup -> cardFromRollValue(v, totalCardIndex++)
+                        isFudgeGroup -> if (v > 0) "+" else if (v < 0) "−" else "0"
+                        else -> v.toString()
+                    }
+                }
+            } else ""
+
+            val mod = if (group.has("modifier")) group.getInt("modifier") else 0
+            val modText = if (mod > 0) " + $mod" else if (mod < 0) " − ${kotlin.math.abs(mod)}" else ""
+            val total = if (group.has("total")) {
+                group.getInt("total")
+            } else if (!isVs && rolls != null && rolls.length() > 0 && !isCardGroup && !isFudgeGroup) {
+                (0 until rolls.length()).sumOf { rolls.getInt(it) } + mod
+            } else null
+            val totalText = if (total != null && !isCardGroup) " = $total" else ""
+            if (total != null && grandTotal != null) {
+                grandTotal += total
+            } else if (isCardGroup || isFudgeGroup) {
+                grandTotal = null
+            }
+
+            val groupStr = buildString {
+                // Tres pools de d6 iguais (Forbidden Lands) viravam tres
+                // listas anonimas na mesma linha — sem o nome nao da pra
+                // saber qual "= 1" veio de onde.
+                if (groupKeys.size > 1) append("${groupLabel(groupKey)} ")
+                if (rollsFormatted.isNotEmpty()) {
+                    append("[$rollsFormatted]")
+                } else {
+                    // Pool de zero dados ("0d6"): existe, mas nao rolou
+                    // nada. "[]" parecia bug.
+                    append("—")
+                }
+                append(modText)
+                append(totalText)
+            }
+            if (groupStr.isNotEmpty()) groupStrings.add(groupStr)
+        }
+        return GroupWalk(groupStrings, grandTotal)
+    }
+
+    /**
+     * Sucessos do Vampiro v5: 6+ conta, e cada PAR de 10 (entre regulares e
+     * fome/ira juntos) vale +2 de bonus critico. Nulo quando nao e wod5.
+     */
+    private fun wod5Successes(profile: String, groupsObj: JSONObject?): Int? {
+        if (profile != "wod5" || groupsObj == null) return null
+        val regRolls = groupsObj.optJSONObject("regular")?.optJSONArray("rolls")
+        val hungRolls = groupsObj.optJSONObject("hunger")?.optJSONArray("rolls")
+        var successes = 0
+        var totalTens = 0
+        for (arr in listOfNotNull(regRolls, hungRolls)) {
+            for (i in 0 until arr.length()) {
+                val v = arr.getInt(i)
+                if (v >= 6) successes++
+                if (v == 10) totalTens++
+            }
+        }
+        return successes + (totalTens / 2) * 2
+    }
+
+    /** "Dificuldade: 2, Valor testado: 10" — nulo quando o profile nao testa nada. */
+    private fun testedText(result: JSONObject): String? =
+        result.optJSONArray("tested")?.let { arr ->
+            (0 until arr.length()).joinToString(", ") { i ->
+                val item = arr.getJSONObject(i)
+                "${item.getString("label")}: ${item.get("value")}"
+            }
+        }
+
+    /** Plural na mao: "1 sucesso" / "3 sucessos". */
+    private fun successesLabel(n: Int): String = "$n ${if (n == 1) "sucesso" else "sucessos"}"
+
     /** As tres linhas que o cartao de resultado do overlay desenha. */
     data class ResultDisplayLines(
         val headline: String,
@@ -204,18 +327,14 @@ object ResultFormat {
             val groupsObj = result.optJSONObject("groups")
             val profile = result.optString("profile", "")
 
-            val groupNotations = Regex("""\{([^}]+)\}""").findAll(notation)
-                .map { it.groupValues[1] }
-                .toList()
-
             val isVs = notation.contains(" vs ")
-            val isYze = listOf("yze", "yze_fbl", "yze_alien", "yze_wdu").contains(profile)
+            val isYze = YZE_PROFILES.contains(profile)
             val joiner = if (isVs) " vs " else " • "
 
+            // 1. Desfechos. Mais de uma flag pode bater na mesma rolagem
+            // (Infaernum: varias categorias no mesmo 3d6).
             val flags = result.optJSONArray("outcome_flags")
             val rawOutcome = result.optString("outcome", "")
-
-            // 1. Resolve lista de desfechos / flags
             val outcomeList = mutableListOf<Pair<String, String>>() // label to rawFlag
             if (flags != null && flags.length() > 0) {
                 for (i in 0 until flags.length()) {
@@ -229,106 +348,23 @@ object ResultFormat {
                 outcomeList.add(outcomeLabel(rawOutcome) to rawOutcome)
             }
 
-            // 2. Resolve grupos de dados e totais
-            var totalCardIndex = 0
-            val groupStrings = mutableListOf<String>()
-            var grandTotal: Int? = if (!isVs && outcomeList.isEmpty() && !isYze) 0 else null
-
-            if (groupsObj != null) {
-                val groupKeys = orderedGroupKeys(resultJson, groupsObj)
-                for (gi in groupKeys.indices) {
-                    val groupKey = groupKeys[gi]
-                    val group = groupsObj.optJSONObject(groupKey) ?: continue
-                    val subNotation = groupNotations.getOrNull(gi) ?: notation
-                    val isCardGroup = Regex("""\b\d*c\b""").containsMatchIn(subNotation)
-                    val isFudgeGroup = Regex("""\b\d*dF\b""").containsMatchIn(subNotation)
-
-                    val rolls = group.optJSONArray("rolls")
-                    val rollsFormatted = if (rolls != null && rolls.length() > 0) {
-                        (0 until rolls.length()).joinToString(", ") { ri ->
-                            val v = rolls.getInt(ri)
-                            when {
-                                isCardGroup -> cardFromRollValue(v, totalCardIndex++)
-                                isFudgeGroup -> if (v > 0) "+" else if (v < 0) "−" else "0"
-                                else -> v.toString()
-                            }
-                        }
-                    } else ""
-
-                    val mod = if (group.has("modifier")) group.getInt("modifier") else 0
-                    val modText = if (mod > 0) " + $mod" else if (mod < 0) " − ${kotlin.math.abs(mod)}" else ""
-                    val total = if (group.has("total")) {
-                        group.getInt("total")
-                    } else if (!isVs && rolls != null && rolls.length() > 0 && !isCardGroup && !isFudgeGroup) {
-                        (0 until rolls.length()).sumOf { rolls.getInt(it) } + mod
-                    } else null
-                    val totalText = if (total != null && !isCardGroup) " = $total" else ""
-                    if (total != null && grandTotal != null) {
-                        grandTotal += total
-                    } else if (isCardGroup || isFudgeGroup) {
-                        grandTotal = null
-                    }
-
-                    val label = if (groupKeys.size > 1) groupLabel(groupKey) else ""
-                    val rollsPart = if (rollsFormatted.isNotEmpty()) "[$rollsFormatted]" else "—"
-                    val fullGroupStr = buildString {
-                        if (label.isNotEmpty()) append("$label ")
-                        append(rollsPart)
-                        append(modText)
-                        append(totalText)
-                    }
-                    if (fullGroupStr.isNotEmpty()) {
-                        groupStrings.add(fullGroupStr)
-                    }
-                }
-            }
+            // 2. Pools. So soma quando a rolagem e livre: com desfecho, com
+            // "vs" ou em pool de sucessos o total nao quer dizer nada.
+            val seedTotal = if (!isVs && outcomeList.isEmpty() && !isYze) 0 else null
+            val walk = walkGroups(resultJson, notation, groupsObj, isVs, seedTotal)
+            val groupStrings = walk.groupStrings
 
             val yzeSuccesses = if (isYze && groupsObj != null && groupsObj.length() > 1) {
-                val keys = orderedGroupKeys(resultJson, groupsObj)
-                keys.sumOf { groupsObj.optJSONObject(it)?.optInt("total", 0) ?: 0 }
+                orderedGroupKeys(resultJson, groupsObj)
+                    .sumOf { groupsObj.optJSONObject(it)?.optInt("total", 0) ?: 0 }
             } else null
-
-            val isWod5 = profile == "wod5"
-            val wod5Successes = if (isWod5 && groupsObj != null) {
-                val regRolls = groupsObj.optJSONObject("regular")?.optJSONArray("rolls")
-                val hungRolls = groupsObj.optJSONObject("hunger")?.optJSONArray("rolls")
-                var regSuccess = 0
-                var hungSuccess = 0
-                var totalTens = 0
-                if (regRolls != null) {
-                    for (i in 0 until regRolls.length()) {
-                        val v = regRolls.getInt(i)
-                        if (v >= 6) regSuccess++
-                        if (v == 10) totalTens++
-                    }
-                }
-                if (hungRolls != null) {
-                    for (i in 0 until hungRolls.length()) {
-                        val v = hungRolls.getInt(i)
-                        if (v >= 6) hungSuccess++
-                        if (v == 10) totalTens++
-                    }
-                }
-                val critBonus = (totalTens / 2) * 2
-                regSuccess + hungSuccess + critBonus
-            } else null
-
-            val poolSuccesses = yzeSuccesses ?: wod5Successes
-
-            val tested = result.optJSONArray("tested")?.let { arr ->
-                (0 until arr.length()).joinToString(", ") { i ->
-                    val item = arr.getJSONObject(i)
-                    "${item.getString("label")}: ${item.get("value")}"
-                }
-            }
+            val wod5 = wod5Successes(profile, groupsObj)
+            val poolSuccesses = yzeSuccesses ?: wod5
+            val tested = testedText(result)
 
             if (outcomeList.isNotEmpty()) {
                 val outcomeStr = outcomeList.joinToString(", ") { it.first }
-                val headline = if (wod5Successes != null) {
-                    "$outcomeStr ($wod5Successes ${if (wod5Successes == 1) "sucesso" else "sucessos"})"
-                } else {
-                    outcomeStr
-                }
+                val headline = if (wod5 != null) "$outcomeStr (${successesLabel(wod5)})" else outcomeStr
                 val detail = if (groupStrings.isNotEmpty()) {
                     val isMultiNamedGroup = groupsObj != null && groupsObj.length() > 1
                     if (!isMultiNamedGroup) {
@@ -339,24 +375,20 @@ object ResultFormat {
                 } else null
                 ResultDisplayLines(headline, tested, detail, outcomeList)
             } else if (poolSuccesses != null) {
-                val headline = "$poolSuccesses ${if (poolSuccesses == 1) "sucesso" else "sucessos"}"
                 val detail = if (groupStrings.isNotEmpty()) groupStrings.joinToString(joiner) else null
-                ResultDisplayLines(headline, tested, detail, emptyList())
+                ResultDisplayLines(successesLabel(poolSuccesses), tested, detail, emptyList())
             } else if (isVs && groupStrings.size == 2) {
                 val keys = orderedGroupKeys(resultJson, groupsObj ?: JSONObject())
                 val t1 = groupsObj?.optJSONObject(keys.getOrNull(0) ?: "")?.optInt("total", 0) ?: 0
                 val t2 = groupsObj?.optJSONObject(keys.getOrNull(1) ?: "")?.optInt("total", 0) ?: 0
-                val headline = "$t1 vs $t2"
-                val detail = groupStrings.joinToString(" vs ")
-                ResultDisplayLines(headline, tested, detail, emptyList())
-            } else if (grandTotal != null && groupStrings.isNotEmpty()) {
-                val headline = grandTotal.toString()
+                ResultDisplayLines("$t1 vs $t2", tested, groupStrings.joinToString(" vs "), emptyList())
+            } else if (walk.grandTotal != null && groupStrings.isNotEmpty()) {
                 val detail = if (groupStrings.size == 1 && (groupsObj?.length() ?: 0) == 1) {
                     "$notation ${groupStrings.first()}"
                 } else {
                     groupStrings.joinToString(" + ")
                 }
-                ResultDisplayLines(headline, tested, detail, emptyList())
+                ResultDisplayLines(walk.grandTotal.toString(), tested, detail, emptyList())
             } else {
                 ResultDisplayLines(notation, tested, null, emptyList())
             }
@@ -375,13 +407,8 @@ object ResultFormat {
             val groupsObj = result.optJSONObject("groups")
             val profile = result.optString("profile", "")
 
-            // Sub-notações para cada grupo (ex: "{2d6+mod} vs {2c}" -> ["2d6+mod", "2c"])
-            val groupNotations = Regex("""\{([^}]+)\}""").findAll(notation)
-                .map { it.groupValues[1] }
-                .toList()
-
             val isVs = notation.contains(" vs ")
-            val isYze = listOf("yze", "yze_fbl", "yze_alien", "yze_wdu").contains(profile)
+            val isYze = YZE_PROFILES.contains(profile)
             val isWod5 = profile == "wod5"
             val joiner = if (isVs) " vs " else " + "
 
@@ -395,110 +422,24 @@ object ResultFormat {
                 result.optString("outcome", "").let { if (it.isEmpty()) it else outcomeLabel(it) }
             }
 
-            val wod5Successes = if (isWod5 && groupsObj != null) {
-                val regRolls = groupsObj.optJSONObject("regular")?.optJSONArray("rolls")
-                val hungRolls = groupsObj.optJSONObject("hunger")?.optJSONArray("rolls")
-                var regSuccess = 0
-                var hungSuccess = 0
-                var totalTens = 0
-                if (regRolls != null) {
-                    for (i in 0 until regRolls.length()) {
-                        val v = regRolls.getInt(i)
-                        if (v >= 6) regSuccess++
-                        if (v == 10) totalTens++
-                    }
-                }
-                if (hungRolls != null) {
-                    for (i in 0 until hungRolls.length()) {
-                        val v = hungRolls.getInt(i)
-                        if (v >= 6) hungSuccess++
-                        if (v == 10) totalTens++
-                    }
-                }
-                val critBonus = (totalTens / 2) * 2
-                regSuccess + hungSuccess + critBonus
-            } else null
-
-            var totalCardIndex = 0
-            val groupStrings = mutableListOf<String>()
-            var grandTotal: Int? = if (!isVs && outcome.isEmpty() && !isYze && !isWod5) 0 else null
-
-            if (groupsObj != null) {
-                val groupKeys = orderedGroupKeys(resultJson, groupsObj)
-                for (gi in groupKeys.indices) {
-                    val groupKey = groupKeys[gi]
-                    val group = groupsObj.optJSONObject(groupKey) ?: continue
-                    val subNotation = groupNotations.getOrNull(gi) ?: notation
-                    val isCardGroup = Regex("""\b\d*c\b""").containsMatchIn(subNotation)
-                    val isFudgeGroup = Regex("""\b\d*dF\b""").containsMatchIn(subNotation)
-
-                    val rolls = group.optJSONArray("rolls")
-                    val rollsFormatted = if (rolls != null && rolls.length() > 0) {
-                        (0 until rolls.length()).joinToString(", ") { ri ->
-                            val v = rolls.getInt(ri)
-                            when {
-                                isCardGroup -> cardFromRollValue(v, totalCardIndex++)
-                                isFudgeGroup -> if (v > 0) "+" else if (v < 0) "−" else "0"
-                                else -> v.toString()
-                            }
-                        }
-                    } else ""
-
-                    val mod = if (group.has("modifier")) group.getInt("modifier") else 0
-                    val modText = if (mod > 0) " + $mod" else if (mod < 0) " − ${kotlin.math.abs(mod)}" else ""
-                    val total = if (group.has("total")) {
-                        group.getInt("total")
-                    } else if (!isVs && rolls != null && rolls.length() > 0 && !isCardGroup && !isFudgeGroup) {
-                        (0 until rolls.length()).sumOf { rolls.getInt(it) } + mod
-                    } else null
-                    val totalText = if (total != null && !isCardGroup) " = $total" else ""
-                    if (total != null && grandTotal != null) {
-                        grandTotal += total
-                    } else if (isCardGroup || isFudgeGroup) {
-                        grandTotal = null
-                    }
-
-                    val groupStr = buildString {
-                        // Tres pools de d6 iguais (Forbidden Lands) viravam
-                        // tres listas anonimas na mesma linha — sem o nome
-                        // nao da pra saber qual "= 1" veio de onde.
-                        if (groupKeys.size > 1) append("${groupLabel(groupKey)} ")
-                        if (rollsFormatted.isNotEmpty()) {
-                            append("[$rollsFormatted]")
-                        } else {
-                            // Pool de zero dados ("0d6"): existe, mas nao
-                            // rolou nada. "[]" parecia bug.
-                            append("—")
-                        }
-                        append(modText)
-                        append(totalText)
-                    }
-                    if (groupStr.isNotEmpty()) groupStrings.add(groupStr)
-                }
-            }
+            val wod5 = wod5Successes(profile, groupsObj)
+            val seedTotal = if (!isVs && outcome.isEmpty() && !isYze && !isWod5) 0 else null
+            val walk = walkGroups(resultJson, notation, groupsObj, isVs, seedTotal)
+            val groupStrings = walk.groupStrings
 
             val allGroupsText = buildString {
                 append(groupStrings.joinToString(joiner))
-                if (!isVs && outcome.isEmpty() && !isYze && !isWod5 && groupStrings.size > 1 && grandTotal != null) {
-                    append(" = $grandTotal")
+                if (seedTotal != null && groupStrings.size > 1 && walk.grandTotal != null) {
+                    append(" = ${walk.grandTotal}")
                 }
             }
 
-            val tested = result.optJSONArray("tested")?.let { arr ->
-                (0 until arr.length()).joinToString(", ") { i ->
-                    val item = arr.getJSONObject(i)
-                    "${item.getString("label")}: ${item.get("value")}"
-                }
-            } ?: ""
+            val tested = testedText(result) ?: ""
 
-            val finalOutcome = if (wod5Successes != null) {
-                if (outcome.isNotEmpty()) {
-                    "$outcome ($wod5Successes ${if (wod5Successes == 1) "sucesso" else "sucessos"})"
-                } else {
-                    "$wod5Successes ${if (wod5Successes == 1) "sucesso" else "sucessos"}"
-                }
-            } else {
-                outcome
+            val finalOutcome = when {
+                wod5 == null -> outcome
+                outcome.isNotEmpty() -> "$outcome (${successesLabel(wod5)})"
+                else -> successesLabel(wod5)
             }
 
             buildString {
