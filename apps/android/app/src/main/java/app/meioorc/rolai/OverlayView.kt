@@ -3,26 +3,13 @@ package app.meioorc.rolai
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.ColorFilter
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.PixelFormat
-import android.graphics.RectF
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.text.Editable
 import android.text.SpannableStringBuilder
-import android.text.Spanned
 import android.text.TextWatcher
-import android.text.style.ForegroundColorSpan
-import android.text.style.RelativeSizeSpan
-import android.text.style.StyleSpan
-import org.json.JSONArray
-import org.json.JSONObject
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -37,6 +24,20 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
+import app.meioorc.rolai.OverlayPalette.ACCENT
+import app.meioorc.rolai.OverlayPalette.ACCENT_BRIGHT
+import app.meioorc.rolai.OverlayPalette.BORDER
+import app.meioorc.rolai.OverlayPalette.CARD_STROKE
+import app.meioorc.rolai.OverlayPalette.CHIP
+import app.meioorc.rolai.OverlayPalette.DANGER
+import app.meioorc.rolai.OverlayPalette.FAILURE_TEXT
+import app.meioorc.rolai.OverlayPalette.FAN_BG
+import app.meioorc.rolai.OverlayPalette.MUTED
+import app.meioorc.rolai.OverlayPalette.PANEL
+import app.meioorc.rolai.OverlayPalette.PARTIAL_TEXT
+import app.meioorc.rolai.OverlayPalette.RIPPLE
+import app.meioorc.rolai.OverlayPalette.SURFACE
+import app.meioorc.rolai.OverlayPalette.TEXT
 import kotlin.math.abs
 
 /**
@@ -66,16 +67,6 @@ import kotlin.math.abs
  */
 class OverlayView(context: Context) {
 
-    /**
-     * Raiz do overlay.
-     *
-     * `clipChildren/clipToPadding = false` + padding: a janela e
-     * WRAP_CONTENT, entao terminava exatamente na borda da bolha e a SOMBRA
-     * (elevation) era cortada reto embaixo — uma linha horizontal estranha
-     * atras do botao. O padding da a folga que a sombra precisa pra
-     * desvanecer; como a area extra e transparente e a janela nao e
-     * tocavel fora dos filhos, nao muda o alvo do toque.
-     */
     /**
      * Raiz do overlay.
      *
@@ -857,27 +848,8 @@ class OverlayView(context: Context) {
 
     // ---------- campos do sistema ativo (dentro do PANEL) ----------
 
-    private fun systemShortLabel(info: SystemInfo?): String {
-        if (info == null) return "Sistema"
-        val family = ProfileFamilies.familyFor(info.system)
-        if (family != null) return family.shortLabel
-        return when (info.system) {
-            "roll_under" -> "Roll Under"
-            "wod5" -> "WoD v5"
-            "pbta", "pbta2d10" -> "PbtA"
-            "pool_d6" -> "Pool d6"
-            "fate" -> "Fate / Fudge"
-            else -> {
-                val raw = info.label
-                when {
-                    raw.contains(" — ") -> raw.substringBefore(" — ").trim()
-                    raw.contains(" - ") -> raw.substringBefore(" - ").trim()
-                    raw.contains(" (") -> raw.substringBefore(" (").trim()
-                    else -> raw
-                }
-            }
-        }
-    }
+    private fun systemShortLabel(info: SystemInfo?): String =
+        if (info == null) "Sistema" else ProfileFamilies.shortLabelFor(info.system, info.label)
 
     /**
      * Abre o compositor (chips + notacao) com os campos do sistema ativo
@@ -1202,7 +1174,7 @@ class OverlayView(context: Context) {
         }
         val ssb = SpannableStringBuilder()
         for (i in lines.indices) {
-            ssb.append(formatRichLine(lines[i]))
+            ssb.append(ResultSpans.ofLine(lines[i]))
             if (i < lines.size - 1) {
                 ssb.append("\n\n")
             }
@@ -1401,7 +1373,7 @@ class OverlayView(context: Context) {
 
     private fun addDie(key: String) {
         val current = notationInput.text.toString()
-        val next = addDieToNotation(current, key)
+        val next = NotationComposer.addDie(current, key)
         notationInput.setText(next)
         notationInput.setSelection(next.length)
         syncChipsWithNotation(next)
@@ -1410,7 +1382,7 @@ class OverlayView(context: Context) {
     /** Tira um dado do tipo; o termo some do pool ao zerar. Ligado ao long-press do chip. */
     private fun removeDie(key: String) {
         val current = notationInput.text.toString()
-        val next = removeDieFromNotation(current, key)
+        val next = NotationComposer.removeDie(current, key)
         notationInput.setText(next)
         notationInput.setSelection(next.length)
         syncChipsWithNotation(next)
@@ -1422,114 +1394,11 @@ class OverlayView(context: Context) {
         syncChipsWithNotation("")
     }
 
-    private fun addDieToNotation(notation: String, key: String): String {
-        val trimmed = notation.trim()
-        val label = if (key == "C") "1c" else if (key == "F") "1dF" else "1d$key"
-
-        if (trimmed.isEmpty()) return label
-
-        // 1. Slot aberto no fim: ex: "1[", "2[", "3[", "... + 1[", "{2d6} vs {"
-        val openBracketRegex = Regex("""^(.*(?:\b[123]\[|\{))\s*$""")
-        val openMatch = openBracketRegex.find(trimmed)
-        if (openMatch != null) {
-            val prefix = openMatch.groupValues[1]
-            val closing = if (prefix.endsWith("{")) "}" else "]"
-            return "$prefix$label$closing"
-        }
-
-        // 2. Bloco de slot fechado no fim: ex: "1[2d6]" ou "1[2d6+1d4]"
-        val slotBlockRegex = Regex("""^(.*?\b[123]\[)([^\]]*?)(\])\s*$""")
-        val slotMatch = slotBlockRegex.find(trimmed)
-        if (slotMatch != null) {
-            val prefix = slotMatch.groupValues[1]
-            val inner = slotMatch.groupValues[2].trim()
-            val suffix = slotMatch.groupValues[3]
-            val innerUpdated = addDieToSimpleExpression(inner, key)
-            return "$prefix$innerUpdated$suffix"
-        }
-
-        // 3. Operador ou separador pendente no fim: ex: "2d6 +", "2d6+", "vs"
-        if (Regex("""[\+\-\*\/]\s*$""").containsMatchIn(trimmed) || Regex("""\bvs\s*$""", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)) {
-            val sep = if (trimmed.endsWith(" ")) "" else " "
-            return "$trimmed$sep$label"
-        }
-
-        // 4. Estado normal do compositor
-        return addDieToSimpleExpression(trimmed, key)
-    }
-
-    private fun addDieToSimpleExpression(expr: String, key: String): String {
-        val label = if (key == "C") "1c" else if (key == "F") "1dF" else "1d$key"
-        val diePattern = if (key == "C") Regex("""(\d+)c\b""", RegexOption.IGNORE_CASE)
-            else if (key == "F") Regex("""(\d+)dF\b""", RegexOption.IGNORE_CASE)
-            else Regex("""(\d+)d$key\b""", RegexOption.IGNORE_CASE)
-
-        val match = diePattern.find(expr)
-        if (match != null) {
-            val count = match.groupValues[1].toIntOrNull() ?: 1
-            val newCount = count + 1
-            val replacement = if (key == "C") "${newCount}c"
-                else if (key == "F") "${newCount}dF"
-                else "${newCount}d$key"
-            return expr.replaceFirst(diePattern, replacement)
-        }
-
-        if (expr.isEmpty()) return label
-        return "$expr+$label"
-    }
-
-    private fun removeDieFromNotation(notation: String, key: String): String {
-        val trimmed = notation.trim()
-        if (trimmed.isEmpty()) return ""
-
-        val slotBlockRegex = Regex("""^(.*?\b[123]\[)([^\]]*?)(\])\s*$""")
-        val slotMatch = slotBlockRegex.find(trimmed)
-        if (slotMatch != null) {
-            val prefix = slotMatch.groupValues[1]
-            val inner = slotMatch.groupValues[2].trim()
-            val suffix = slotMatch.groupValues[3]
-            val innerUpdated = removeDieFromSimpleExpression(inner, key)
-            if (innerUpdated.isEmpty()) {
-                return prefix.replace(Regex("""\b[123]\[$"""), "").trim().removeSuffix("+").trim()
-            }
-            return "$prefix$innerUpdated$suffix"
-        }
-
-        return removeDieFromSimpleExpression(trimmed, key)
-    }
-
-    private fun removeDieFromSimpleExpression(expr: String, key: String): String {
-        val diePattern = if (key == "C") Regex("""(\d+)c\b""", RegexOption.IGNORE_CASE)
-            else if (key == "F") Regex("""(\d+)dF\b""", RegexOption.IGNORE_CASE)
-            else Regex("""(\d+)d$key\b""", RegexOption.IGNORE_CASE)
-
-        val match = diePattern.find(expr) ?: return expr
-        val count = match.groupValues[1].toIntOrNull() ?: 1
-        if (count > 1) {
-            val newCount = count - 1
-            val replacement = if (key == "C") "${newCount}c"
-                else if (key == "F") "${newCount}dF"
-                else "${newCount}d$key"
-            return expr.replaceFirst(diePattern, replacement)
-        } else {
-            var updated = expr.replaceFirst(diePattern, "")
-            updated = updated.replace("++", "+")
-            return updated.trim().removePrefix("+").removeSuffix("+").trim()
-        }
-    }
-
     private fun syncChipsWithNotation(notation: String) {
         val density = root.context.resources.displayMetrics.density
+        val contagens = NotationComposer.countsByKey(notation, chips.keys.toList())
         for ((key, chip) in chips) {
-            val pattern = if (key == "C") Regex("""(\d+)c\b""", RegexOption.IGNORE_CASE)
-                else if (key == "F") Regex("""(\d+)dF\b""", RegexOption.IGNORE_CASE)
-                else Regex("""(\d+)d$key\b""", RegexOption.IGNORE_CASE)
-
-            var count = 0
-            for (match in pattern.findAll(notation)) {
-                count += match.groupValues[1].toIntOrNull() ?: 1
-            }
-
+            val count = contagens[key] ?: 0
             val label = if (key == "C") "carta" else if (key == "F") "dF" else "d$key"
             chip.text = if (count > 0) {
                 if (key == "C") "${count}c" else "${count}$label"
@@ -1703,7 +1572,7 @@ class OverlayView(context: Context) {
 
     fun showResult(text: CharSequence, tone: OutcomeTone = OutcomeTone.NEUTRAL) {
         val formatted = if (text is String && text.startsWith("{") && text.contains("\"groups\"")) {
-            formatRichResult(text)
+            ResultSpans.ofResult(text)
         } else if (text is String) {
             val cor = when (tone) {
                 OutcomeTone.FAILURE -> FAILURE_TEXT
@@ -1713,7 +1582,7 @@ class OverlayView(context: Context) {
             panelResultView.setTextColor(cor)
             historyResultView.setTextColor(cor)
             resultFlash.setTextColor(cor)
-            formatRichLine(text)
+            ResultSpans.ofLine(text)
         } else {
             text
         }
@@ -1733,7 +1602,7 @@ class OverlayView(context: Context) {
         val recent = history.toList().takeLast(MAX_ACTIVITY_LINES)
         val ssb = SpannableStringBuilder()
         for (i in recent.indices) {
-            ssb.append(formatRichLine(recent[i]))
+            ssb.append(ResultSpans.ofLine(recent[i]))
             if (i < recent.size - 1) ssb.append("\n")
         }
         activityView.text = ssb
@@ -1844,341 +1713,8 @@ class OverlayView(context: Context) {
     }
 
     companion object {
-        // Tokens do apps/web (styles.css), em ARGB.
-        private val ACCENT = Color.rgb(0x1D, 0x9E, 0x75)
-        private val ACCENT_BRIGHT = Color.rgb(0x25, 0xC4, 0x8F)
-        // Opaco: overlay nao tem backdrop-blur, e translucido aqui so
-        // vira ruido visual com o app de baixo.
-        private val PANEL = Color.rgb(0x14, 0x18, 0x1C)
-        private val BORDER = Color.argb(0x1A, 0xFF, 0xFF, 0xFF)
-        private val CHIP = Color.argb(0x14, 0xFF, 0xFF, 0xFF)
-        // Ripple esverdeado: o branco puro sumia sobre o painel escuro.
-        private val RIPPLE = Color.argb(0x66, 0x25, 0xC4, 0x8F)
-        // Superficie de botao dentro do painel e fundo das mini-bolhas.
-        private val SURFACE = Color.argb(0x1F, 0x25, 0xC4, 0x8F)
-        private val FAN_BG = Color.rgb(0x10, 0x2A, 0x22)
-        private val DANGER = Color.rgb(0xE0, 0x6C, 0x75)
-
         /** Espaco pra sombra do elevation desenhar sem ser cortada. */
         const val SHADOW_PAD_DP = 12
-        // Aro dos cartoes: verde da marca a meia opacidade — visivel sobre
-        // qualquer wallpaper sem virar moldura berrante.
-        private val CARD_STROKE = Color.argb(0x66, 0x1D, 0x9E, 0x75)
-        private val TEXT = Color.rgb(0xE8, 0xEC, 0xF0)
-        private val MUTED = Color.rgb(0x8B, 0x95, 0xA1)
-
-        // Mesmas cores do modo stream (apps/web/src/styles.css): claras de
-        // proposito, porque a janela do overlay fica sobre outro app e um
-        // vermelho escuro sumiria sobre fundo escuro.
-        private val FAILURE_TEXT = Color.rgb(0xFF, 0x6B, 0x6B)
-        private val PARTIAL_TEXT = Color.rgb(0xFF, 0xC6, 0x5C)
-
-        // Cores dos slots de dados para formatação rica de resultados e logs
-        private val SLOT_1_COLOR = Color.rgb(0x25, 0xC4, 0x8F) // Esmeralda (#25c48f)
-        private val SLOT_2_COLOR = Color.rgb(0xF8, 0x71, 0x71) // Sangue (#f87171)
-        private val SLOT_3_COLOR = Color.rgb(0x38, 0xBD, 0xF8) // Gelo (#38bdf8)
-        private val CARD_RED_COLOR = Color.rgb(0xFF, 0x6B, 0x6B)
-
-        /**
-         * Formata o resultado completo de uma rolagem com hierarquia visual e quebra
-         * de linhas limpa:
-         *  - Linha 1: Desfecho(s) / Total em destaque grande e colorido + Parâmetro testado em cinza discreto e fonte menor
-         *  - Linha 2: Detalhamento de dados / pools em fonte menor, com rótulos de slots coloridos e dados em negrito
-         */
-        fun formatRichResult(resultJson: String): SpannableStringBuilder {
-            return try {
-                val lines = OverlayService.formatDisplayLines(resultJson)
-                val ssb = SpannableStringBuilder()
-
-                // 1. LINHA 1 (Headline)
-                if (lines.flags.isNotEmpty()) {
-                    for (i in lines.flags.indices) {
-                        val (label, rawFlag) = lines.flags[i]
-                        if (i > 0) {
-                            val commaStart = ssb.length
-                            ssb.append(", ")
-                            ssb.setSpan(ForegroundColorSpan(MUTED), commaStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                        }
-                        val flagStart = ssb.length
-                        ssb.append(label)
-                        val tone = outcomeTone(rawFlag)
-                        val flagColor = when (tone) {
-                            OutcomeTone.FAILURE -> FAILURE_TEXT
-                            OutcomeTone.PARTIAL -> PARTIAL_TEXT
-                            else -> ACCENT_BRIGHT
-                        }
-                        ssb.setSpan(ForegroundColorSpan(flagColor), flagStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                        ssb.setSpan(StyleSpan(Typeface.BOLD), flagStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                        ssb.setSpan(RelativeSizeSpan(1.1f), flagStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    }
-                } else {
-                    val headlineStart = ssb.length
-                    ssb.append(lines.headline)
-                    val tone = OverlayService.toneOf(resultJson)
-                    val headlineColor = when (tone) {
-                        OutcomeTone.FAILURE -> FAILURE_TEXT
-                        OutcomeTone.PARTIAL -> PARTIAL_TEXT
-                        OutcomeTone.SUCCESS -> ACCENT_BRIGHT
-                        else -> TEXT
-                    }
-                    ssb.setSpan(ForegroundColorSpan(headlineColor), headlineStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    ssb.setSpan(StyleSpan(Typeface.BOLD), headlineStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    ssb.setSpan(RelativeSizeSpan(1.25f), headlineStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                }
-
-                // Parâmetros testados ao lado do headline em cinza discreto e fonte menor
-                if (!lines.tested.isNullOrEmpty()) {
-                    val testedStart = ssb.length
-                    ssb.append("  (${lines.tested})")
-                    ssb.setSpan(ForegroundColorSpan(MUTED), testedStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    ssb.setSpan(RelativeSizeSpan(0.75f), testedStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                }
-
-                // 2. LINHA 2 (Detail)
-                if (!lines.detail.isNullOrEmpty()) {
-                    ssb.append("\n")
-                    val detailStart = ssb.length
-                    ssb.append(lines.detail)
-                    ssb.setSpan(RelativeSizeSpan(0.75f), detailStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    applyDetailSpans(ssb, detailStart)
-                }
-
-                ssb
-            } catch (e: Exception) {
-                SpannableStringBuilder(formatRichLine(resultJson.take(80)))
-            }
-        }
-
-        private fun applyDetailSpans(ssb: SpannableStringBuilder, start: Int) {
-            val text = ssb.substring(start)
-
-            // 1. Slot 1 (Esmeralda / Cyan): base, ação, acao, claros, grupo 1, regulares, verbo
-            val slot1Regex = Regex("""\b(base|ação|acao|claros|grupo 1|regulares|verbo)\b""", RegexOption.IGNORE_CASE)
-            for (m in slot1Regex.findAll(text)) {
-                val s = start + m.range.first
-                val e = start + m.range.last + 1
-                ssb.setSpan(ForegroundColorSpan(SLOT_1_COLOR), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-            // 2. Slot 2 (Sangue / Vermelho): perícia, pericia, desafio, escuros, fome/ira, fome, ira, grupo 2, substantivo
-            val slot2Regex = Regex("""\b(perícia|pericia|desafio|escuros|fome/ira|fome|ira|grupo 2|substantivo)\b""", RegexOption.IGNORE_CASE)
-            for (m in slot2Regex.findAll(text)) {
-                val s = start + m.range.first
-                val e = start + m.range.last + 1
-                ssb.setSpan(ForegroundColorSpan(SLOT_2_COLOR), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-            // 3. Slot 3 (Gelo / Azul): equipamento, ruína, ruina, estresse, grupo 3
-            val slot3Regex = Regex("""\b(equipamento|ruína|ruina|estresse|grupo 3)\b""", RegexOption.IGNORE_CASE)
-            for (m in slot3Regex.findAll(text)) {
-                val s = start + m.range.first
-                val e = start + m.range.last + 1
-                ssb.setSpan(ForegroundColorSpan(SLOT_3_COLOR), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-            // 4. Bracketed dice numbers [x, y, z] -> números em negrito com destaque para acertos (>= 6) e 10 (crítico)
-            val bracketRegex = Regex("""\[([^\]]+)\]""")
-            for (m in bracketRegex.findAll(text)) {
-                val s = start + m.range.first
-                val e = start + m.range.last + 1
-                ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-
-                val inner = m.groupValues[1]
-                val innerStart = start + m.range.first + 1
-                val numRegex = Regex("""\b(\d+)\b""")
-                for (nm in numRegex.findAll(inner)) {
-                    val nVal = nm.value.toIntOrNull() ?: continue
-                    val ns = innerStart + nm.range.first
-                    val ne = innerStart + nm.range.last + 1
-                    if (nVal == 10) {
-                        ssb.setSpan(ForegroundColorSpan(PARTIAL_TEXT), ns, ne, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    } else if (nVal >= 6) {
-                        ssb.setSpan(ForegroundColorSpan(ACCENT_BRIGHT), ns, ne, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    }
-                }
-            }
-
-            // 5. Cartas vermelhas (♥ e ♦)
-            val cardRedRegex = Regex("""(10|[A2-9JQK])([♥♦])""")
-            for (m in cardRedRegex.findAll(text)) {
-                val s = start + m.range.first
-                val e = start + m.range.last + 1
-                ssb.setSpan(ForegroundColorSpan(CARD_RED_COLOR), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-            // 6. Muted separators: "•", "vs"
-            val sepRegex = Regex("""(•|\bvs\b)""")
-            for (m in sepRegex.findAll(text)) {
-                val s = start + m.range.first
-                val e = start + m.range.last + 1
-                ssb.setSpan(ForegroundColorSpan(MUTED), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-        }
-
-        /**
-         * Formata uma linha de histórico / atividade com destaque de cores nos
-         * nomes de jogadores, rótulos de slots (Base, Perícia, Equipamento),
-         * valores de cartas, dados e desfechos (sucesso / falha / dano).
-         */
-        fun formatRichLine(rawLine: String): SpannableStringBuilder {
-            val ssb = SpannableStringBuilder()
-            val colonIdx = rawLine.indexOf(": ")
-
-            val content = if (colonIdx != -1) {
-                val playerName = rawLine.substring(0, colonIdx)
-                val nameStart = ssb.length
-                ssb.append(playerName)
-                ssb.setSpan(
-                    ForegroundColorSpan(ACCENT_BRIGHT),
-                    nameStart,
-                    ssb.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-                ssb.setSpan(
-                    StyleSpan(Typeface.BOLD),
-                    nameStart,
-                    ssb.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-                val colonStart = ssb.length
-                ssb.append(": ")
-                ssb.setSpan(
-                    ForegroundColorSpan(MUTED),
-                    colonStart,
-                    ssb.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-                rawLine.substring(colonIdx + 2)
-            } else {
-                rawLine
-            }
-
-            val bodyStart = ssb.length
-            ssb.append(content)
-
-            // 1. Notação inicial (ex: "{2d6+1} + {0d6} + {1d6}" ou "1[1d6] + 2[2d6]" ou "2d6+1"):
-            // Se houver grupos ou outcome na linha, a notação que precede fica em MUTED
-            val notationRegex = Regex("""^(\{[^}]+\}(\s*(\+|\bvs\b)\s*\{[^}]+\})*|\d*\[[^\]]+\](\s*(\+|\bvs\b)\s*\d*\[[^\]]+\])*|\b\d+d\w+[^\s]*)\s+""")
-            val notationMatch = notationRegex.find(content)
-            if (notationMatch != null) {
-                val notStart = bodyStart + notationMatch.range.first
-                val notEnd = bodyStart + notationMatch.range.last + 1
-                ssb.setSpan(
-                    ForegroundColorSpan(MUTED),
-                    notStart,
-                    notEnd,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                )
-            }
-
-            // 2. Destaca grupos de dados com cores de slots:
-            // Slot 1: base, ação, claros, grupo 1, regulares
-            val slot1Regex = Regex("""\b(base|ação|acao|claros|grupo 1|regulares)\b""", RegexOption.IGNORE_CASE)
-            for (m in slot1Regex.findAll(content)) {
-                val ms = bodyStart + m.range.first
-                val me = bodyStart + m.range.last + 1
-                ssb.setSpan(ForegroundColorSpan(SLOT_1_COLOR), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-            // Slot 2: perícia, desafio, escuros, fome/ira, grupo 2
-            val slot2Regex = Regex("""\b(perícia|pericia|desafio|escuros|fome/ira|grupo 2)\b""", RegexOption.IGNORE_CASE)
-            for (m in slot2Regex.findAll(content)) {
-                val ms = bodyStart + m.range.first
-                val me = bodyStart + m.range.last + 1
-                ssb.setSpan(ForegroundColorSpan(SLOT_2_COLOR), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-            // Slot 3: equipamento, ruína, grupo 3
-            val slot3Regex = Regex("""\b(equipamento|ruína|ruina|grupo 3)\b""", RegexOption.IGNORE_CASE)
-            for (m in slot3Regex.findAll(content)) {
-                val ms = bodyStart + m.range.first
-                val me = bodyStart + m.range.last + 1
-                ssb.setSpan(ForegroundColorSpan(SLOT_3_COLOR), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-            // 3. Destaca números nos colchetes [x, y, z]:
-            val bracketRegex = Regex("""\[([^\]]+)\]""")
-            for (m in bracketRegex.findAll(content)) {
-                val ms = bodyStart + m.range.first
-                val me = bodyStart + m.range.last + 1
-                ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-
-                val inner = m.groupValues[1]
-                val innerStart = bodyStart + m.range.first + 1
-                val numRegex = Regex("""\b(\d+)\b""")
-                for (nm in numRegex.findAll(inner)) {
-                    val nVal = nm.value.toIntOrNull() ?: continue
-                    val ns = innerStart + nm.range.first
-                    val ne = innerStart + nm.range.last + 1
-                    if (nVal == 10) {
-                        ssb.setSpan(ForegroundColorSpan(PARTIAL_TEXT), ns, ne, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    } else if (nVal >= 6) {
-                        ssb.setSpan(ForegroundColorSpan(ACCENT_BRIGHT), ns, ne, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    }
-                }
-            }
-
-            // 4. Destaca cartas vermelhas (♥ e ♦)
-            val cardRedRegex = Regex("""(10|[A2-9JQK])([♥♦])""")
-            for (m in cardRedRegex.findAll(content)) {
-                val ms = bodyStart + m.range.first
-                val me = bodyStart + m.range.last + 1
-                ssb.setSpan(ForegroundColorSpan(CARD_RED_COLOR), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                ssb.setSpan(StyleSpan(Typeface.BOLD), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-            // 5. Destaca outcome / resultado (após " — "):
-            val outcomeIdx = content.indexOf(" — ")
-            if (outcomeIdx != -1) {
-                var outcomeEndIdx = content.indexOf(" (Dificuldade:", outcomeIdx)
-                if (outcomeEndIdx == -1) outcomeEndIdx = content.indexOf(" (Limiar:", outcomeIdx)
-                if (outcomeEndIdx == -1) outcomeEndIdx = content.length
-                val outcomeText = content.substring(outcomeIdx + 3, outcomeEndIdx)
-                val outStart = bodyStart + outcomeIdx + 3
-                val outEnd = bodyStart + outcomeEndIdx
-
-                val isFailure = outcomeText.contains("falha", ignoreCase = true) ||
-                    outcomeText.contains("fracasso", ignoreCase = true) ||
-                    outcomeText.contains("bestial", ignoreCase = true) ||
-                    outcomeText.contains("dano", ignoreCase = true) ||
-                    outcomeText.contains("desgraça", ignoreCase = true) ||
-                    outcomeText.contains("desgraca", ignoreCase = true) ||
-                    outcomeText.contains("pânico", ignoreCase = true) ||
-                    outcomeText.contains("panico", ignoreCase = true) ||
-                    outcomeText.contains("descontrole", ignoreCase = true)
-
-                val isPartial = outcomeText.contains("parcial", ignoreCase = true) ||
-                    outcomeText.contains("manchado", ignoreCase = true) ||
-                    outcomeText.contains("vislumbre", ignoreCase = true) ||
-                    outcomeText.contains("complicada", ignoreCase = true)
-
-                val outColor = when {
-                    isFailure -> FAILURE_TEXT
-                    isPartial -> PARTIAL_TEXT
-                    else -> ACCENT_BRIGHT
-                }
-                ssb.setSpan(ForegroundColorSpan(outColor), outStart, outEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                ssb.setSpan(StyleSpan(Typeface.BOLD), outStart, outEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-            // 6. Destaca parâmetros testados (ex: "(Dificuldade: 1)"):
-            val testedRegex = Regex("""\(([^)]+)\)""")
-            for (m in testedRegex.findAll(content)) {
-                val ms = bodyStart + m.range.first
-                val me = bodyStart + m.range.last + 1
-                ssb.setSpan(ForegroundColorSpan(MUTED), ms, me, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-
-            return ssb
-        }
-
         private const val MAX_ACTIVITY_LINES = 3
         private const val HISTORY_CARD_LINES = 20
         private const val MAX_HISTORY = 40
@@ -2193,173 +1729,4 @@ class OverlayView(context: Context) {
         // Teto do stepper de cartas — o baralho padrao tem 52 (+2 curinga).
         private const val DECK_MAX_COUNT = 20
     }
-}
-
-/**
- * Desenha os icones geometricos dos dados (e carta de baralho) em Canvas/Vector.
- * Espelha as silhuetas SVG de DiceIcon.tsx da web.
- */
-class DieIconDrawable(
-    private val key: String,
-    private val strokeColor: Int,
-    private val density: Float,
-) : Drawable() {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = strokeColor
-        style = Paint.Style.STROKE
-        strokeWidth = 1.4f * density
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
-    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = strokeColor
-        style = Paint.Style.FILL
-    }
-    private val path = Path()
-
-    override fun draw(canvas: Canvas) {
-        val b = bounds
-        val w = b.width().toFloat()
-        val h = b.height().toFloat()
-        if (w <= 0 || h <= 0) return
-
-        val cx = b.left + w / 2f
-        val cy = b.top + h / 2f
-        val s = minOf(w, h) * 0.76f
-
-        path.reset()
-        when (key) {
-            "2" -> {
-                // Moeda: circulo com divisoria vertical
-                canvas.drawCircle(cx, cy, s * 0.44f, paint)
-                canvas.drawLine(cx, cy - s * 0.32f, cx, cy + s * 0.32f, paint)
-            }
-            "3" -> {
-                // Prisma: triangulo com aresta central
-                path.moveTo(cx, cy - s * 0.44f)
-                path.lineTo(cx + s * 0.44f, cy + s * 0.4f)
-                path.lineTo(cx - s * 0.44f, cy + s * 0.4f)
-                path.close()
-                canvas.drawPath(path, paint)
-                canvas.drawLine(cx, cy - s * 0.44f, cx, cy + s * 0.4f, paint)
-            }
-            "4" -> {
-                // Triangulo (d4)
-                path.moveTo(cx, cy - s * 0.44f)
-                path.lineTo(cx + s * 0.44f, cy + s * 0.4f)
-                path.lineTo(cx - s * 0.44f, cy + s * 0.4f)
-                path.close()
-                canvas.drawPath(path, paint)
-            }
-            "6" -> {
-                // Quadrado / Cubo (d6)
-                val r = s * 0.40f
-                val rect = RectF(cx - r, cy - r, cx + r, cy + r)
-                canvas.drawRoundRect(rect, 2.5f * density, 2.5f * density, paint)
-            }
-            "8" -> {
-                // Losango / Octaedro (d8)
-                path.moveTo(cx, cy - s * 0.46f)
-                path.lineTo(cx + s * 0.44f, cy)
-                path.lineTo(cx, cy + s * 0.46f)
-                path.lineTo(cx - s * 0.44f, cy)
-                path.close()
-                canvas.drawPath(path, paint)
-            }
-            "10" -> {
-                // Pipa / Kite (d10)
-                path.moveTo(cx, cy - s * 0.46f)
-                path.lineTo(cx + s * 0.42f, cy - s * 0.12f)
-                path.lineTo(cx, cy + s * 0.46f)
-                path.lineTo(cx - s * 0.42f, cy - s * 0.12f)
-                path.close()
-                canvas.drawPath(path, paint)
-            }
-            "12" -> {
-                // Pentagono / Dodecaedro (d12)
-                for (i in 0 until 5) {
-                    val angle = Math.toRadians((i * 72 - 90).toDouble())
-                    val px = cx + (s * 0.44f * Math.cos(angle)).toFloat()
-                    val py = cy + (s * 0.44f * Math.sin(angle)).toFloat()
-                    if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
-                }
-                path.close()
-                canvas.drawPath(path, paint)
-            }
-            "20" -> {
-                // Hexagono / Icosaedro (d20)
-                for (i in 0 until 6) {
-                    val angle = Math.toRadians((i * 60 - 30).toDouble())
-                    val px = cx + (s * 0.44f * Math.cos(angle)).toFloat()
-                    val py = cy + (s * 0.44f * Math.sin(angle)).toFloat()
-                    if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
-                }
-                path.close()
-                canvas.drawPath(path, paint)
-            }
-            "66" -> {
-                // Par de d6 (d66: dezena e unidade)
-                val rect1 = RectF(cx - s * 0.44f, cy - s * 0.42f, cx + s * 0.04f, cy + s * 0.06f)
-                val rect2 = RectF(cx - s * 0.04f, cy - s * 0.06f, cx + s * 0.44f, cy + s * 0.42f)
-                canvas.drawRoundRect(rect1, 2f * density, 2f * density, paint)
-                canvas.drawRoundRect(rect2, 2f * density, 2f * density, paint)
-            }
-            "100" -> {
-                // Par de percentis (d100)
-                val r1 = s * 0.26f
-                val ox1 = cx - s * 0.22f
-                val oy1 = cy - s * 0.10f
-                path.moveTo(ox1, oy1 - r1)
-                path.lineTo(ox1 + r1 * 0.8f, oy1)
-                path.lineTo(ox1, oy1 + r1)
-                path.lineTo(ox1 - r1 * 0.8f, oy1)
-                path.close()
-                val ox2 = cx + s * 0.22f
-                val oy2 = cy + s * 0.10f
-                path.moveTo(ox2, oy2 - r1)
-                path.lineTo(ox2 + r1 * 0.8f, oy2)
-                path.lineTo(ox2, oy2 + r1)
-                path.lineTo(ox2 - r1 * 0.8f, oy2)
-                path.close()
-                canvas.drawPath(path, paint)
-            }
-            "F" -> {
-                // Cubo com + e - (dF)
-                val r = s * 0.40f
-                val rect = RectF(cx - r, cy - r, cx + r, cy + r)
-                canvas.drawRoundRect(rect, 2.5f * density, 2.5f * density, paint)
-                canvas.drawLine(cx - s * 0.20f, cy - s * 0.12f, cx - s * 0.08f, cy - s * 0.12f, paint)
-                canvas.drawLine(cx - s * 0.14f, cy - s * 0.18f, cx - s * 0.14f, cy - s * 0.06f, paint)
-                canvas.drawLine(cx + s * 0.08f, cy + s * 0.12f, cx + s * 0.20f, cy + s * 0.12f, paint)
-            }
-            "C" -> {
-                // Carta de baralho
-                val rw = s * 0.36f
-                val rh = s * 0.46f
-                val rect = RectF(cx - rw, cy - rh, cx + rw, cy + rh)
-                canvas.drawRoundRect(rect, 2.5f * density, 2.5f * density, paint)
-                val cr = s * 0.13f
-                path.moveTo(cx, cy - cr)
-                path.lineTo(cx + cr * 0.8f, cy)
-                path.lineTo(cx, cy + cr)
-                path.lineTo(cx - cr * 0.8f, cy)
-                path.close()
-                canvas.drawPath(path, fillPaint)
-            }
-        }
-    }
-
-    override fun setAlpha(alpha: Int) {
-        paint.alpha = alpha
-        fillPaint.alpha = alpha
-    }
-
-    override fun setColorFilter(colorFilter: ColorFilter?) {
-        paint.colorFilter = colorFilter
-        fillPaint.colorFilter = colorFilter
-    }
-
-    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
-    override fun getIntrinsicWidth(): Int = (22 * density).toInt()
-    override fun getIntrinsicHeight(): Int = (22 * density).toInt()
 }

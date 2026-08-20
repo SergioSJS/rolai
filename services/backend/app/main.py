@@ -19,7 +19,7 @@ from app.limits import client_ip, within_limit
 from app.logs import configure_logging, log
 from app.profiles import purge_old_profiles
 from app.redis import create_redis
-from app.rooms import RoomStore
+from app.room_store import RoomStore
 from app.stats import StatsCollector
 
 RequestHandler = Callable[[Request], Awaitable[Response]]

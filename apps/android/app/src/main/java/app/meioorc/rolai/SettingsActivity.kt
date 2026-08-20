@@ -305,40 +305,25 @@ class SettingsActivity : Activity() {
      * deixar em branco, que era o que fazia o "Criar sala" parecer quebrado.
      */
     private fun renderRoomStatus() {
-        val codigo = editRoomCode.text.toString().trim()
-        val ligado = RolaiSettings.isOverlayEnabled(this)
-        val estado = OverlayService.roomState
-
-        // A palavra vem primeiro e em CAIXA ALTA: o que importa e saber, de
-        // relance, se esta ou nao na sala. Detalhe (codigo, quantos estao
-        // dentro) vem depois.
-        val (rotulo, cor) = when {
-            !ligado && codigo.isEmpty() -> "SEM SALA" to 0xFF3A424B.toInt()
-            !ligado -> "AGUARDANDO" to 0xFFE5C07B.toInt()
-            estado == OverlayService.Companion.RoomState.CONNECTED ->
-                "CONECTADO" to 0xFF25C48F.toInt()
-            estado == OverlayService.Companion.RoomState.CONNECTING ->
-                "CONECTANDO…" to 0xFFE5C07B.toInt()
-            estado == OverlayService.Companion.RoomState.ERROR ->
-                "SEM CONEXÃO" to 0xFFE06C75.toInt()
-            codigo.isEmpty() -> "SEM SALA" to 0xFF3A424B.toInt()
-            else -> "SEM CONEXÃO" to 0xFFE06C75.toInt()
+        // A decisao mora em RoomStatusChip (pura, testada); aqui fica so
+        // traduzir tom em cor e pintar.
+        val chip = RoomStatusChip.de(
+            overlayLigado = RolaiSettings.isOverlayEnabled(this),
+            codigo = editRoomCode.text.toString().trim(),
+            estado = OverlayService.roomState,
+            statusDoServico = OverlayService.roomStatus,
+        )
+        val cor = when (chip.tom) {
+            RoomStatusChip.Tom.NEUTRO -> 0xFF3A424B.toInt()
+            RoomStatusChip.Tom.ESPERA -> 0xFFE5C07B.toInt()
+            RoomStatusChip.Tom.CONECTADO -> 0xFF25C48F.toInt()
+            RoomStatusChip.Tom.PROBLEMA -> 0xFFE06C75.toInt()
         }
-
-        val detalhe = when {
-            !ligado && codigo.isNotEmpty() ->
-                "$codigo — ative o botão flutuante para conectar"
-            !ligado -> "o dado rola só neste aparelho"
-            codigo.isEmpty() -> "o dado rola só neste aparelho"
-            OverlayService.roomStatus.isNotEmpty() -> "$codigo · ${OverlayService.roomStatus}"
-            else -> codigo
-        }
-
-        txtRoomStatus.text = "$rotulo · $detalhe"
+        txtRoomStatus.text = "${chip.rotulo} · ${chip.detalhe}"
         txtRoomStatus.backgroundTintList = android.content.res.ColorStateList.valueOf(cor)
         // Texto escuro sobre chip claro; sobre o cinza de "sem sala", claro.
         txtRoomStatus.setTextColor(
-            if (rotulo == "SEM SALA") 0xFFE8ECF0.toInt() else 0xFF0D1013.toInt(),
+            if (chip.tom == RoomStatusChip.Tom.NEUTRO) 0xFFE8ECF0.toInt() else 0xFF0D1013.toInt(),
         )
     }
 
@@ -458,29 +443,22 @@ class SettingsActivity : Activity() {
     // ---------- preferencias ----------
 
     /**
-     * Posicao do sistema salvo no spinner principal.
+     * Posicao do sistema salvo no spinner principal, aplicando a troca de
+     * member ativo quando o salvo e um modo de familia.
      *
-     * Familia entra no spinner UMA vez, com o PRIMEIRO member como valor
-     * (`yze` pela "Year Zero", `infaernum` pelo "Infaernum") — entao um
-     * modo salvo que nao seja o primeiro ("yze_fbl", "infaernum_ideias")
-     * nao esta em `systemIds` e o `indexOf` devolvia -1. O fallback pro
-     * indice 0 e "Notação livre": abrir configuracoes escolhia sozinho
-     * "sem sistema", e o `saveFromViews` do proprio spinner GRAVAVA isso
-     * por cima — o modo do jogador sumia so de olhar a tela.
-     *
-     * Aqui o member salvo vira o valor ativo DA FAMILIA (`systemIds`/
-     * `systemInfos` sao mutaveis de proposito, e o spinner "Modo" ja le
-     * dali qual member marcar).
+     * A decisao mora em SystemSpinner (pura, testada); aqui fica so a
+     * mutacao das listas do spinner, que e o que exige a Activity.
      */
     private fun resolveSystemIndex(system: String): Int {
-        val direct = systemIds.indexOf(system)
-        if (direct >= 0) return direct
-        val family = ProfileFamilies.familyFor(system) ?: return 0
-        val position = familyAtPosition.entries.find { it.value.key == family.key }?.key ?: return 0
-        val info = systemInfoById[system] ?: return position
-        systemIds[position] = system
-        systemInfos[position] = info
-        return position
+        val r = SystemSpinner.resolve(system, systemIds, familyAtPosition, systemInfoById)
+        val member = r.activeMember
+        if (member != null) {
+            // `systemIds`/`systemInfos` sao mutaveis de proposito: o spinner
+            // "Modo" le dali qual member marcar.
+            systemIds[r.position] = member.system
+            systemInfos[r.position] = member
+        }
+        return r.position
     }
 
     private fun getActiveSlotStyle(): DiceSlotStyle = when (activeDiceSlot) {

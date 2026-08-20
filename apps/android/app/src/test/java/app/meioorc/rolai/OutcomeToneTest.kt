@@ -99,13 +99,13 @@ class OutcomeToneTest {
     @Test
     fun `tom lido do JSON da rolagem`() {
         val falha = """{"notation":"1d20","outcome":"critical_failure"}"""
-        assertEquals(OutcomeTone.FAILURE, OverlayService.toneOf(falha))
+        assertEquals(OutcomeTone.FAILURE, ResultFormat.toneOf(falha))
     }
 
     /** Rolagem livre nao tem profile, logo nao tem outcome: nada a afirmar. */
     @Test
     fun `rolagem sem outcome e JSON quebrado ficam neutros`() {
-        assertEquals(OutcomeTone.NEUTRAL, OverlayService.toneOf("""{"notation":"2d6"}"""))
-        assertEquals(OutcomeTone.NEUTRAL, OverlayService.toneOf("nao e json"))
+        assertEquals(OutcomeTone.NEUTRAL, ResultFormat.toneOf("""{"notation":"2d6"}"""))
+        assertEquals(OutcomeTone.NEUTRAL, ResultFormat.toneOf("nao e json"))
     }
 }

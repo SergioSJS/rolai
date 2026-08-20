@@ -1,0 +1,240 @@
+/* ---------- Compositor ---------- */
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.7rem;
+}
+
+/* Resumo do pool: o que vai ser rolado, com remocao explicita por tipo. */
+.pool-tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.1rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px dashed var(--panel-border);
+  border-radius: 8px;
+  background: var(--input-bg);
+}
+
+.pool-empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.pool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.2rem 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  border: 1px solid var(--accent);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pool-chip-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--accent-strong);
+}
+
+.pool-chip-mod {
+  border-style: dashed;
+  color: var(--accent-strong);
+}
+
+.pool-chip-remove {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.pool-chip-remove:hover:not(:disabled) {
+  background: var(--error);
+  color: #fff;
+}
+
+/* Os 12 slots (11 dados + Carta): 6 colunas ou 12 colunas no container largo */
+.composer-dice {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  /* folga pros badges "−" e contador, que sobram pra fora do slot */
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+}
+
+/* ~640px = 12 slots + gaps. Abaixo disso, 6+6. */
+@container panel (min-width: 640px) {
+  .composer-dice {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+}
+
+/* Slot = botao de adicionar + botao "−" sobreposto (HTML nao aceita
+   button dentro de button). flex: 1 faz a ultima linha preencher a largura
+   em vez de deixar buraco. */
+/* Slot = celula da grade. Sem flex: quem decide a largura e a grade, e e
+   isso que mantem as duas linhas iguais. */
+.die-slot {
+  position: relative;
+  min-width: 0;
+}
+
+.die-button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.5rem 0.2rem 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: var(--chip-bg);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.die-remove {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 1;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 1px solid var(--panel-border);
+  background: var(--bg-soft);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.die-remove:hover:not(:disabled) {
+  background: var(--error);
+  border-color: var(--error);
+  color: #fff;
+}
+
+.die-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+}
+
+.die-slot.active .die-icon {
+  color: var(--accent-strong);
+}
+
+.die-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--chip-bg);
+}
+
+.die-slot.active .die-button {
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.die-button-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 1.2rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.65rem;
+  line-height: 1.2rem;
+  text-align: center;
+}
+
+.composer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* nowrap: com wrap, o "Limpar" caia sozinho numa linha vazia */
+  flex-wrap: nowrap;
+}
+
+.composer-row .stepper {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.composer-clear {
+  margin-left: auto;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  flex: 0 0 auto;
+}
+
+.composer-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+
+.notation-input {
+  font-family: var(--mono);
+  width: 100%;
+}
+
+/* ---------- Stepper ---------- */
+
+.stepper {
+  display: flex;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+
+.stepper input {
+  width: 3.1rem;
+  text-align: center;
+}
+
+.stepper input::-webkit-outer-spin-button,
+.stepper input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+.stepper-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  padding: 0;
+  background: var(--chip-bg);
+  color: var(--text);
+}
+
+.stepper-button .glyph {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.stepper-button:hover:not(:disabled) {
+  background: var(--panel-border);
+}
+
+/* So em campo OPCIONAL (roll_under "valor testado", wod5 "dificuldade")
+   — voltar pra "sem valor" e diferente de "zero". Mudo/menor que +/-: e
+   uma acao secundaria, nao teria por que competir visualmente com elas. */
+.stepper-clear {
+  color: var(--muted);
+}
+
+.stepper-clear:disabled {
+  opacity: 0.4;
+}

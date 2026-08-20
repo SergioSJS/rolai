@@ -1,0 +1,381 @@
+/* ---------- Painéis ---------- */
+
+.panel {
+  position: relative;
+  /* Ancora das container queries dos filhos (ex.: a grade de dados decide
+     4 ou 8 colunas pela largura DO PAINEL, nao da janela). */
+  container: panel / inline-size;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-panel);
+}
+
+/* Fio de luz na borda de cima: separa o painel do fundo escuro sem
+   precisar clarear o fundo inteiro. */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.14),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.panel h2,
+.modal-header h2 {
+  /* Titulos ja eram caixa alta espacada — e exatamente onde capitulares
+     romanas funcionam sem custar legibilidade. */
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin: 0 0 0.7rem;
+}
+
+.panel h3 {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0.9rem 0 0.35rem;
+}
+
+/* ---------- Formulários ---------- */
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin-bottom: 0.7rem;
+}
+
+input,
+select {
+  font: inherit;
+  font-size: 0.95rem;
+  text-transform: none;
+  letter-spacing: normal;
+  border-radius: 7px;
+  border: 1px solid var(--panel-border);
+  padding: 0.5rem 0.65rem;
+  background: var(--input-bg);
+  color: var(--text);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.05s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.button-secondary {
+  background: var(--chip-bg);
+  color: var(--text);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: var(--panel-border);
+}
+
+.button-ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+/* Botao redondo que carrega so um glifo SVG (−, ×). O SVG centraliza
+   sozinho no viewBox — nada de baseline de fonte desalinhando o traco. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  line-height: 0;
+}
+
+.icon-button .glyph {
+  width: 62%;
+  height: 62%;
+  display: block;
+}
+
+.button-ghost:hover:not(:disabled) {
+  background: var(--chip-bg);
+  color: var(--text);
+}
+
+.roll-button {
+  width: 100%;
+  padding: 0.85rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  box-shadow:
+    0 0 22px var(--accent-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.roll-button:hover:not(:disabled) {
+  box-shadow:
+    0 0 30px var(--accent-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.roll-button:disabled {
+  background: var(--chip-bg);
+  color: var(--muted);
+  box-shadow: none;
+}
+
+/* Forçar (o push do Year Zero): rola na hora com o pool recalculado.
+   Botao secundario de proposito, com contorno em vez de preenchimento —
+   e a rolagem de excecao, o ROLAR acima continua sendo a principal. */
+.push-button {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.6rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent-strong);
+  box-shadow: none;
+}
+
+.push-button:hover:not(:disabled) {
+  background: var(--chip-bg);
+}
+
+.push-button:disabled {
+  border-color: var(--chip-bg);
+  color: var(--muted);
+}
+
+.push-hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: 0.4rem 0 0;
+}
+
+/* Modos de uma familia (Infaernum: acao/sim-ou-nao/ideias) como botoes
+   dentro da propria caixa de rolagem — trocar de modo nao deveria exigir
+   abrir Preferências. Substitui o <h2> do profile quando ha familia. */
+.family-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+}
+
+.family-tab {
+  flex: 1 1 auto;
+  padding: 0.4rem 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--muted);
+}
+
+.family-tab:hover:not(.is-active) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.family-tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ---------- Seletor de sistema ---------- */
+
+.system-select {
+  margin-bottom: 0.35rem;
+}
+
+.system-caption {
+  margin: 0 0 0.8rem;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+/* Linha que quebra, nao coluna: com 3 campos (wod5: regulares/fome/
+   dificuldade) cada um virava uma linha inteira so pra um stepper de
+   3.1rem — desperdicio de altura enorme. Campos curtos (numero, select)
+   ficam lado a lado; so quebra pra proxima linha quando nao cabe. */
+/* Os tres pools do Forbidden Lands (Base, Perícia, Equipamento) precisam
+   caber numa linha so — um por linha empurrava o botao Rolar pra fora da
+   vista. Flex em vez de grade justamente pela ULTIMA linha: quem sobra se
+   estica pra ocupar a largura toda (dois campos = metade cada), em vez de
+   ficar espremido numa coluna de tres com um buraco do lado. */
+.profile-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+/* .field tambem e usado sozinho (RoomPanel) — aqui dentro o gap do pai ja
+   espaca as linhas, e o item nao deve ser forcado a largura cheia. A base
+   pequena e o que deixa tres na mesma linha num painel estreito; o
+   flex-grow devolve o espaco sobrando pros que estao na linha. */
+.profile-inputs .field {
+  margin-bottom: 0;
+  flex: 1 1 5.5rem;
+  min-width: 0;
+}
+
+/* Stepper + "X" na mesma linha, com o stepper mandando na largura. O
+   rotulo fica em cima, sozinho — X colado no fim de um rotulo que quebra
+   em duas linhas parecia pertencer ao campo vizinho. */
+.field-control {
+  display: flex;
+  align-items: stretch;
+  gap: 0.2rem;
+  min-width: 0;
+  /* Empurra o controle pro rodape do campo: steppers da mesma linha ficam
+     alinhados mesmo quando um rotulo quebra em duas linhas e o outro nao. */
+  margin-top: auto;
+}
+
+.field-control .stepper {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field-clear {
+  flex: 0 0 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.field-clear .glyph {
+  width: 0.7rem;
+  height: 0.7rem;
+}
+
+.field-clear:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--chip-bg);
+}
+
+.field-clear:disabled {
+  opacity: 0.3;
+}
+
+/* Stepper compacto dentro do formulario de sistema: o input encolhe junto
+   com a coluna em vez de manter largura fixa (a largura fixa e o que
+   impedia tres deles na mesma linha). */
+.profile-inputs .stepper {
+  gap: 0.15rem;
+}
+
+.profile-inputs .stepper input {
+  width: auto;
+  flex: 1 1 2rem;
+  min-width: 1.8rem;
+  padding-left: 0.2rem;
+  padding-right: 0.2rem;
+  text-align: center;
+}
+
+.profile-inputs .stepper-button {
+  width: 1.6rem;
+  flex: 0 0 1.6rem;
+}
+
+/* Rotulo curto ("Base", "Perícia") cabe; "Sucesso garantido" quebra em
+   duas linhas em vez de esticar a coluna. */
+.profile-inputs .field > label {
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* Escrituracao do Forçar (os "1s travados" do Forbidden Lands): campos que
+   o botao preenche sozinho, dobrados pra nao competir com os pools. */
+.push-fields {
+  margin: 0.1rem 0 0.5rem;
+  border-top: 1px solid var(--chip-bg);
+  padding-top: 0.4rem;
+}
+
+.push-fields > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0;
+}
+
+.push-fields[open] > summary {
+  margin-bottom: 0.4rem;
+}

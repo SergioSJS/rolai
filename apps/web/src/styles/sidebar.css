@@ -1,0 +1,259 @@
+/* ---------- Roster no painel lateral ---------- */
+
+.roster-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.roster-card-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- Ajuda da notação ---------- */
+
+.notation-help {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.notation-intro,
+.notation-foot {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.notation-block h3 {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.notation-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Grid em vez de dl solto: o exemplo e a explicacao precisam alinhar em
+   coluna, senao a leitura vira caca ao par. */
+.notation-row {
+  display: grid;
+  grid-template-columns: minmax(11.5rem, auto) 1fr;
+  gap: 0.5rem 1.25rem;
+  align-items: baseline;
+  padding: 0.45rem 0.2rem;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.notation-row:last-child {
+  border-bottom: none;
+}
+
+.notation-row dt,
+.notation-row dd {
+  margin: 0;
+}
+
+.notation-row code {
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  background: var(--chip-bg);
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+}
+
+.notation-row dd {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 540px) {
+  .notation-row {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
+
+/* Link do APK dentro do "Sobre". */
+.apk-link {
+  display: inline-block;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.apk-link:hover {
+  background: var(--accent-strong);
+}
+
+/* Sobre: titulos de secao pra virar documento navegavel em vez de bloco
+   de paragrafos. */
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.about h3 {
+  margin: 1.3rem 0 0.45rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.about h3:first-of-type {
+  margin-top: 0.8rem;
+}
+
+.about p {
+  margin: 0 0 0.6rem;
+  line-height: 1.5;
+  font-size: 0.92rem;
+}
+
+.about-lead {
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+/* Contato, no fim do "Sobre": nome + pilulas (o mesmo tratamento visual do
+   PlayerTag na sala), em vez de uma linha de texto corrido com "·". */
+.about-contact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
+.about-contact-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.about-contact-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.about-contact-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  background: var(--accent-glow);
+  border: 1px solid transparent;
+  color: var(--accent-strong);
+  font-size: 0.84rem;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.about-contact-chip.is-static {
+  color: var(--muted);
+}
+
+a.about-contact-chip:hover {
+  border-color: var(--accent);
+}
+
+/* Notas de versao, no fim do "Sobre": versao mais nova primeiro, cada uma
+   com sua data e uma lista curta de notas — sem exigir rolar ate o fim do
+   histórico completo pra achar o que mudou por ultimo. */
+.changelog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0 0 0.5rem;
+}
+
+.changelog-entry {
+  padding: 0.65rem 0.85rem;
+  background: var(--chip-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+.changelog-entry dt {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.changelog-date {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.changelog-entry dd {
+  margin: 0.35rem 0 0;
+}
+
+.changelog-entry ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+/* Agradecimentos e creditos de recursos abertos */
+.about-credits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+}
+
+.about-credit-item {
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--muted);
+  padding: 0.65rem 0.85rem;
+  background: var(--chip-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+.about-credit-item strong {
+  color: var(--text);
+}
+
+.about-credit-item a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Dado descartado pelo keep/drop: aparece, mas nao compete com o que conta. */
+.die-chip.is-dropped {
+  opacity: 0.38;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}

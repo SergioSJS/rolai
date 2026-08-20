@@ -100,7 +100,16 @@ recebe o snapshot atual, não só eventos futuros.
   WebView em background fica sujeita a throttling de Doze/App Standby.
 - O motor de regras (parser + profiles) roda numa WebView headless mantida
   "morna" pelo Service — sem canvas, sem WebGL, só JS puro computando.
-- Nenhuma lógica de regras é duplicada em Kotlin.
+- Nenhuma lógica de regras é duplicada em Kotlin. Desde 2026-08-20 a
+  APRESENTAÇÃO também não: rótulo de outcome, tom e famílias de sistema
+  saem gerados de `apps/web/src` para `OutcomeCatalog.kt` no mesmo
+  `build:headless` do motor.
+- A leitura do resultado (JSON -> texto -> spans coloridos) mora fora da
+  view, em três arquivos puros: `ResultFormat.kt` (texto), `RichTextPlan.kt`
+  (o que pintar, como dado) e `ResultSpans.kt` (aplica no
+  `SpannableStringBuilder`). O corte existe porque em teste JVM o
+  `android.jar` é stub — span cru dentro da `OverlayView` só podia ser
+  conferido olhando o celular.
 - **Palco de dados 3D**: uma segunda janela de overlay com uma WebView no
   modo stream do `apps/web`. O Service **empurra** cada rolagem por
   `window.rolaiStream.play(resultado, style)` — inclusive as que chegam da
@@ -114,3 +123,24 @@ recebe o snapshot atual, não só eventos futuros.
   ninguém pra empurrar.
 
 Ver `specs/04-android-overlay.md` para o detalhamento de implementação.
+
+## Onde cada coisa mora (pós-fatiamento de 2026-08-20)
+
+Três arquivos tinham passado de mil linhas com mais de um papel dentro.
+O corte foi por responsabilidade, sem mudar comportamento:
+
+| Antes | Agora |
+| --- | --- |
+| `OverlayView.kt` (2365) | + `OverlayPalette.kt`, `RichTextPlan.kt`, `ResultSpans.kt`, `DieIconDrawable.kt` |
+| `OverlayService.kt` (1598) | + `ResultFormat.kt` (o companion de formatação inteiro) |
+| `services/backend/app/rooms.py` (790) | `room_store.py` (Redis), `room_deps.py`, `room_export.py`, `room_ws.py` (o relay), `rooms.py` (REST + router) |
+| `apps/web/src/styles.css` (2856) | `src/styles/*.css`, um por superfície, importados na ordem original |
+| `apps/web/src/App.tsx` (854) | + `room/useRoomSession.ts` (cliente WS, roster, echo, `?room=`) |
+
+Duas regras que valem pra qualquer fatia nova aqui:
+
+- **O que é decisão pura sai da camada de UI.** É o que torna testável o
+  que antes só dava pra conferir no aparelho ou no navegador.
+- **Ordem de import é comportamento**, não arrumação: em `styles.css` a
+  cascata depende dela (mobile e stream sobrescrevem), e a conferência do
+  corte foi o CSS compilado sair byte a byte igual.

@@ -1,0 +1,147 @@
+/* ---------- Palco (overlay acima de TODA a UI) ---------- */
+
+/* O canvas fica fixed no viewport inteiro, ACIMA dos paineis (menu z5,
+   modal z20, palco z60, resultado z61). pointer-events: none — a UI
+   continua clicavel por baixo. Fora da rolagem o canvas e transparente:
+   some de vista sem atrapalhar. */
+.stage {
+  position: fixed;
+  inset: 0;
+  /* Faixa reservada embaixo: a mesa termina onde a placa de resultado
+     comeca, senao o dado para em cima do numero e ninguem le. A dice-box
+     monta o mundo fisico a partir DESTE elemento, entao encurtar aqui
+     encurta a mesa de verdade (ver stage/floor.ts). O valor e sobrescrito
+     em runtime pela medida da placa; o `min()` mantem o teto valendo ao
+     girar o aparelho. */
+  bottom: var(--stage-bottom, min(210px, 45vh));
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+/* Cartas animadas: MESMA posicao/camada do .stage do dado (solta por cima
+   de tudo, sem caixa) — so que sem fisica, entao nao precisa de canvas
+   proprio, so o CardStack direto. A caixa de resultado (.result-display)
+   mostra so o texto; a animacao vive aqui, z-index 59 pra ficar por baixo do dado (60). */
+.card-stage {
+  position: fixed;
+  inset: 0;
+  bottom: var(--stage-bottom, min(210px, 45vh));
+  z-index: 59;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Palco 3D (CardStage3D): preenche a area toda — o canvas do three.js
+   precisa de dimensao propria, nao de flex centralizando um filho do
+   tamanho do conteudo. */
+.card-stage-3d {
+  width: 100%;
+  height: 100%;
+}
+
+.card-stage-3d canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Escada de cartas: em vez de lado a lado (que espremia tudo numa fileira
+   minuscula com varias cartas numa tela estreita — ver historico do PR),
+   cada carta EMPILHA sobre a anterior. O indice (canto superior esquerdo,
+   onde rank+naipe ficam) da carta de baixo nunca fica tapado pela de cima.
+   margin-left e transform de cada item vem INLINE (CardStack.tsx) — a
+   sobreposicao e CALCULADA a partir da largura real da carta e da
+   quantidade puxada, nao um valor CSS fixo (fixo cabia bem com poucas
+   cartas mas so cortava na tela com muitas). */
+.card-stack {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+.card-stack-item {
+  flex-shrink: 0;
+}
+
+/* Barreiras: uma por borda. Ficam a 3.5% da beirada do palco, que e onde a
+   parede da fisica esta de verdade (0.93 do meio pra borda) — a posicao vem
+   do JS, nao daqui. Sem impacto o elemento nao desenha nada: no OBS com
+   fundo alpha nao pode aparecer faixa nenhuma com o palco parado. */
+.stage-barrier {
+  position: absolute;
+  pointer-events: none;
+}
+
+.stage-barrier.is-top,
+.stage-barrier.is-bottom {
+  left: 0;
+  right: 0;
+  height: 0;
+}
+
+.stage-barrier.is-left,
+.stage-barrier.is-right {
+  top: 0;
+  bottom: 0;
+  width: 0;
+}
+
+/* Clarao de um impacto: nasce na posicao do dado que bateu, ao longo da
+   borda. Nas verticais e o mesmo traco girado 90 graus (o JS poe a rotacao
+   nos keyframes, senao a animacao sobrescreveria o transform daqui). */
+.stage-barrier-hit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: min(38vmin, 320px);
+  height: 3px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(120, 240, 200, 0.75) 35%,
+    rgba(190, 255, 235, 0.95) 50%,
+    rgba(120, 240, 200, 0.75) 65%,
+    transparent
+  );
+  box-shadow:
+    0 0 10px rgba(80, 230, 190, 0.65),
+    0 0 26px rgba(80, 230, 190, 0.35);
+  opacity: 0;
+}
+
+/* Quem pediu menos animacao nao quer um flash a cada dado. */
+@media (prefers-reduced-motion: reduce) {
+  .stage-barrier-hit {
+    display: none;
+  }
+}
+
+.stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Resultado por cima do canvas: base central da tela. */
+.stage-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 1rem 1rem 2rem;
+  pointer-events: none;
+}

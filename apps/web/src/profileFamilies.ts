@@ -19,6 +19,12 @@ export interface ProfileFamily {
   key: string;
   label: string;
   members: ProfileFamilyMember[];
+  /**
+   * Nome enxuto pra onde o label inteiro nao cabe — hoje so o overlay do
+   * Android usa ("ROLAR YZ"), onde "Year Zero" com quatro modos ja empurrava
+   * a aba pra fora do painel de 300dp. Ausente = usa o proprio `label`.
+   */
+  shortLabel?: string;
 }
 
 export const PROFILE_FAMILIES: ProfileFamily[] = [
@@ -38,6 +44,7 @@ export const PROFILE_FAMILIES: ProfileFamily[] = [
   {
     key: "yze",
     label: "Year Zero",
+    shortLabel: "YZ",
     members: [
       { system: "yze", subLabel: "Genérico" },
       { system: "yze_fbl", subLabel: "Forbidden Lands" },

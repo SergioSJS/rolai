@@ -308,7 +308,7 @@ Pontos que distinguem este profile:
   Isso é calculado na condition via aritmética booleana
   (`(bool >= 2) * 2`).
 - **UI calcula o total localmente** (`wod5Successes` em `format.ts` e
-  `OverlayService.kt`): o motor não tem um campo "total geral com bônus
+  `ResultFormat.kt`): o motor não tem um campo "total geral com bônus
   de crítico" — isso é apresentação, como o tom de outcome.
 ## Invocação (camada de UI/atalho)
 

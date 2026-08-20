@@ -111,7 +111,7 @@ reconectando a cada ~2 min (chato) e cada reconexão comendo cota de
 **Heartbeat implementado** (app-level, não frame de protocolo — o Starlette
 não expõe ping/pong de baixo nível):
 
-- Backend (`rooms.py`): a cada `ws_heartbeat_seconds` (default 30, 0 desliga)
+- Backend (`room_ws.py`): a cada `ws_heartbeat_seconds` (default 30, 0 desliga)
   sem mensagem do cliente, envia `{"type":"ping"}`. O envio fica na mesma
   task do receive (via `asyncio.wait_for`), sem writer concorrente no socket.
 - Cliente web (`apps/web/src/room/client.ts`) e Android
@@ -179,7 +179,7 @@ válido é pré-requisito, não polimento.
 
 ## O que NÃO muda
 
-- Checagem de `Origin` no WS (`rooms.py`, close **4403**) — a CF repassa o
+- Checagem de `Origin` no WS (`room_ws.py`, close **4403**) — a CF repassa o
   header. `CORS_ORIGINS` continua valendo pro CORS **e** pro WS.
 - Trust model da rolagem: o backend não recalcula (`docs/architecture.md`).
 - Códigos de sala aleatórios, validação Pydantic, tetos de sala e de memória.
@@ -253,8 +253,8 @@ chegando a cada `ws_heartbeat_seconds` (30s por default).
 | Assunto | Onde |
 | --- | --- |
 | IP do cliente | `services/backend/app/limits.py` |
-| Heartbeat do WS | `services/backend/app/rooms.py` (`ws_heartbeat_seconds` em `config.py`), `apps/web/src/room/client.ts`, `apps/android/.../RoomClient.kt` |
-| Origin do WS, códigos 4403/4429 | `services/backend/app/rooms.py` |
+| Heartbeat do WS | `services/backend/app/room_ws.py` (`ws_heartbeat_seconds` em `config.py`), `apps/web/src/room/client.ts`, `apps/android/.../RoomClient.kt` |
+| Origin do WS, códigos 4403/4429 | `services/backend/app/room_ws.py` (`_admit`) |
 | Limites configuráveis | `services/backend/app/config.py`, `.env.example` |
 | Labels do Traefik | `infra/docker-compose.hostinger.yml` |
 | Cache e SPA fallback | `infra/nginx.conf` |

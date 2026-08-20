@@ -13,9 +13,11 @@ Todo bug caro desta sessão teve a mesma forma do "Armadilha recorrente" do
 
 - o bundle `assets/headless`/`assets/stage` existe no APK → não quer dizer
   que é a build de hoje;
-- `format.ts` ter o label do outcome → não quer dizer que
-  `OutcomeLabels.kt` também tem (são dois arquivos, cópia manual, o motor
-  não gera nenhum dos dois);
+- `format.ts` ter o label do outcome → não quer dizer que o APK tem. Não é
+  mais cópia manual (desde 2026-08-20 `OutcomeCatalog.kt` é GERADO por
+  `npm run build:headless`), mas gerado só vale depois de rodar: sem
+  regenerar, o Kotlin no disco continua com o catálogo da build passada. O
+  CI falha nesse caso — o aparelho, não;
 - `lastRollAction` estar setado → não quer dizer que reflete o que tá nos
   campos AGORA (é uma closure de valores capturados na última rolagem de
   verdade, não uma leitura fresca de `RolaiSettings`);
@@ -91,10 +93,13 @@ YAML.
    existe (`evaluateOutcomeRules`/`referencesAny`), não precisa de
    tratamento especial por profile. Campo com dado zero-válido (pool que
    pode chegar a `0d6`) leva `zero_dice_fallback`.
-2. **Web** — registrar o YAML em `apps/web/src/profiles.ts`; todo
-   `outcome`/`outcome_flags` novo precisa de entrada em
+2. **Web** — o YAML entra sozinho na lista (`apps/web/src/profiles.ts`
+   varre a pasta com `import.meta.glob`); só acrescente o id no array
+   `ORDER` se quiser escolher a posição dele no seletor, senão ele cai no
+   fim. Todo `outcome`/`outcome_flags` novo precisa de entrada em
    `OUTCOME_LABELS` **e** `OUTCOME_TONES` (`apps/web/src/format.ts`) — sem
-   isso a UI mostra o id cru (`FACANHA_X3`) em vez do texto. Se o sistema
+   isso a UI mostra o id cru (`FACANHA_X3`) em vez do texto, e o Android
+   também, porque o catálogo dele é gerado desses dois mapas. Se o sistema
    tem sub-modos (tipo Infaernum ou Year Zero), registrar a família em
    `apps/web/src/profileFamilies.ts` — a família vira UMA entrada em
    "Regras da mesa" e os modos aparecem no select "Modo" logo abaixo, na
@@ -141,22 +146,23 @@ YAML.
    npm run build:headless -w @rolai/web
    npm run build:stage    -w @rolai/web
    ```
-   O primeiro é o motor de cálculo que a `HeadlessRoller` usa; o segundo é
-   o palco 3D + `ResultDisplay`/`format.ts` que a `DiceStageWindow` mostra
-   por cima do overlay. São dois builds INDEPENDENTES — regenerar um e
+   O primeiro é o motor de cálculo que a `HeadlessRoller` usa — e, na mesma
+   passada, `systems.json` e `OutcomeCatalog.kt` (rótulos, tons e famílias
+   que a UI nativa lê). O segundo é o palco 3D + `ResultDisplay`/`format.ts`
+   que a `DiceStageWindow` mostra por cima do overlay. São dois builds
+   INDEPENDENTES — regenerar um e
    esquecer o outro é como não regenerar nenhum: metade da tela fica
    velha sem erro nenhum. Confirme com `stat` nos dois lados se tiver
    dúvida (`apps/android/app/src/main/assets/stage/index.html` mais novo
    que o `ResultDisplay.tsx` que você acabou de editar).
-4. **Android nativo** — isto NÃO vem de bundle, é código Kotlin duplicado à
-   mão e por isso esquecido com facilidade:
-   - `OutcomeLabels.kt` and `OutcomeTone.kt` — mesmos ids que você acabou de
-     adicionar em `format.ts`, cópia manual dos dois mapas (label E tom).
-   - `ProfileFamilies.kt` — mesma família que você registrou em
-     `profileFamilies.ts` do lado web. Web e Android têm **dois arquivos
-     separados** para a mesma família; um sem o outro deixa metade da UI
-     sem os modos. Família com nome longo leva `shortLabel` (Year Zero ->
-     "YZ"): é ele que vai pra aba e pro botão do overlay.
+4. **Android nativo** — label, tom e família **não são mais copiados à
+   mão**: `OutcomeCatalog.kt` sai do mesmo `build:headless` do passo 3, a
+   partir de `format.ts` e `profileFamilies.ts`. `OutcomeLabels.kt`,
+   `OutcomeTone.kt` e `ProfileFamilies.kt` viraram leitores desse catálogo
+   — não edite nenhum dos quatro. O que sobra de trabalho manual aqui:
+   - Família com nome longo leva `shortLabel` (Year Zero -> "YZ") — agora
+     declarado em `profileFamilies.ts` (web), de onde o catálogo o leva
+     pro Kotlin. É ele que vai pra aba e pro botão do overlay.
    - **O modo da família é escolhido em Preferências, nos dois lados.** Já
      foi fileira de botões dentro da caixa de rolagem (web e overlay); com
      os quatro modos do Year Zero a fileira comia a largura toda e ainda

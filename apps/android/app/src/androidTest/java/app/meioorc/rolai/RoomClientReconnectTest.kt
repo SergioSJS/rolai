@@ -37,7 +37,12 @@ class RoomClientReconnectTest {
 
     @After
     fun tearDown() {
-        server.shutdown()
+        // O shutdown do MockWebServer as vezes estoura "Gave up waiting for
+        // queue to shut down" — o cliente ainda esta em backoff tentando
+        // reconectar quando o servidor cai, e a fila dele nao drena a tempo.
+        // Isso e ruido de desmontagem: reprovava um teste que ja tinha
+        // passado, e o resultado do run virava loteria.
+        runCatching { server.shutdown() }
     }
 
     @Test
@@ -62,7 +67,12 @@ class RoomClientReconnectTest {
                 connected.countDown()
             }
 
-            override fun onRoll(player: String, resultJson: String, styleJson: String?) = Unit
+            override fun onRoll(
+                player: String,
+                resultJson: String,
+                styleJson: String?,
+                stylesJson: String?,
+            ) = Unit
             override fun onDeckDraw(player: String, cardsJson: String, remaining: Int) = Unit
             override fun onDeckShuffle(player: String) = Unit
             override fun onDeckConfig(
@@ -114,7 +124,12 @@ class RoomClientReconnectTest {
         val sawReconnecting = AtomicBoolean(false)
         val client = RoomClient(object : RoomClient.Listener {
             override fun onConnected() = Unit
-            override fun onRoll(player: String, resultJson: String, styleJson: String?) = Unit
+            override fun onRoll(
+                player: String,
+                resultJson: String,
+                styleJson: String?,
+                stylesJson: String?,
+            ) = Unit
             override fun onDeckDraw(player: String, cardsJson: String, remaining: Int) = Unit
             override fun onDeckShuffle(player: String) = Unit
             override fun onDeckConfig(

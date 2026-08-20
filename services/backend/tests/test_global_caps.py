@@ -13,7 +13,7 @@ from starlette.testclient import TestClient
 
 from app.db import Base, ProfileRow, make_session_factory, utcnow
 from app.profiles import purge_old_profiles
-from app.rooms import ACTIVE_ROOMS_KEY
+from app.room_store import ACTIVE_ROOMS_KEY
 
 
 async def _delete_key(redis_client: FakeRedis, key: str) -> None:

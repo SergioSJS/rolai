@@ -1,0 +1,150 @@
+/* Cinzel: capitulares romanas gravadas — a cara de coisa entalhada combina
+   com dado e mesa, e como so aparece em marca/titulos/numero grande nao
+   compete com a legibilidade do resto da interface.
+
+   AUTO-HOSPEDADA de proposito (public/fonts, copiada de @fontsource): o app
+   e PWA offline e o APK Android embarca o dist inteiro — buscar do CDN do
+   Google quebraria os dois. `swap`: o texto aparece na fonte do sistema
+   enquanto a fonte carrega, em vez de sumir. */
+@font-face {
+  font-family: "Cinzel";
+  src: url("/fonts/cinzel-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cinzel";
+  src: url("/fonts/cinzel-latin-600-normal.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cinzel";
+  src: url("/fonts/cinzel-latin-700-normal.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+/* Rolaí — design tokens + app shell. Temas via [data-theme] no <html>:
+   dark (default), light, table (feltro). O modo stream/OBS nao usa tema:
+   e uma URL propria (?stream=1) com fundo alpha ou chroma — ver o bloco
+   "Modo stream" mais abaixo e src/StreamApp.tsx.
+   Convencao de tokens inspirada em design systems semanticos (background /
+   panel / text / muted / accent) — sem framework. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0d1013;
+  --bg-soft: #13171c;
+  --panel: rgba(22, 27, 33, 0.92);
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --text: #e8ecf0;
+  --muted: #8b95a1;
+  --accent: #1d9e75;
+  --accent-strong: #25c48f;
+  --accent-glow: rgba(29, 158, 117, 0.35);
+  --warn: #e5c07b;
+  --error: #e06c75;
+  --chip-bg: rgba(255, 255, 255, 0.08);
+  --input-bg: rgba(0, 0, 0, 0.35);
+  --stage-bg: rgba(14, 38, 29, 0.45);
+  --shadow-panel: 0 6px 24px rgba(0, 0, 0, 0.35);
+  /* Caixa do resultado sobre o palco: e translucida, entao precisa de cor
+     PROPRIA por tema — herdar so o texto (var(--text)) deixava letra
+     escura sobre vidro escuro no tema claro, ilegivel. */
+  --result-bg: rgba(10, 13, 16, 0.62);
+  --result-border: rgba(255, 255, 255, 0.09);
+  --result-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  /* Sombra do texto do resultado: no escuro ela "entalha" o numero sobre o
+     palco; no claro, a mesma sombra preta por tras de texto colorido em
+     caixa clara so borra a letra. */
+  --result-text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+  --result-outcome-shadow: 0 0 26px var(--accent-glow), 0 2px 12px rgba(0, 0, 0, 0.55);
+  /* Quanto a arte da carta e escurecida (ver cardTexture.tsx). A arte e
+     branco quase puro: no tema escuro sem isso ela QUEIMA contra o fundo;
+     no claro, escurecer deixa a carta cinza suja. Um numero so, aqui, lido
+     pelo CSS e pelo canvas do palco 3D. */
+  --card-dim: 0.72;
+  --radius: 10px;
+  --font:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Só marca, títulos de seção e o número do resultado. O corpo da
+     interface fica na fonte do sistema: é o que se lê o dia inteiro. */
+  --font-display: "Cinzel", Georgia, serif;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #e7eae4;
+  --bg-soft: #f4f6f1;
+  --panel: rgba(255, 255, 255, 0.88);
+  --panel-border: rgba(23, 33, 28, 0.12);
+  --text: #182420;
+  --muted: #5a6a61;
+  --accent: #15775a;
+  --accent-strong: #0f8f68;
+  --accent-glow: rgba(21, 119, 90, 0.25);
+  --warn: #8a6d1f;
+  --error: #b03a46;
+  --chip-bg: rgba(23, 33, 28, 0.06);
+  --input-bg: rgba(255, 255, 255, 0.7);
+  --stage-bg: rgba(21, 119, 90, 0.08);
+  --shadow-panel: 0 4px 18px rgba(23, 33, 28, 0.12);
+  --result-bg: rgba(252, 253, 251, 0.86);
+  --result-border: rgba(23, 33, 28, 0.14);
+  --result-shadow: 0 10px 40px rgba(23, 33, 28, 0.18);
+  --result-text-shadow: none;
+  --result-outcome-shadow: 0 0 18px var(--accent-glow);
+  /* Carta no tema claro fica com a arte como ela e: fundo claro nao
+     estoura com branco, e escurecer so deixava a carta cinza. */
+  --card-dim: 1;
+}
+
+:root[data-theme="table"] {
+  --stage-bg: rgba(0, 0, 0, 0.28);
+  --panel: rgba(17, 22, 19, 0.9);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(29, 158, 117, 0.12) 0%, transparent 60%),
+    var(--bg);
+}
+
+:root[data-theme="light"] body {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(21, 119, 90, 0.08) 0%, transparent 60%),
+    var(--bg);
+}
+
+:root[data-theme="table"] body {
+  background: var(--bg) url("/texture-felt.png") repeat;
+  background-size: 512px;
+}
+
+/* Modo stream/OBS (?stream=1): nada de fundo alem do escolhido pela URL —
+   alpha real (transparent) ou chroma solido, aplicado inline pela StreamApp. */
+body.stream-mode {
+  background: transparent;
+}

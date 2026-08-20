@@ -12,7 +12,7 @@ from collections.abc import Callable
 from fastapi import APIRouter, HTTPException, Request
 
 from app.config import Settings
-from app.rooms import ACTIVE_ROOMS_KEY
+from app.room_store import ACTIVE_ROOMS_KEY
 
 router = APIRouter()
 

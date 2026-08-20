@@ -135,15 +135,30 @@ app/src/main/java/app/meioorc/rolai/
   TwaActivity.kt        TWA -> https://rolai.app
   OverlayService.kt     foreground service (specialUse) orquestrando tudo
   OverlayView.kt        bolha arrastável + painel (WindowManager)
+  OverlayPalette.kt     cores do overlay (tokens do styles.css da web)
+  DieIconDrawable.kt    silhuetas dos dados em Canvas (espelha DiceIcon.tsx)
   RoomClient.kt         WS da sala (OkHttp) + backoff de reconexão
   ReconnectBackoff.kt   backoff exponencial (puro, teste JVM)
   HeadlessRoller.kt     WebView headless <-> bridge RolaiBridge
   RolaiSettings.kt      SharedPreferences + validações puras
+
+  # leitura do resultado — tudo puro, coberto por teste JVM
+  ResultFormat.kt       RollResult JSON -> texto (org.json, sem Android)
+  RichTextPlan.kt       o que pintar, como dado (SpanTone/TextSpan)
+  ResultSpans.kt        aplica o plano num SpannableStringBuilder
+  OutcomeLabels.kt      label de outcome (lê o catálogo)
+  OutcomeTone.kt        tom de outcome (lê o catálogo)
+  ProfileFamilies.kt    famílias de sistema (lê o catálogo)
+  OutcomeCatalog.kt     GERADO (npm run build:headless) — não editar
 app/src/main/assets/headless/
   index.html            página mínima carregada pela WebView
   rolai-headless.js     GERADO (npm run build:headless) — não editar
   systems.json          GERADO — fonte do seletor de sistema
 ```
+
+Os três arquivos GERADOS saem do mesmo `npm run build:headless -w @rolai/web`,
+a partir de `apps/web/src` — nunca edite nenhum na mão. O CI roda o comando e
+falha se o resultado sair diferente do commitado.
 
 ## Chave de assinatura (keystore) — quando e por quê
 

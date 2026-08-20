@@ -265,6 +265,14 @@ class DiceStageWindow(private val context: Context) {
         )
     }
 
+    /**
+     * A WebView do palco, só para o teste instrumentado perguntar se a
+     * página rodou (StageRendersTest). Não use em produção: quem fala com o
+     * palco fala por [play], [playCard] e [clear].
+     */
+    @androidx.annotation.VisibleForTesting
+    fun webViewParaTeste(): android.webkit.WebView? = webView
+
     fun detach() {
         val view = container ?: return
         val web = webView

@@ -1,6 +1,6 @@
 {
   "name": "@rolai/web",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,9 @@
     "build:headless": "vite build --config vite.headless.config.ts && node scripts/install-headless.mjs",
     "test": "vitest run",
     "preview": "vite preview",
-    "build:stage": "vite build && node scripts/install-stage.mjs"
+    "build:stage": "vite build && node scripts/install-stage.mjs",
+    "coverage": "vitest run --coverage",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@3d-dice/dice-box-threejs": "^0.0.12",
@@ -22,12 +24,14 @@
   },
   "devDependencies": {
     "@fontsource/cinzel": "^5.3.0",
+    "@playwright/test": "^1.62.1",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.1.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@types/three": "^0.143.2",
     "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/coverage-v8": "^2.1.0",
     "jsdom": "^25.0.0",
     "typescript": "^5.6.0",
     "vite": "^5.4.0",

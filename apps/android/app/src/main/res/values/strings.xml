@@ -14,7 +14,16 @@
     <string name="join_room">Entrar</string>
     <string name="room_needs_overlay">ative o botão flutuante para conectar na sala</string>
     <string name="room_joining">conectando em %1$s…</string>
-    <string name="room_joining_weak">conectando em %1$s… (só funciona se a sala já existir: %2$s)</string>
+    <!--
+      Codigo abaixo do piso de entropia: da pra ENTRAR numa sala que ja
+      existe (o caso normal — codigo gerado pelo backend tem 8 caracteres),
+      so nao da pra CRIAR uma com ele. O texto antigo comecava pelo
+      problema ("so funciona se a sala ja existir: minimo de 16
+      caracteres") e era lido como recusa: com uma queda de conexao
+      acontecendo junto, a conclusao obvia era "nao conectou por causa
+      disso" — e as duas coisas nao tinham relacao nenhuma.
+    -->
+    <string name="room_joining_weak">conectando em %1$s… (se ela não existir, não dá pra criar: %2$s)</string>
     <string name="create_room_working">criando sala…</string>
     <string name="create_room_failed">nao deu pra criar a sala: %1$s</string>
     <string name="room_status_none">sem sala — o dado rola só neste aparelho</string>

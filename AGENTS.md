@@ -67,6 +67,16 @@ Todo PR deve rodar limpo: `npm test` (rules-engine e web), `pytest`
 (backend), `ruff check` e `mypy` (backend), `./gradlew testDebugUnitTest`
 (Android, se o módulo for tocado).
 
+Cobertura roda LOCAL, nunca no CI (`npm run coverage -w @rolai/web`,
+`pytest --cov=app`, `./gradlew coverage`): serve pra escolher onde investir
+teste antes de subir versão, não pra reprovar PR por decimal.
+
+Antes de SUBIR VERSÃO, a suíte verde não basta: rode
+`docs/manual-test-checklist.md`. Ele cobre de propósito só o que nenhuma
+suíte alcança (som, palco 3D, sala com duas pontas, pixel do overlay) e
+começa preparando o ambiente — três armadilhas de ambiente já se
+disfarçaram de bug de produto numa sessão só.
+
 Os testes instrumentados do Android NÃO rodam no CI (emulador em Actions é
 lento e instável) — rode `apps/android/scripts/run-instrumented.sh` num
 aparelho antes de gerar release. Eles cobrem justamente o que teste JVM não
@@ -153,9 +163,16 @@ defasado em silêncio: a web mostra o comportamento novo e o APK segue com
 o motor antigo, sem erro nenhum.
 
 ```bash
-npm run build:headless -w @rolai/web   # motor de regras (rolagem)
+npm run build:headless -w @rolai/web   # motor de regras + systems.json + OutcomeCatalog.kt
 npm run build:stage    -w @rolai/web   # palco 3D offline
 ```
+
+O `build:headless` gera TRÊS artefatos versionados: o bundle do motor, o
+`systems.json` da tela nativa e o `OutcomeCatalog.kt` (rótulos de outcome,
+tons e famílias, vindos de `format.ts`/`profileFamilies.ts` — antes copiados
+à mão em Kotlin). O CI roda o mesmo comando e falha se o commitado sair
+diferente, então esquecer de regenerar vira build vermelho em vez de rótulo
+velho no APK.
 
 Aconteceu com o `dropped` do keep/drop: corrigido no engine, verde nos
 testes web, e `1d20dis` continuava errado no celular.
@@ -174,6 +191,12 @@ aparecer (a tela de Preferências dos DOIS lados — desde 2026-08-19 o modo
 não fica mais como abas dentro da caixa de rolagem), e como testar
 o `lastRollAction` do overlay sem reintroduzir o mesmo bug de duas formas
 opostas.
+
+Uma parte do checklist encolheu em 2026-08-20: label de outcome, tom e
+família saem GERADOS pro Kotlin (`OutcomeCatalog.kt`), então "duplicar em
+web E Android" virou "editar em `format.ts`/`profileFamilies.ts` e rodar
+`build:headless`". Profile novo também não precisa mais ser registrado em
+`profiles.ts` — a lista varre a pasta.
 
 ## Armadilha recorrente deste projeto
 

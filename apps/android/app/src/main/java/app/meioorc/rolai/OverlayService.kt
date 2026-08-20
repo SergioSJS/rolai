@@ -19,6 +19,15 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import app.meioorc.rolai.ResultFormat.cardCountOf
+import app.meioorc.rolai.ResultFormat.diceCountOf
+import app.meioorc.rolai.ResultFormat.formatCards
+import app.meioorc.rolai.ResultFormat.formatDeckConfigChange
+import app.meioorc.rolai.ResultFormat.formatDeckDrawAction
+import app.meioorc.rolai.ResultFormat.formatResult
+import app.meioorc.rolai.ResultFormat.mergePushBookkeeping
+import app.meioorc.rolai.ResultFormat.sameInputs
+import app.meioorc.rolai.ResultFormat.toneOf
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -55,7 +64,7 @@ class OverlayService : Service() {
      * HeadlessRoller e recriada a cada Service, entao quem persiste o
      * `DeckState` entre chamadas e este campo, salvo em SharedPreferences a
      * cada puxada/reembaralhada/config (ver KEY_DECK_STATE) pra sobreviver a
-     * um restart do processo, igual lastRollAction/KEY_LAST_ROLL.
+     * um restart do processo, igual lastRoll/KEY_LAST_ROLL.
      */
     private var deckStateJson: String? = null
 
@@ -72,10 +81,10 @@ class OverlayService : Service() {
     private var lastStageUrl: String? = null
     private var lastHandshakeUrl: String? = null
 
-    /** Acao da mini-bolha de rolagem do fan: repete a ultima rolagem por
-     *  notacao; null = ainda nao rolou (ou a config mudou) = rola a
-     *  rolagem rapida configurada. */
-    private var lastRollAction: (() -> Unit)? = null
+    /** O que a mini-bolha do fan repete; null = ainda nao rolou (ou a
+     *  config mudou) = dispara a rolagem rapida configurada. Descricao, nao
+     *  closure — ver LastRoll pro motivo. */
+    private var lastRoll: LastRoll.Action? = null
 
     /**
      * Ultima rolagem PROPRIA (nao o eco da sala) — base do Forçar do Year
@@ -178,7 +187,7 @@ class OverlayService : Service() {
             }
         }
         overlay.onRollClicked = ::rollNow
-        overlay.onQuickRoll = { (lastRollAction ?: ::rollNow).invoke() }
+        overlay.onQuickRoll = { lastRoll?.let(::repetir) ?: rollNow() }
         overlay.onDrawCard = { count -> drawCard(count) }
         overlay.onReshuffleDeck = ::reshuffleDeck
         overlay.onRollNotation = { notation -> rollNotation(notation) }
@@ -203,11 +212,7 @@ class OverlayService : Service() {
             // composer de propósito continua funcionando: isso passa por
             // rollNotation(), nao por aqui.
             if (RolaiSettings.load(this).system.isEmpty()) {
-                lastRollAction = { headlessRoller.roll(notation) }
-                getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-                    .edit()
-                    .putString(KEY_LAST_ROLL, notation)
-                    .apply()
+                setLastRoll(LastRoll.Action.Notation(notation))
             }
             overlay.setQuickNotation(notation)
         }
@@ -217,7 +222,7 @@ class OverlayService : Service() {
         // START_STICKY recria o service do zero quando o sistema mata o
         // processo — sem persistir, a mini-bolha "esquecia" a ultima rolagem
         // e voltava pra configurada. Sobrevive a restart.
-        loadLastRoll()?.let { saved -> lastRollAction = { headlessRoller.roll(saved) } }
+        loadLastRoll()?.let { saved -> lastRoll = LastRoll.Action.Notation(saved) }
         overlay.onOpenApp = { launchFromOverlay(TwaActivity.intentFor(this)) }
         overlay.onOpenSettings = { launchFromOverlay(Intent(this, SettingsActivity::class.java)) }
         // Acoes de sala do painel do overlay. Entrar/criar exigem digitar
@@ -427,11 +432,7 @@ class OverlayService : Service() {
             // Mudou a rolagem configurada: a "ultima rolagem" da mini-bolha
             // deixa de fazer sentido — ela volta a rolar a configurada.
             lastQuickKey = quickKey
-            lastRollAction = null
-            getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .remove(KEY_LAST_ROLL)
-                .apply()
+            setLastRoll(null)
         }
 
         val oldJokers = deckIncludeJokers
@@ -551,6 +552,9 @@ class OverlayService : Service() {
 
         override fun onDeckDraw(player: String, cardsJson: String, remaining: Int) {
             overlay.addActivityLine("$player: ${formatDeckDrawAction(cardsJson)}")
+            // Carta de outro jogador tambem soa — o barulho e o aviso de que
+            // aconteceu algo na mesa, igual a rolagem dos outros.
+            diceSounds?.card(cardCountOf(cardsJson))
             // Mesmo empurrao direto do onRoll acima — o palco anima sem
             // depender de nenhuma WebView espectadora.
             diceStage.playCard(cardsJson)
@@ -617,11 +621,7 @@ class OverlayService : Service() {
         if (trimmed.isEmpty()) return
 
         headlessRoller.roll(trimmed)
-        lastRollAction = { rollNotation(notation) }
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_LAST_ROLL, notation)
-            .apply()
+        setLastRoll(LastRoll.Action.Notation(trimmed))
     }
 
     /** Ultima rolagem por notacao, ou null se nunca rolou / config mudou. */
@@ -632,7 +632,33 @@ class OverlayService : Service() {
 
     /** Assinatura da rolagem configurada — pra detectar mudanca no reload. */
     private fun quickKeyOf(settings: RolaiSettings): String =
-        listOf(settings.system, settings.notation, settings.inputsJson).joinToString("|")
+        LastRoll.quickKey(settings.system, settings.notation, settings.inputsJson)
+
+    /**
+     * Registra (ou apaga, com null) o que a mini-bolha repete, mantendo a
+     * persistencia em sincronia. Era esta dupla — campo + KEY_LAST_ROLL —
+     * que vivia repetida em dez lugares, cada um lembrando de gravar ou
+     * remover por conta propria.
+     */
+    private fun setLastRoll(action: LastRoll.Action?) {
+        lastRoll = action
+        val prefs = getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE).edit()
+        val persistivel = LastRoll.persisted(action)
+        if (persistivel != null) prefs.putString(KEY_LAST_ROLL, persistivel) else prefs.remove(KEY_LAST_ROLL)
+        prefs.apply()
+    }
+
+    /** Traduz a descricao em chamada do motor. Unico lugar que sabe disso. */
+    private fun repetir(action: LastRoll.Action) {
+        when (action) {
+            is LastRoll.Action.Notation -> rollNotation(action.notation)
+            is LastRoll.Action.Profile ->
+                headlessRoller.rollWithProfile(action.system, action.inputsJson)
+            is LastRoll.Action.Overlay ->
+                headlessRoller.rollOverlay(action.system, action.notation, action.inputsJson)
+            is LastRoll.Action.DeckDraw -> drawCard(action.count)
+        }
+    }
 
     /** O campo de notacao do painel precisa de teclado: sem NOT_FOCUSABLE a
      *  janela pode ganhar foco, e NOT_TOUCH_MODAL devolve os toques fora
@@ -759,11 +785,7 @@ class OverlayService : Service() {
     private fun selectFamilyMember(system: String) {
         val settings = RolaiSettings.load(this)
         RolaiSettings.save(this, settings.copy(system = system, inputsJson = "{}"))
-        lastRollAction = null
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
+        setLastRoll(null)
         val info = systems[system]
         overlay.openComposer(info, ProfileForm.fromJson("{}"))
         updatePushAvailability()
@@ -776,13 +798,13 @@ class OverlayService : Service() {
      * salvam do mesmo jeito que cada toque na tela de configuracoes salva.
      * Sem isto, digitar um valor novo e minimizar nao mudava nada: o campo
      * ficava certo na TELA, mas o proximo "rolar" de fora (mini-bolha do
-     * fan) repetia o `lastRollAction` de uma rolagem anterior — com o valor
+     * fan) repetia o `lastRoll` de uma rolagem anterior — com o valor
      * ANTIGO. Vale pra qualquer sistema, nao so pro roll_under.
      *
-     * SO invalida o `lastRollAction` quando o campo (ou, no roll_under, a
+     * SO invalida o `lastRoll` quando o campo (ou, no roll_under, a
      * notacao do composer) de fato MUDOU desde o ultimo valor REALMENTE
      * rolado. Sem essa comparacao, fechar o painel DEPOIS de rolar (o fluxo
-     * normal: abre, rola, minimiza) tambem zerava o `lastRollAction` que o
+     * normal: abre, rola, minimiza) tambem zerava o `lastRoll` que o
      * proprio rollWithInputs/rollOverlayNow tinha acabado de setar certinho
      * — o botao de "repetir" voltava a abrir o formulario sempre, o MESMO
      * bug que ja tinha sido corrigido antes.
@@ -794,15 +816,9 @@ class OverlayService : Service() {
         // tela) — sem repor os salvos, fechar o painel depois de um Forçar
         // parecia edicao e derrubava o "repetir".
         val merged = mergePushBookkeeping(inputsJson, settings.inputsJson)
-        val inputsChanged = !sameInputs(merged, settings.inputsJson)
-        val notationChanged = notation != null && notation != lastOverlayNotation
-        if (!inputsChanged && !notationChanged) return
+        if (!LastRoll.invalidadaPorEdicao(merged, settings.inputsJson, notation, lastOverlayNotation)) return
         RolaiSettings.save(this, settings.copy(inputsJson = merged))
-        lastRollAction = null
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
+        setLastRoll(null)
     }
 
     /**
@@ -863,11 +879,7 @@ class OverlayService : Service() {
         RolaiSettings.save(this, settings.copy(inputsJson = inputsJson))
         overlay.updateSystemInputs(ProfileForm.fromJson(inputsJson))
         val system = settings.system
-        lastRollAction = { headlessRoller.rollWithProfile(system, inputsJson) }
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
+        setLastRoll(LastRoll.Action.Profile(system, inputsJson))
     }
 
     /**
@@ -893,11 +905,7 @@ class OverlayService : Service() {
         // sobre rolagem de profile: sempre cai no fallback rollNow(), que
         // pra sistema com input REABRE o formulario em vez de repetir —
         // parecia que o botao de rolar chamava configuracao.
-        lastRollAction = { headlessRoller.rollWithProfile(settings.system, inputsJson) }
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
+        setLastRoll(LastRoll.Action.Profile(settings.system, inputsJson))
     }
 
     /**
@@ -911,17 +919,12 @@ class OverlayService : Service() {
         if (settings.system.isEmpty()) return
         RolaiSettings.save(this, settings.copy(inputsJson = inputsJson))
         headlessRoller.rollOverlay(settings.system, notation, inputsJson)
-        lastRollAction = { headlessRoller.rollOverlay(settings.system, notation, inputsJson) }
+        // Overlay nao persiste (LastRoll.persisted): KEY_LAST_ROLL so sabe
+        // repetir por headlessRoller.roll(notation) CRU, sem avaliar as
+        // outcome_rules — repetir um roll_under assim devolveria numero sem
+        // desfecho, parecendo certo.
+        setLastRoll(LastRoll.Action.Overlay(settings.system, notation, inputsJson))
         lastOverlayNotation = notation
-        // NAO grava em KEY_LAST_ROLL: aquele campo alimenta loadLastRoll(),
-        // que so sabe repetir via headlessRoller.roll(notation) CRU — sem
-        // avaliar outcome_rules do overlay. Depois de matar o processo, e
-        // melhor cair no fallback de rollNow() (reabre o composer) do que
-        // repetir a notacao ignorando a regra "<= valor testado".
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
     }
 
     /**
@@ -989,13 +992,17 @@ class OverlayService : Service() {
         val remaining = payload.optInt("remaining", deck.optJSONArray("drawPile")?.length() ?: 0)
         overlay.setDeckRemaining(remaining)
         val cards = payload.optJSONArray("cards") ?: return
+        // Carta puxada aqui: som nativo, igual ao do dado. O palco vai mudo
+        // (`&sound=0`) pra nao pedir foco de audio, entao sem isto a puxada
+        // era completamente silenciosa no aparelho.
+        diceSounds?.card(cards.length())
         overlay.showResult(formatCards(cards))
         // Mini-bolha "rolar" repete ISTO agora, nao a ultima rolagem de dado
         // — mesma logica de rollNotation/rollWithInputs, so que pra carta.
         // Sem KEY_LAST_ROLL: aquele campo so sabe repetir via
         // headlessRoller.roll(notation) cru, formato que nao serve aqui.
         val count = cards.length()
-        lastRollAction = { drawCard(count) }
+        setLastRoll(LastRoll.Action.DeckDraw(count))
         val timestamp = java.time.Instant.now().toString()
         val entregue = roomState == RoomState.CONNECTED &&
             roomClient?.sendDeckDraw(cards.toString(), remaining, timestamp) == true
@@ -1094,505 +1101,5 @@ class OverlayService : Service() {
         @Volatile
         var roomState: RoomState = RoomState.NONE
             private set
-
-        /**
-         * Formata um RollResult JSON (docs/roll-notation.md) como texto
-         * curto pro overlay: "2d6 [3, 4] = 7" / "2d6+1 [6, 6] = 13 — strong_hit".
-         * Se o grupo nao tem `total` (multi-dado sem operador, ver
-         * docs/roll-notation.md), soma os rolls na hora de EXIBIR — nao e
-         * regra de negocio, e apresentacao.
-         */
-        /**
-         * Tom do resultado pro overlay pintar falha de vermelho. JSON que nao
-         * parseia, ou rolagem livre (sem profile, logo sem outcome), vale
-         * neutro — nao ha o que afirmar.
-         */
-        /**
-         * Quantos dados cairam, so pra dosar o som (DiceSounds.impactDelays).
-         * JSON quebrado vira 1: melhor um clique do que silencio.
-         */
-        fun diceCountOf(resultJson: String): Int = runCatching {
-            val groups = JSONObject(resultJson).optJSONObject("groups") ?: return@runCatching 1
-            var total = 0
-            for (key in groups.keys()) {
-                total += groups.optJSONObject(key)?.optJSONArray("rolls")?.length() ?: 0
-            }
-            total.coerceAtLeast(1)
-        }.getOrDefault(1)
-
-        // Simbolo do naipe (mesmo mapa de apps/web/src/cardFormat.ts —
-        // SUIT_SYMBOL) pro texto nativo do overlay.
-        private val SUIT_SYMBOL = mapOf(
-            "hearts" to "♥",
-            "diamonds" to "♦",
-            "clubs" to "♣",
-            "spades" to "♠",
-        )
-
-        private val CARD_SUITS = arrayOf("♠", "♥", "♦", "♣")
-        private val CARD_RANKS = arrayOf("A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K")
-
-        /** Mapeia 1..13 para A..K com naipe determinístico igual ao web `cardFromRollValue`. */
-        fun cardFromRollValue(value: Int, cardIndex: Int = 0): String {
-            val rankIdx = (value.coerceIn(1, 13)) - 1
-            val rank = CARD_RANKS.getOrElse(rankIdx) { "10" }
-            val suit = CARD_SUITS[(value + cardIndex * 2) % CARD_SUITS.size]
-            return "$rank$suit"
-        }
-
-        /** "10♥, K♠" / "Curinga" — mesma leitura do cardLabel() da web. */
-        fun formatCards(cards: JSONArray): String =
-            (0 until cards.length()).joinToString(", ") { i ->
-                val card = cards.getJSONObject(i)
-                val suit = card.optString("suit")
-                if (suit == "joker") "Curinga" else "${card.optString("rank")}${SUIT_SYMBOL[suit] ?: ""}"
-            }
-
-        /** Sobrecarga pra quando as cartas chegam como JSON em string (eco da sala). */
-        fun formatCards(cardsJson: String): String = try {
-            formatCards(JSONArray(cardsJson))
-        } catch (e: Exception) {
-            cardsJson.take(80)
-        }
-
-        /** "puxou 2 cartas: 10♥, K♠" — mesma leitura do HistoryList da web. */
-        fun formatDeckDrawAction(cards: JSONArray): String {
-            val count = cards.length()
-            val prefix = if (count == 1) "puxou 1 carta:" else "puxou $count cartas:"
-            return "$prefix ${formatCards(cards)}"
-        }
-
-        fun formatDeckDrawAction(cardsJson: String): String = try {
-            formatDeckDrawAction(JSONArray(cardsJson))
-        } catch (e: Exception) {
-            "puxou cartas: ${cardsJson.take(80)}"
-        }
-
-        /** Resumo legivel de uma mudanca de config — mesma leitura do
-         *  deckConfigChangeLabel() da web (cardFormat.ts). So os campos
-         *  presentes (nao-null) entram, igual o evento deck_config em si. */
-        fun formatDeckConfigChange(
-            includeJokers: Boolean?,
-            removalMode: String?,
-            autoReshuffleOnEmpty: Boolean?,
-        ): String {
-            val parts = mutableListOf<String>()
-            if (includeJokers != null) parts.add(if (includeJokers) "com curinga" else "sem curinga")
-            if (removalMode != null) {
-                parts.add(
-                    if (removalMode == "returns") "carta volta na hora" else "carta some até reembaralhar",
-                )
-            }
-            if (autoReshuffleOnEmpty != null) {
-                parts.add(
-                    if (autoReshuffleOnEmpty) "reembaralha sozinho quando vazio" else "trava quando vazio",
-                )
-            }
-            return parts.joinToString(", ")
-        }
-
-        /**
-         * Grupos na ordem em que aparecem no JSON, nao na ordem que o
-         * `JSONObject` devolver.
-         *
-         * O pareamento grupo <-> sub-notacao aqui e por INDICE ("{2d6+1} +
-         * {0d6}" -> primeiro grupo usa "2d6+1"), e `keys()` nao promete
-         * ordem nenhuma: no org.json do JVM ela sai embaralhada, e o pool de
-         * pericia acabava rotulado com a notacao da base — inclusive a
-         * deteccao de carta/Fudge, que sai justamente dali. Na WebView do
-         * aparelho a ordem costuma bater por acaso (LinkedHashMap), que e a
-         * pior versao do bug: passa no aparelho e falha em teste, ou vice
-         * versa.
-         */
-        internal fun orderedGroupKeys(resultJson: String, groups: JSONObject): List<String> =
-            groups.keys().asSequence().toList().sortedBy { key ->
-                resultJson.indexOf("\"$key\"").let { if (it < 0) Int.MAX_VALUE else it }
-            }
-
-        /**
-         * Nome do grupo em pt-BR. Espelha `GROUP_LABELS` de
-         * `apps/web/src/format.ts` — id desconhecido cai nele mesmo, igual
-         * na web.
-         */
-        internal fun groupLabel(name: String): String {
-            val lower = name.lowercase()
-            val groupMatch = Regex("""^group(\d+)$""").find(lower)
-            if (groupMatch != null) {
-                val num = (groupMatch.groupValues[1].toIntOrNull() ?: 0) + 1
-                return "grupo $num"
-            }
-            return when (lower) {
-                "action" -> "ação"
-                "challenge" -> "desafio"
-                "verb" -> "verbo"
-                "noun" -> "substantivo"
-                "regular" -> "regulares"
-                "hunger" -> "fome/ira"
-                "pool" -> "pool"
-                "roll" -> "rolagem"
-                // year zero
-                "base" -> "base"
-                "pericia" -> "perícia"
-                "equipamento" -> "equipamento"
-                "estresse" -> "estresse"
-                // trophy
-                "claros" -> "claros"
-                "escuros" -> "escuros"
-                "ruina" -> "ruína"
-                else -> name
-            }
-        }
-
-        /**
-         * Campos "push_*" do JSON salvo em cima do que veio do formulario.
-         *
-         * A escrituracao do Forçar nao e campo de tela (ver
-         * ProfileInput.isPushBookkeeping), entao o formulario SEMPRE volta
-         * sem ela. Sem esta juncao, minimizar o painel depois de forcar
-         * parecia "mudei os campos": o `lastRollAction` era invalidado e a
-         * mini-bolha voltava a abrir o formulario em vez de repetir a
-         * rolagem — o bug de sempre, so que entrando por uma porta nova.
-         */
-        fun mergePushBookkeeping(formJson: String, savedJson: String): String =
-            runCatching {
-                val merged = JSONObject(formJson)
-                val saved = JSONObject(savedJson)
-                for (key in saved.keys()) {
-                    if (key.startsWith("push_")) merged.put(key, saved.get(key))
-                }
-                merged.toString()
-            }.getOrDefault(formJson)
-
-        /** Mesmos pares chave/valor, independente da ordem das chaves. */
-        fun sameInputs(a: String, b: String): Boolean =
-            ProfileForm.fromJson(a) == ProfileForm.fromJson(b)
-
-        fun toneOf(resultJson: String): OutcomeTone {
-            val outcome = runCatching {
-                JSONObject(resultJson).optString("outcome", "")
-            }.getOrDefault("")
-            return if (outcome.isEmpty()) OutcomeTone.NEUTRAL else outcomeTone(outcome)
-        }
-        data class ResultDisplayLines(
-            val headline: String,
-            val tested: String?,
-            val detail: String?,
-            val flags: List<Pair<String, String>>,
-        )
-
-        fun formatDisplayLines(resultJson: String): ResultDisplayLines {
-            return try {
-                val result = JSONObject(resultJson)
-                val notation = result.optString("notation", "?")
-                val groupsObj = result.optJSONObject("groups")
-                val profile = result.optString("profile", "")
-
-                val groupNotations = Regex("""\{([^}]+)\}""").findAll(notation)
-                    .map { it.groupValues[1] }
-                    .toList()
-
-                val isVs = notation.contains(" vs ")
-                val isYze = listOf("yze", "yze_fbl", "yze_alien", "yze_wdu").contains(profile)
-                val joiner = if (isVs) " vs " else " • "
-
-                val flags = result.optJSONArray("outcome_flags")
-                val rawOutcome = result.optString("outcome", "")
-
-                // 1. Resolve lista de desfechos / flags
-                val outcomeList = mutableListOf<Pair<String, String>>() // label to rawFlag
-                if (flags != null && flags.length() > 0) {
-                    for (i in 0 until flags.length()) {
-                        val f = flags.getString(i)
-                        val label = outcomeLabel(f)
-                        if (label.isNotEmpty() && outcomeList.none { it.first == label }) {
-                            outcomeList.add(label to f)
-                        }
-                    }
-                } else if (rawOutcome.isNotEmpty()) {
-                    outcomeList.add(outcomeLabel(rawOutcome) to rawOutcome)
-                }
-
-                // 2. Resolve grupos de dados e totais
-                var totalCardIndex = 0
-                val groupStrings = mutableListOf<String>()
-                var grandTotal: Int? = if (!isVs && outcomeList.isEmpty() && !isYze) 0 else null
-
-                if (groupsObj != null) {
-                    val groupKeys = orderedGroupKeys(resultJson, groupsObj)
-                    for (gi in groupKeys.indices) {
-                        val groupKey = groupKeys[gi]
-                        val group = groupsObj.optJSONObject(groupKey) ?: continue
-                        val subNotation = groupNotations.getOrNull(gi) ?: notation
-                        val isCardGroup = Regex("""\b\d*c\b""").containsMatchIn(subNotation)
-                        val isFudgeGroup = Regex("""\b\d*dF\b""").containsMatchIn(subNotation)
-
-                        val rolls = group.optJSONArray("rolls")
-                        val rollsFormatted = if (rolls != null && rolls.length() > 0) {
-                            (0 until rolls.length()).joinToString(", ") { ri ->
-                                val v = rolls.getInt(ri)
-                                when {
-                                    isCardGroup -> cardFromRollValue(v, totalCardIndex++)
-                                    isFudgeGroup -> if (v > 0) "+" else if (v < 0) "−" else "0"
-                                    else -> v.toString()
-                                }
-                            }
-                        } else ""
-
-                        val mod = if (group.has("modifier")) group.getInt("modifier") else 0
-                        val modText = if (mod > 0) " + $mod" else if (mod < 0) " − ${kotlin.math.abs(mod)}" else ""
-                        val total = if (group.has("total")) {
-                            group.getInt("total")
-                        } else if (!isVs && rolls != null && rolls.length() > 0 && !isCardGroup && !isFudgeGroup) {
-                            (0 until rolls.length()).sumOf { rolls.getInt(it) } + mod
-                        } else null
-                        val totalText = if (total != null && !isCardGroup) " = $total" else ""
-                        if (total != null && grandTotal != null) {
-                            grandTotal += total
-                        } else if (isCardGroup || isFudgeGroup) {
-                            grandTotal = null
-                        }
-
-                        val label = if (groupKeys.size > 1) groupLabel(groupKey) else ""
-                        val rollsPart = if (rollsFormatted.isNotEmpty()) "[$rollsFormatted]" else "—"
-                        val fullGroupStr = buildString {
-                            if (label.isNotEmpty()) append("$label ")
-                            append(rollsPart)
-                            append(modText)
-                            append(totalText)
-                        }
-                        if (fullGroupStr.isNotEmpty()) {
-                            groupStrings.add(fullGroupStr)
-                        }
-                    }
-                }
-
-                val yzeSuccesses = if (isYze && groupsObj != null && groupsObj.length() > 1) {
-                    val keys = orderedGroupKeys(resultJson, groupsObj)
-                    keys.sumOf { groupsObj.optJSONObject(it)?.optInt("total", 0) ?: 0 }
-                } else null
-
-                val isWod5 = profile == "wod5"
-                val wod5Successes = if (isWod5 && groupsObj != null) {
-                    val regRolls = groupsObj.optJSONObject("regular")?.optJSONArray("rolls")
-                    val hungRolls = groupsObj.optJSONObject("hunger")?.optJSONArray("rolls")
-                    var regSuccess = 0
-                    var hungSuccess = 0
-                    var totalTens = 0
-                    if (regRolls != null) {
-                        for (i in 0 until regRolls.length()) {
-                            val v = regRolls.getInt(i)
-                            if (v >= 6) regSuccess++
-                            if (v == 10) totalTens++
-                        }
-                    }
-                    if (hungRolls != null) {
-                        for (i in 0 until hungRolls.length()) {
-                            val v = hungRolls.getInt(i)
-                            if (v >= 6) hungSuccess++
-                            if (v == 10) totalTens++
-                        }
-                    }
-                    val critBonus = (totalTens / 2) * 2
-                    regSuccess + hungSuccess + critBonus
-                } else null
-
-                val poolSuccesses = yzeSuccesses ?: wod5Successes
-
-                val tested = result.optJSONArray("tested")?.let { arr ->
-                    (0 until arr.length()).joinToString(", ") { i ->
-                        val item = arr.getJSONObject(i)
-                        "${item.getString("label")}: ${item.get("value")}"
-                    }
-                }
-
-                if (outcomeList.isNotEmpty()) {
-                    val outcomeStr = outcomeList.joinToString(", ") { it.first }
-                    val headline = if (wod5Successes != null) {
-                        "$outcomeStr ($wod5Successes ${if (wod5Successes == 1) "sucesso" else "sucessos"})"
-                    } else {
-                        outcomeStr
-                    }
-                    val detail = if (groupStrings.isNotEmpty()) {
-                        val isMultiNamedGroup = groupsObj != null && groupsObj.length() > 1
-                        if (!isMultiNamedGroup) {
-                            "$notation ${groupStrings.joinToString(joiner)}"
-                        } else {
-                            groupStrings.joinToString(joiner)
-                        }
-                    } else null
-                    ResultDisplayLines(headline, tested, detail, outcomeList)
-                } else if (poolSuccesses != null) {
-                    val headline = "$poolSuccesses ${if (poolSuccesses == 1) "sucesso" else "sucessos"}"
-                    val detail = if (groupStrings.isNotEmpty()) groupStrings.joinToString(joiner) else null
-                    ResultDisplayLines(headline, tested, detail, emptyList())
-                } else if (isVs && groupStrings.size == 2) {
-                    val keys = orderedGroupKeys(resultJson, groupsObj ?: JSONObject())
-                    val t1 = groupsObj?.optJSONObject(keys.getOrNull(0) ?: "")?.optInt("total", 0) ?: 0
-                    val t2 = groupsObj?.optJSONObject(keys.getOrNull(1) ?: "")?.optInt("total", 0) ?: 0
-                    val headline = "$t1 vs $t2"
-                    val detail = groupStrings.joinToString(" vs ")
-                    ResultDisplayLines(headline, tested, detail, emptyList())
-                } else if (grandTotal != null && groupStrings.isNotEmpty()) {
-                    val headline = grandTotal.toString()
-                    val detail = if (groupStrings.size == 1 && (groupsObj?.length() ?: 0) == 1) {
-                        "$notation ${groupStrings.first()}"
-                    } else {
-                        groupStrings.joinToString(" + ")
-                    }
-                    ResultDisplayLines(headline, tested, detail, emptyList())
-                } else {
-                    ResultDisplayLines(notation, tested, null, emptyList())
-                }
-            } catch (e: Exception) {
-                ResultDisplayLines(resultJson.take(80), null, null, emptyList())
-            }
-        }
-
-        /** Formata o resultado completo de rolagem, cobrindo todos os grupos
-         *  (como `{2d6+1} vs {2c}` no Firelights ou `{1d6+2} vs {2d10}` no Ironsworn),
-         *  valores de cartas e Fudge, e múltiplas flags de outcome. */
-        fun formatResult(resultJson: String): String {
-            return try {
-                val result = JSONObject(resultJson)
-                val notation = result.optString("notation", "?")
-                val groupsObj = result.optJSONObject("groups")
-                val profile = result.optString("profile", "")
-
-                // Sub-notações para cada grupo (ex: "{2d6+mod} vs {2c}" -> ["2d6+mod", "2c"])
-                val groupNotations = Regex("""\{([^}]+)\}""").findAll(notation)
-                    .map { it.groupValues[1] }
-                    .toList()
-
-                val isVs = notation.contains(" vs ")
-                val isYze = listOf("yze", "yze_fbl", "yze_alien", "yze_wdu").contains(profile)
-                val isWod5 = profile == "wod5"
-                val joiner = if (isVs) " vs " else " + "
-
-                // Mais de uma flag bateu (Infaernum: "1 milagre" + "2
-                // desgraças" na mesma rolagem; Ironsworn: "strong_hit" +
-                // "match"): mostra todas, juntas.
-                val flags = result.optJSONArray("outcome_flags")
-                val outcome = if (flags != null && flags.length() > 1) {
-                    (0 until flags.length()).joinToString(", ") { outcomeLabel(flags.getString(it)) }
-                } else {
-                    result.optString("outcome", "").let { if (it.isEmpty()) it else outcomeLabel(it) }
-                }
-
-                val wod5Successes = if (isWod5 && groupsObj != null) {
-                    val regRolls = groupsObj.optJSONObject("regular")?.optJSONArray("rolls")
-                    val hungRolls = groupsObj.optJSONObject("hunger")?.optJSONArray("rolls")
-                    var regSuccess = 0
-                    var hungSuccess = 0
-                    var totalTens = 0
-                    if (regRolls != null) {
-                        for (i in 0 until regRolls.length()) {
-                            val v = regRolls.getInt(i)
-                            if (v >= 6) regSuccess++
-                            if (v == 10) totalTens++
-                        }
-                    }
-                    if (hungRolls != null) {
-                        for (i in 0 until hungRolls.length()) {
-                            val v = hungRolls.getInt(i)
-                            if (v >= 6) hungSuccess++
-                            if (v == 10) totalTens++
-                        }
-                    }
-                    val critBonus = (totalTens / 2) * 2
-                    regSuccess + hungSuccess + critBonus
-                } else null
-
-                var totalCardIndex = 0
-                val groupStrings = mutableListOf<String>()
-                var grandTotal: Int? = if (!isVs && outcome.isEmpty() && !isYze && !isWod5) 0 else null
-
-                if (groupsObj != null) {
-                    val groupKeys = orderedGroupKeys(resultJson, groupsObj)
-                    for (gi in groupKeys.indices) {
-                        val groupKey = groupKeys[gi]
-                        val group = groupsObj.optJSONObject(groupKey) ?: continue
-                        val subNotation = groupNotations.getOrNull(gi) ?: notation
-                        val isCardGroup = Regex("""\b\d*c\b""").containsMatchIn(subNotation)
-                        val isFudgeGroup = Regex("""\b\d*dF\b""").containsMatchIn(subNotation)
-
-                        val rolls = group.optJSONArray("rolls")
-                        val rollsFormatted = if (rolls != null && rolls.length() > 0) {
-                            (0 until rolls.length()).joinToString(", ") { ri ->
-                                val v = rolls.getInt(ri)
-                                when {
-                                    isCardGroup -> cardFromRollValue(v, totalCardIndex++)
-                                    isFudgeGroup -> if (v > 0) "+" else if (v < 0) "−" else "0"
-                                    else -> v.toString()
-                                }
-                            }
-                        } else ""
-
-                        val mod = if (group.has("modifier")) group.getInt("modifier") else 0
-                        val modText = if (mod > 0) " + $mod" else if (mod < 0) " − ${kotlin.math.abs(mod)}" else ""
-                        val total = if (group.has("total")) {
-                            group.getInt("total")
-                        } else if (!isVs && rolls != null && rolls.length() > 0 && !isCardGroup && !isFudgeGroup) {
-                            (0 until rolls.length()).sumOf { rolls.getInt(it) } + mod
-                        } else null
-                        val totalText = if (total != null && !isCardGroup) " = $total" else ""
-                        if (total != null && grandTotal != null) {
-                            grandTotal += total
-                        } else if (isCardGroup || isFudgeGroup) {
-                            grandTotal = null
-                        }
-
-                        val groupStr = buildString {
-                            // Tres pools de d6 iguais (Forbidden Lands) viravam
-                            // tres listas anonimas na mesma linha — sem o nome
-                            // nao da pra saber qual "= 1" veio de onde.
-                            if (groupKeys.size > 1) append("${groupLabel(groupKey)} ")
-                            if (rollsFormatted.isNotEmpty()) {
-                                append("[$rollsFormatted]")
-                            } else {
-                                // Pool de zero dados ("0d6"): existe, mas nao
-                                // rolou nada. "[]" parecia bug.
-                                append("—")
-                            }
-                            append(modText)
-                            append(totalText)
-                        }
-                        if (groupStr.isNotEmpty()) groupStrings.add(groupStr)
-                    }
-                }
-
-                val allGroupsText = buildString {
-                    append(groupStrings.joinToString(joiner))
-                    if (!isVs && outcome.isEmpty() && !isYze && !isWod5 && groupStrings.size > 1 && grandTotal != null) {
-                        append(" = $grandTotal")
-                    }
-                }
-
-                val tested = result.optJSONArray("tested")?.let { arr ->
-                    (0 until arr.length()).joinToString(", ") { i ->
-                        val item = arr.getJSONObject(i)
-                        "${item.getString("label")}: ${item.get("value")}"
-                    }
-                } ?: ""
-
-                val finalOutcome = if (wod5Successes != null) {
-                    if (outcome.isNotEmpty()) {
-                        "$outcome ($wod5Successes ${if (wod5Successes == 1) "sucesso" else "sucessos"})"
-                    } else {
-                        "$wod5Successes ${if (wod5Successes == 1) "sucesso" else "sucessos"}"
-                    }
-                } else {
-                    outcome
-                }
-
-                buildString {
-                    append(notation)
-                    if (allGroupsText.isNotEmpty()) append(" $allGroupsText")
-                    if (finalOutcome.isNotEmpty()) append(" — $finalOutcome")
-                    if (tested.isNotEmpty()) append(" ($tested)")
-                }
-            } catch (e: Exception) {
-                resultJson.take(80)
-            }
-        }
     }
 }

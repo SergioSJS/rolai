@@ -12,7 +12,7 @@
 // rules-engine, anima local com o valor decidido, envia pronto via WS;
 // o echo entra no historico (ordem canonica) sem re-animar (echo.ts).
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RollResult } from "@rolai/rules-engine";
 import type { Card, DeckConfig, DrawResult } from "@rolai/deck-engine";
 import { playCardDraw } from "./deckSound";
@@ -26,22 +26,17 @@ import type {
   ThemeName,
 } from "./settings";
 import {
-  clearRoomCode,
   loadDeckConfig,
   loadDiceScale,
   loadDiceStyle,
   loadDiceStyles,
-  loadPlayerName,
   loadQualityTier,
-  loadRoomCode,
   loadSystem,
   loadTheme,
   saveDeckConfig,
   saveDiceScale,
   saveDiceStyles,
-  savePlayerName,
   saveQualityTier,
-  saveRoomCode,
   saveSystem,
   saveTheme,
 } from "./settings";
@@ -49,10 +44,7 @@ import type { RollRenderer } from "./renderers/types";
 import { exceedsAnimationCap, cardsFromResult } from "./renderers/types";
 import { createRenderer } from "./renderers";
 import { TextRenderer } from "./renderers/text";
-import { initialRoomState, roomReducer } from "./room/reducer";
-import type { HistoryEntry, RoomEvent } from "./room/reducer";
-import { createRoom, RoomClient } from "./room/client";
-import { PendingDeckDraws, PendingRolls } from "./room/echo";
+import { roomParamFromUrl, useRoomSession } from "./room/useRoomSession";
 import { RollPanel } from "./components/RollPanel";
 import { DeckPanel } from "./components/DeckPanel";
 import { RoomPanel } from "./components/RoomPanel";
@@ -60,7 +52,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { HistoryList } from "./components/HistoryList";
 import { ResultDisplay } from "./components/ResultDisplay";
 import { CardStack } from "./components/CardStack";
-import { CardStage3D } from "./components/CardStage3D";
+import { LazyCardStage3D, preloadCardStage3D } from "./components/LazyCardStage3D";
 import { PlayerTag } from "./components/PlayerTag";
 import { cardLabel, isRedSuit } from "./cardFormat";
 import { useStageFloor } from "./stage/floor";
@@ -70,27 +62,6 @@ import { checkCooldown, initialCooldown } from "./rollCooldown";
 import { MenuBar } from "./components/MenuBar";
 import { Modal } from "./components/Modal";
 import { useOnline } from "./useOnline";
-
-function roomParamFromUrl(): string {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get("room") ?? "";
-}
-
-// Mantem `?room=` na barra de enderecos em sincronia com a sala atual.
-// Sem isto a URL fica presa na sala com que a pagina foi carregada: criar
-// ou trocar de sala pelo modal muda o estado por dentro, mas quem olhar a
-// barra (ou copiar dali, ou so der F5) ve/volta pra sala ERRADA — inclusive
-// uma que ja nao existe mais, derrubando de novo uma sala boa por cima.
-function setRoomUrlParam(code: string | null): void {
-  if (typeof window === "undefined") return;
-  const url = new URL(window.location.href);
-  if (code === null) {
-    url.searchParams.delete("room");
-  } else {
-    url.searchParams.set("room", code);
-  }
-  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-}
 
 type ModalKind = "room" | "settings" | "about" | "help" | null;
 
@@ -123,9 +94,6 @@ export function App() {
   const [diceScale, setDiceScale] = useState<number>(() =>
     loadDiceScale(window.localStorage),
   );
-  const [playerName, setPlayerName] = useState<string>(
-    () => loadPlayerName(window.localStorage) || "anonymous",
-  );
   // Sistema de regras vive em Preferências: e escolha de mesa, nao algo que
   // se troca a cada rolagem.
   const [system, setSystem] = useState<string>(() => loadSystem(window.localStorage));
@@ -134,8 +102,6 @@ export function App() {
   const [deckConfig, setDeckConfig] = useState<DeckConfig>(() =>
     loadDeckConfig(window.localStorage),
   );
-  const [room, dispatch] = useReducer(roomReducer, initialRoomState);
-  const [localHistory, setLocalHistory] = useState<HistoryEntry[]>([]);
   const [lastResult, setLastResult] = useState<RollResult | null>(null);
   // Quem rolou o que esta na tela (null = eu mesmo, ou rolagem local).
   const [lastRoller, setLastRoller] = useState<{
@@ -161,10 +127,6 @@ export function App() {
   const stageRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<RollRenderer | null>(null);
-  const clientRef = useRef<RoomClient | null>(null);
-  const pendingRef = useRef(new PendingRolls());
-  const pendingDeckRef = useRef(new PendingDeckDraws());
-  const selfNameRef = useRef("anonymous");
   // Reserva a faixa do pe do palco com a placa JA na tela e so entao rola.
   const queueRoll = useStageFloor(stageRef, overlayRef, rendererRef);
 
@@ -286,87 +248,23 @@ export function App() {
     setLastCardPlayer(player ?? null);
   }, []);
 
-  // Eventos WS vindos do RoomClient.
-  const handleRoomEvent = useCallback(
-    (event: RoomEvent) => {
-      dispatch(event);
-      if (event.type === "roll") {
-        // Echo da propria rolagem: ja animada no disparo local — so entra
-        // no historico (via reducer acima). Rolagem dos outros: anima com a
-        // aparencia de dado de quem rolou.
-        if (!pendingRef.current.consumeEcho(event.player, event.result)) {
-          animate(event.result, event.style, event.player, event.styles);
-        }
-      } else if (event.type === "deck_draw") {
-        // Mesma logica do roll acima, so que pro baralho (echo.ts).
-        if (!pendingDeckRef.current.consumeEcho(event.player, event.timestamp)) {
-          animateCards(event.cards, event.player);
-        }
-      } else if (event.type === "rejected") {
-        // Codigo recusado (sala nao encontrada/cheia/origem barrada): nao
-        // adianta guardar pra reentrar sozinho no proximo carregamento, nem
-        // deixar a URL apontando pra ele.
-        clearRoomCode(window.localStorage);
-        setRoomUrlParam(null);
-      }
-    },
-    [animate, animateCards],
-  );
-
-  const joinRoom = useCallback(
-    (code: string, name: string) => {
-      clientRef.current?.leave();
-      selfNameRef.current = name;
-      setPlayerName(name);
-      savePlayerName(window.localStorage, name);
-      saveRoomCode(window.localStorage, code);
-      setRoomUrlParam(code);
-      pendingRef.current = new PendingRolls();
-      pendingDeckRef.current = new PendingDeckDraws();
-      dispatch({ type: "joining", code });
-      // O estilo do dado vai no join: a sala inteira anima a rolagem de
-      // cada um com a cor de cada um.
-      const client = new RoomClient(
-        code,
-        name,
-        handleRoomEvent,
-        diceStyle,
-        false,
-        5,
-        diceStyles,
-      );
-      clientRef.current = client;
-      client.connect();
-    },
-    [handleRoomEvent, diceStyle, diceStyles],
-  );
-
-  // Link de convite (?room=CODIGO) entra direto, sem passar pelo modal — com
-  // o apelido salvo (ou "anonymous"), que da pra trocar depois em Sala. Sem
-  // link, cai pra ultima sala em que a pessoa esteve (localStorage): reabrir
-  // o app nao devia pedir pra digitar o codigo de novo — "sair da sala" e
-  // que apaga isso (handleLeave), senao reentraria numa sala que a pessoa
-  // deixou por querer.
-  const autoJoinedRef = useRef(false);
-  useEffect(() => {
-    if (autoJoinedRef.current) return;
-    const code = roomParamFromUrl() || loadRoomCode(window.localStorage);
-    if (code === "") return;
-    autoJoinedRef.current = true;
-    joinRoom(code, playerName);
-  }, [joinRoom, playerName]);
-
-  // Trocar de apelido (ou de cor de dado) dentro da sala reconecta: nome e
-  // estilo viajam no handshake do WS.
-  const handleRename = useCallback(
-    (name: string) => {
-      const next = name.trim() || "anonymous";
-      setPlayerName(next);
-      savePlayerName(window.localStorage, next);
-      if (room.code !== null) joinRoom(room.code, next);
-    },
-    [joinRoom, room.code],
-  );
+  // Sala: cliente WS, roster, historico, echo e o `?room=` da URL. Tudo o
+  // que o App precisa saber esta no que volta daqui — inclusive "a sala
+  // esta de pe AGORA", que os send* checam por dentro.
+  const {
+    room,
+    playerName,
+    localHistory,
+    join: joinRoom,
+    create: handleCreate,
+    leave: handleLeave,
+    rename: handleRename,
+    sendRoll,
+    sendDeckDraw,
+    sendDeckShuffle,
+    sendDeckConfig,
+    restyle,
+  } = useRoomSession({ animate, animateCards, diceStyle, diceStyles });
 
   // Previa REAL: com Preferências aberto, qualquer mudanca na aparencia ou
   // no tamanho rola um d20 no palco (o dado de verdade, atras do modal). O
@@ -404,28 +302,6 @@ export function App() {
     [dismissDice],
   );
 
-  const handleCreate = useCallback(
-    (name: string) => {
-      createRoom()
-        .then((code) => joinRoom(code, name))
-        .catch((err: unknown) =>
-          dispatch({
-            type: "serverError",
-            message: err instanceof Error ? err.message : String(err),
-          }),
-        );
-    },
-    [joinRoom],
-  );
-
-  const handleLeave = useCallback(() => {
-    clientRef.current?.leave();
-    clientRef.current = null;
-    setLocalHistory([]);
-    clearRoomCode(window.localStorage);
-    setRoomUrlParam(null);
-  }, []);
-
   const handleRoll = useCallback(
     (result: RollResult) => {
       // Freio de mesa: so vale com gente junto (ver rollCooldown.ts). O
@@ -447,22 +323,15 @@ export function App() {
       // nome e a nossa mostrava nada — ficava parecendo que so o resultado
       // alheio tem dono. O historico ja usa a mesma palavra.
       animate(result, undefined, "você", diceStyles);
-      const client = clientRef.current;
-      if (client && room.status === "connected") {
-        pendingRef.current.track(selfNameRef.current, result);
-        client.send(result);
-      } else {
-        setLocalHistory((prev) => [...prev, { type: "roll", player: "você", result }]);
-        if (room.code !== null) {
-          // Dentro de uma sala mas sem conexao agora (reconectando/caida):
-          // sem isto a rolagem anima igual e some no vazio, sem ninguem mais
-          // ver — e a pessoa so descobre muito depois, quando reparar que a
-          // mesa nao tem a rolagem dela.
-          setNotice("Sem conexão com a sala agora — essa rolagem ficou só com você.");
-        }
+      if (!sendRoll(result) && room.code !== null) {
+        // Dentro de uma sala mas sem conexao agora (reconectando/caida):
+        // sem isto a rolagem anima igual e some no vazio, sem ninguem mais
+        // ver — e a pessoa so descobre muito depois, quando reparar que a
+        // mesa nao tem a rolagem dela.
+        setNotice("Sem conexão com a sala agora — essa rolagem ficou só com você.");
       }
     },
-    [animate, diceStyles, room.status, room.code, room.roster.length],
+    [animate, diceStyles, sendRoll, room.code, room.status, room.roster.length],
   );
 
   // Baralho: DeckPanel calcula local (deck-engine) e chama isto DEPOIS do
@@ -476,32 +345,12 @@ export function App() {
   const handleDeckDraw = useCallback(
     (result: DrawResult, timestamp: string) => {
       animateCards(result.cards, "você");
-      const client = clientRef.current;
-      if (client && room.status === "connected") {
-        pendingDeckRef.current.track(selfNameRef.current, timestamp);
-        client.sendDeckDraw(result.cards, result.remaining, timestamp);
-      } else {
-        setLocalHistory((prev) => [
-          ...prev,
-          {
-            type: "deck_draw",
-            player: "você",
-            cards: result.cards,
-            remaining: result.remaining,
-            timestamp,
-          },
-        ]);
-      }
+      sendDeckDraw(result, timestamp);
     },
-    [animateCards, room.status],
+    [animateCards, sendDeckDraw],
   );
 
-  const handleDeckReshuffle = useCallback(() => {
-    const client = clientRef.current;
-    if (client && room.status === "connected") {
-      client.sendDeckShuffle();
-    }
-  }, [room.status]);
+  const handleDeckReshuffle = sendDeckShuffle;
 
   // Config do baralho vive aqui (Preferências) — igual ao sistema de
   // regras. Salva local sempre; retransmite pra sala so quando conectado.
@@ -512,12 +361,9 @@ export function App() {
         saveDeckConfig(window.localStorage, next);
         return next;
       });
-      const client = clientRef.current;
-      if (client && room.status === "connected") {
-        client.sendDeckConfig(changes);
-      }
+      sendDeckConfig(changes);
     },
-    [room.status],
+    [sendDeckConfig],
   );
 
   const handleTierChange = useCallback((next: QualityTier) => {
@@ -546,20 +392,9 @@ export function App() {
       setDiceStyle(next["1"]);
       saveDiceStyles(window.localStorage, next);
       // Reconecta pra sala saber a cor nova (o estilo vai no handshake).
-      if (room.code !== null) {
-        clientRef.current?.leave();
-        dispatch({ type: "joining", code: room.code });
-        const client = new RoomClient(
-          room.code,
-          selfNameRef.current,
-          handleRoomEvent,
-          next["1"],
-        );
-        clientRef.current = client;
-        client.connect();
-      }
+      restyle(next);
     },
-    [handleRoomEvent, room.code],
+    [restyle],
   );
 
   const handleDiceStyleChange = useCallback(
@@ -617,7 +452,13 @@ export function App() {
               role="tab"
               aria-selected={sidebarView === "deck"}
               className={sidebarView === "deck" ? "family-tab is-active" : "family-tab"}
-              onClick={() => setSidebarView("deck")}
+              onClick={() => {
+                setSidebarView("deck");
+                // Aquece o chunk do palco 3D: quem abriu o baralho vai
+                // puxar carta em seguida, e a animacao nao pode parar pra
+                // baixar three.js (ver LazyCardStage3D).
+                if (tier === "3d-full" || tier === "3d-light") preloadCardStage3D();
+              }}
             >
               Baralho
             </button>
@@ -654,7 +495,7 @@ export function App() {
           {tier === "2d" ? (
             <CardStack cards={lastCards} />
           ) : (
-            <CardStage3D cards={lastCards} />
+            <LazyCardStage3D cards={lastCards} />
           )}
         </div>
       )}
