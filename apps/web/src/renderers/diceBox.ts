@@ -483,9 +483,6 @@ export class DiceBoxRenderer implements RollRenderer {
   // Som: contagem e relogio proprios (todas as colisoes, nao so as paredes).
   private lastSound = 0;
   private soundsThisRoll = 0;
-  // Aparencia atualmente carregada no motor (troca por rolagem de outro
-  // jogador; evita recarregar o tema quando nao mudou).
-  private currentStyle: DiceStyle | null = null;
   // dispose() chamado enquanto init() ainda esta em algum await (StrictMode
   // do dev monta -> desmonta -> monta de novo antes do primeiro init()
   // terminar): sem isto, o init() velho retoma DEPOIS do dispose(), pisa no
@@ -565,7 +562,6 @@ export class DiceBoxRenderer implements RollRenderer {
     makeDiceOpaque(box);
     makeOutlineVisible(box);
     this.box = box;
-    this.currentStyle = this.options.style;
     this.mountBarrier(container);
     this.watchImpacts(box);
   }

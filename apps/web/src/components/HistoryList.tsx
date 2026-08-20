@@ -53,8 +53,9 @@ function HistoryRollResult({
               <>
                 <span>[</span>
                 {group.rolls.map((roll, ri) => {
+                  const slotKey = String(roll.slot) as "1" | "2" | "3";
                   const slotStyle = roll.slot
-                    ? styles?.[String(roll.slot)] ??
+                    ? styles?.[slotKey] ??
                       (roll.slot === 1 ? style : undefined)
                     : undefined;
                   const inlineStyle = slotStyle

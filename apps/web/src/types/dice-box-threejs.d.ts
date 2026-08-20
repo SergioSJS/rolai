@@ -4,6 +4,8 @@
 declare module "@3d-dice/dice-box-threejs" {
   // Paleta custom do dado: corpo, numero, contorno, textura e material.
   export interface DiceColorset {
+    name?: string;
+    id?: string;
     background: string;
     foreground: string;
     outline?: string;

@@ -164,9 +164,10 @@ export function ResultDisplay({
                 <span className="result-empty">sem dados</span>
               )}
               {group.rolls.map((roll, i) => {
+                const slotKey = String(roll.slot) as "1" | "2" | "3";
                 const slotStyle =
                   roll.slot
-                    ? playerStyles?.[String(roll.slot)] ??
+                    ? playerStyles?.[slotKey] ??
                       (roll.slot === 1 ? playerStyle : undefined)
                     : undefined;
                 const inlineStyle = slotStyle
@@ -199,9 +200,10 @@ export function ResultDisplay({
                   primeiro) mantem o total facil de conferir. */}
               {group.rolls.length > 0 &&
                 group.dropped?.map((roll, i) => {
+                  const slotKey = String(roll.slot) as "1" | "2" | "3";
                   const slotStyle =
                     roll.slot
-                      ? playerStyles?.[String(roll.slot)] ??
+                      ? playerStyles?.[slotKey] ??
                         (roll.slot === 1 ? playerStyle : undefined)
                       : undefined;
                   const inlineStyle = slotStyle
