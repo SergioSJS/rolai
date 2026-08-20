@@ -1,7 +1,11 @@
 # Plano de testes do app Android
 
-Estado em 1.3.0: **20% de cobertura JVM** (798/4.051 linhas), medido com
-`./gradlew coverage`.
+> **Executado em 2026-08-20.** P1–P6 e E1 estão feitos: 122 -> 192 testes
+> JVM, cobertura 20% -> 23,4%, instrumentado 14 -> 15. O que cada um virou
+> está marcado abaixo. E2 (Playwright) segue como decisão em aberto.
+
+Estado ao escrever o plano: **20% de cobertura JVM** (798/4.051 linhas),
+medido com `./gradlew coverage`.
 
 O número sozinho engana. O que ele diz de verdade:
 
@@ -27,7 +31,12 @@ se o app dá algum sinal quando quebra. As três armadilhas do `AGENTS.md`
 
 ---
 
-## P1 — `lastRollAction`: a máquina de estado que já voltou quatro vezes
+## P1 ✅ — `lastRollAction`: a máquina de estado que já voltou quatro vezes
+
+> **Feito** (`LastRoll.kt`, 16 testes). Virou `sealed interface Action` mais
+> três funções puras: `persisted`, `quickKey` e `invalidadaPorEdicao`. No
+> Service sobraram `setLastRoll()` (campo + persistência num lugar só) e
+> `repetir()`.
 
 **Onde:** `OverlayService.kt` — 10 atribuições, 4 invalidações explícitas.
 **Cobertura hoje:** 0%.
@@ -61,7 +70,10 @@ e dá pra **testar**.
 **Tamanho:** ~120 linhas movidas, ~12 testes. **Impacto:** ~3% de cobertura
 e o fim da reincidência mais cara do projeto.
 
-## P2 — Compositor de notação: string pura, bug confirmado, zero teste
+## P2 ✅ — Compositor de notação: string pura, bug confirmado, zero teste
+
+> **Feito** (`NotationComposer.kt`, 19 testes, 100% de cobertura). `countsByKey`
+> saiu junto — o que o chip mostra é contagem pura.
 
 **Onde:** `OverlayView.kt`, 5 funções, ~110 linhas:
 `addDieToNotation`, `addDieToSimpleExpression`, `removeDieFromNotation`,
@@ -81,7 +93,9 @@ mão.
 
 **Tamanho:** ~110 linhas movidas, ~15 testes. **Impacto:** ~3%.
 
-## P3 — `RoomClient.onMessage`: o parser do protocolo
+## P3 ✅ — `RoomClient.onMessage`: o parser do protocolo
+
+> **Feito** (`ServerEvent.kt`, 16 testes, 97-100% por tipo).
 
 **Onde:** `RoomClient.kt`, 62 linhas. **Cobertura hoje:** 0%
 (`RoomClientUrlTest` cobre a URL do handshake, não a leitura).
@@ -102,7 +116,12 @@ opcional ausente vs `null`; tipo desconhecido é ignorado em silêncio;
 **Tamanho:** ~60 linhas movidas, ~12 testes. **Impacto:** ~1,5%, e um
 alarme para mudança de contrato.
 
-## P4 — Dosagem do som
+## P4 ✅ — Dosagem do som
+
+> **Feito** em parte: `DiceSounds.cardDelays()` e `ResultFormat.cardCountOf`
+> ganharam teste. O `playDiceSound` em si continua sendo um `postDelayed` —
+> a decisão que sobra ("nenhuma colisão chegou") é uma linha, e extrair um
+> arquivo pra ela custaria mais do que paga.
 
 **Onde:** `OverlayService.playDiceSound` (25 linhas) e
 `DiceStageWindow.onDiceImpact` (33). **Cobertura hoje:** 0%.
@@ -117,7 +136,12 @@ não toca duas vezes pela mesma rolagem; carta dosa pelo número de cartas.
 
 **Tamanho:** ~60 linhas, ~8 testes.
 
-## P5 — `SettingsActivity`: 621 linhas a 0%
+## P5 ✅ — `SettingsActivity`: 621 linhas a 0%
+
+> **Feito** em parte: `RoomStatusChip.kt` (9 testes) tirou a tabela de decisão
+> do chip de sala. `saveFromViews`/`loadIntoViews` ficaram: são leitura e
+> escrita de campo, muita linha e pouco risco por linha — não valem a
+> indireção agora.
 
 **Onde:** `saveFromViews` (61 linhas), `renderRoomStatus` (38), `applyPreset`
 (24), `saveCurrentSlotFromControls` (21) e a leitura de `systems.json`.
@@ -132,7 +156,11 @@ linha, pouco risco por linha.
 
 **Tamanho:** ~120 linhas movidas, ~15 testes. **Impacto:** ~3%.
 
-## P6 — Restinho puro
+## P6 ✅ — Restinho puro
+
+> **Feito**: `systemShortLabel` foi pro `ProfileFamilies` (4 testes). O resto
+> (`quickKeyOf`, `buildDeckConfigJson`) foi absorvido pelo P1 ou continua
+> trivial demais pra valer arquivo próprio.
 
 `systemShortLabel` (35), `quickKeyOf` (7), `buildDeckConfigJson` (8),
 `loadDeckConfig` (13). Somam ~60 linhas e são baratos de pegar de carona
@@ -149,9 +177,16 @@ o instrumentado e `docs/manual-test-checklist.md`.
 
 **A meta não é 80% de cobertura. É 0% de decisão dentro de tela.**
 
-Somando P1–P6: ~470 linhas movidas para arquivos testáveis e ~62 testes
-novos, levando o JVM de 20% para a casa dos **32–35%** — com a parte que
-resta a 0% sendo, aí sim, só desenho.
+Somando P1–P6, o previsto era ~470 linhas movidas, ~62 testes e 32-35% de
+cobertura. O realizado: **70 testes novos** (122 -> 192) e **23,4%**.
+
+A diferença no percentual merece explicação, porque ela ensina algo: o que
+saiu das telas foi menos linha do que a estimativa (o despacho continua no
+Service, e deve continuar — é ele que conhece o motor), enquanto o que
+entrou de teste foi mais. Cobertura mede linha executada, não risco coberto;
+os arquivos novos estão todos em 97-100%, e são justamente os que guardavam
+os bugs reincidentes. **O número subiu pouco e o risco caiu muito** — que é
+o resultado que se queria, ainda que não seja o que a métrica mostra.
 
 ---
 
@@ -162,7 +197,15 @@ dentro é caro e lento — e os três bugs mais caros desta sessão (som mudo,
 cleartext, seletor de cor) não teriam sido pegos por nenhum e2e de
 navegador.
 
-### E1 — Instrumentado: o que já existe, ampliado
+### E1 ✅ — Instrumentado: o que já existe, ampliado
+
+> **Feito**: `StageRendersTest` monta o palco e pergunta se `window.rolaiStream`
+> existe — a ponte que o StreamApp publica quando o bundle roda. Conferido por
+> mutação: apontando pra um endereço inexistente, falha. Fecha a lacuna que
+> virou "tela branca" nesta sessão.
+>
+> Continuam pendentes: fluxo de sala do Service com MockWebServer, e o
+> `lastRollAction` de ponta a ponta (agora possível, já que virou dado).
 
 Hoje são 14 testes (`run-instrumented.sh`, aparelho, fora do CI):
 `HeadlessRollerParityTest` (3), `KeepDropHeadlessTest` (2),

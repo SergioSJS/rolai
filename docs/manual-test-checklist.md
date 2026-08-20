@@ -133,12 +133,13 @@ Medido em 1.3.0:
 | --- | --- |
 | Backend | **93%** (774 linhas) |
 | Web | **72%** (5.879 linhas) |
-| Android (JVM) | **20%** (4.051 linhas) |
+| Android (JVM) | **23,4%** (4.079 linhas) |
 
 Os 20% do Android assustam menos do que parecem, e o detalhe explica por quê:
 
 | classe | linhas | coberto |
 | --- | --- | --- |
+| `NotationComposer`, `LastRoll`, `ServerEvent` | 160 | 97-100% |
 | `OutcomeCatalog` / `ProfileForm` | 190 | 100% |
 | `RichTextPlan` | 88 | 95% |
 | `ResultFormat` / `RolaiSettings` | 301 | 86% |
@@ -159,7 +160,7 @@ arquivos a 0% para dois arquivos a 86–95%.
 | --- | --- |
 | Motor de regras | 181 testes — confie neles |
 | Backend | 68 testes, **93% de linhas**, mais o smoke fim-a-fim |
-| Formatação do resultado (Android) | 122 testes JVM |
+| Lógica pura do Android | 192 testes JVM |
 | Sala (cliente, reducer, echo, hook) | 17 casos, 2 conferidos por mutação |
 
 Do lado web, o que puxa os 72% pra baixo é o que exige WebGL de verdade:
