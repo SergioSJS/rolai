@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDie,
+  addDieToNotation,
   adjustModifier,
   clearComposer,
   DEFAULT_COMPOSER,
@@ -9,6 +10,7 @@ import {
   MAX_COMPOSER_COUNT,
   MAX_COMPOSER_MODIFIER,
   removeDie,
+  removeDieFromNotation,
   removeTerm,
   toNotation,
   totalDice,
@@ -167,5 +169,44 @@ describe("adjustModifier / clearComposer", () => {
   it("limpar esvazia o pool e o modificador", () => {
     expect(clearComposer()).toEqual({ terms: [], modifier: 0 });
     expect(toNotation(clearComposer())).toBe("");
+  });
+});
+
+describe("addDieToNotation", () => {
+  it("adiciona dado a partir de notacao vazia", () => {
+    expect(addDieToNotation("", 6)).toBe("1d6");
+  });
+
+  it("completa slot aberto no final ('1[' -> '1[1d4]')", () => {
+    expect(addDieToNotation("1[", 4)).toBe("1[1d4]");
+    expect(addDieToNotation("2[", 6)).toBe("2[1d6]");
+    expect(addDieToNotation("1[2d6] + 2[", 4)).toBe("1[2d6] + 2[1d4]");
+  });
+
+  it("incrementa dado dentro de bloco de slot existente ('1[1d4]' -> '1[2d4]')", () => {
+    expect(addDieToNotation("1[1d4]", 4)).toBe("1[2d4]");
+    expect(addDieToNotation("1[2d6] + 2[1d4]", 4)).toBe("1[2d6] + 2[2d4]");
+    expect(addDieToNotation("1[2d6] + 2[1d4]", 6)).toBe("1[2d6] + 2[1d4+1d6]");
+  });
+
+  it("anexa dado quando há operador pendente ('3d6 + ' -> '3d6 + 1d8')", () => {
+    expect(addDieToNotation("3d6 + ", 8)).toBe("3d6 + 1d8");
+    expect(addDieToNotation("3d6+", 8)).toBe("3d6+ 1d8");
+  });
+
+  it("mantém comportamento padrão de acumular tipos para notação simples", () => {
+    expect(addDieToNotation("2d6", 6)).toBe("3d6");
+    expect(addDieToNotation("2d6", 4)).toBe("2d6+1d4");
+  });
+});
+
+describe("removeDieFromNotation", () => {
+  it("decrementa e remove dado dentro de bloco de slot", () => {
+    expect(removeDieFromNotation("1[2d4]", 4)).toBe("1[1d4]");
+    expect(removeDieFromNotation("1[1d4]", 4)).toBe("");
+  });
+
+  it("decrementa em notação simples", () => {
+    expect(removeDieFromNotation("2d6+1d4", 4)).toBe("2d6");
   });
 });

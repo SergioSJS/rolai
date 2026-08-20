@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: rolai-backend
-Version: 1.1.0
+Version: 1.1.1
 Summary: Relay de sala do rolai. Nao valida rolagens, so retransmite (ver docs/security.md).
 Requires-Python: >=3.12
 Requires-Dist: fastapi>=0.115

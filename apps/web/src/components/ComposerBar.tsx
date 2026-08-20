@@ -8,7 +8,7 @@
 // inteiro.
 
 import {
-  addDie,
+  addDieToNotation,
   adjustModifier,
   clearComposer,
   COMPOSER_DICE,
@@ -16,7 +16,7 @@ import {
   dieKindLabel,
   EMPTY_COMPOSER,
   fromNotation,
-  removeDie,
+  removeDieFromNotation,
   removeTerm,
   termNotation,
   toNotation,
@@ -97,7 +97,7 @@ export function ComposerBar({ notation, onChange }: ComposerBarProps) {
                 className="die-button"
                 aria-label={addLabel}
                 title={addLabel}
-                onClick={() => apply(addDie(base, kind))}
+                onClick={() => onChange(addDieToNotation(notation, kind))}
               >
                 <DiceIcon kind={kind} />
                 <span className="die-button-label">{label}</span>
@@ -109,7 +109,7 @@ export function ComposerBar({ notation, onChange }: ComposerBarProps) {
                   className="icon-button die-remove"
                   aria-label={removeLabel}
                   title={removeLabel}
-                  onClick={() => apply(removeDie(base, kind))}
+                  onClick={() => onChange(removeDieFromNotation(notation, kind))}
                 >
                   <MinusIcon />
                 </button>

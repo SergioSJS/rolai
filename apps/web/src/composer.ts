@@ -167,3 +167,86 @@ export function adjustModifier(state: ComposerState, delta: number): ComposerSta
 export function clearComposer(): ComposerState {
   return { terms: [], modifier: 0 };
 }
+
+/**
+ * Adiciona um dado diretamente na string de notação, respeitando
+ * notação de slot aberta ("1[", "2["), blocos existentes ("1[2d6]")
+ * e operadores pendentes ("2d6 +").
+ */
+export function addDieToNotation(notation: string, kind: DieKind): string {
+  const trimmed = notation.trim();
+  const label = kind === "C" ? "1c" : kind === "F" ? "1dF" : `1d${kind}`;
+
+  if (trimmed === "") {
+    return label;
+  }
+
+  // 1. Slot aberto no fim: ex: "1[", "2[", "3[", "... + 1[", "{2d6} vs {"
+  const openBracketMatch = trimmed.match(/^(.*(?:\b[123]\[|\{))\s*$/);
+  if (openBracketMatch) {
+    const prefix = openBracketMatch[1];
+    const closing = prefix.endsWith("{") ? "}" : "]";
+    return `${prefix}${label}${closing}`;
+  }
+
+  // 2. Bloco de slot fechado no fim: ex: "1[2d6]" ou "1[2d6+1d4]"
+  const slotBlockMatch = trimmed.match(/^(.*?\b[123]\[)([^\]]*?)(\])\s*$/);
+  if (slotBlockMatch) {
+    const prefix = slotBlockMatch[1];
+    const inner = slotBlockMatch[2].trim();
+    const suffix = slotBlockMatch[3];
+    const innerState = fromNotation(inner);
+    if (innerState) {
+      const nextInner = addDie(innerState, kind);
+      return `${prefix}${toNotation(nextInner)}${suffix}`;
+    }
+  }
+
+  // 3. Operador ou separador pendente no fim: ex: "2d6 +", "2d6+", "vs"
+  if (/[\+\-\*\/]\s*$/.test(trimmed) || /\bvs\s*$/i.test(trimmed)) {
+    const sep = trimmed.endsWith(" ") ? "" : " ";
+    return `${trimmed}${sep}${label}`;
+  }
+
+  // 4. Estado normal do compositor
+  const state = fromNotation(trimmed);
+  if (state) {
+    return toNotation(addDie(state, kind));
+  }
+
+  // 5. Notação livre não suportada (ex.: "4d6kh3"): recomeça do zero com o dado clicado
+  return label;
+}
+
+/**
+ * Remove um dado da notação, suportando blocos de slot e notação padrão.
+ */
+export function removeDieFromNotation(notation: string, kind: DieKind): string {
+  const trimmed = notation.trim();
+  if (trimmed === "") return "";
+
+  // 1. Bloco de slot fechado no fim
+  const slotBlockMatch = trimmed.match(/^(.*?\b[123]\[)([^\]]*?)(\])\s*$/);
+  if (slotBlockMatch) {
+    const prefix = slotBlockMatch[1];
+    const inner = slotBlockMatch[2].trim();
+    const suffix = slotBlockMatch[3];
+    const innerState = fromNotation(inner);
+    if (innerState) {
+      const nextInner = removeDie(innerState, kind);
+      const nextNotation = toNotation(nextInner);
+      if (nextNotation === "") {
+        return prefix.replace(/\b[123]\[$/, "").trim().replace(/\+$/, "").trim();
+      }
+      return `${prefix}${nextNotation}${suffix}`;
+    }
+  }
+
+  // 2. Estado normal do compositor
+  const state = fromNotation(trimmed);
+  if (state) {
+    return toNotation(removeDie(state, kind));
+  }
+
+  return trimmed;
+}

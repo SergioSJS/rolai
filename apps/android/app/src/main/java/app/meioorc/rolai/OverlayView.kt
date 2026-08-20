@@ -235,7 +235,6 @@ class OverlayView(context: Context) {
     private val chips = LinkedHashMap<String, TextView>()
     private var deckCount = 1
     private lateinit var deckCountView: TextView
-    private val pool = LinkedHashMap<String, Int>()
     private var quickNotation: String = ""
     private val history = ArrayDeque<String>()
 
@@ -521,7 +520,10 @@ class OverlayView(context: Context) {
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-                override fun afterTextChanged(s: Editable?) { updateRollButton() }
+                override fun afterTextChanged(s: Editable?) {
+                    updateRollButton()
+                    syncChipsWithNotation(s?.toString().orEmpty())
+                }
             })
         }
 
@@ -697,7 +699,7 @@ class OverlayView(context: Context) {
             )
         }
 
-        renderPool()
+        syncChipsWithNotation(notationInput.text.toString())
 
         val body = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -1393,34 +1395,136 @@ class OverlayView(context: Context) {
     // ---------- compositor de pool ----------
 
     private fun addDie(key: String) {
-        pool[key] = (pool[key] ?: 0) + 1
-        renderPool()
+        val current = notationInput.text.toString()
+        val next = addDieToNotation(current, key)
+        notationInput.setText(next)
+        notationInput.setSelection(next.length)
+        syncChipsWithNotation(next)
     }
 
-    /** Tira um dado do tipo; o termo some do pool ao zerar (senao
-     *  `poolNotation` imprimiria "0d6"). Ligado ao long-press do chip. */
+    /** Tira um dado do tipo; o termo some do pool ao zerar. Ligado ao long-press do chip. */
     private fun removeDie(key: String) {
-        val count = (pool[key] ?: 0) - 1
-        if (count > 0) pool[key] = count else pool.remove(key)
-        renderPool()
+        val current = notationInput.text.toString()
+        val next = removeDieFromNotation(current, key)
+        notationInput.setText(next)
+        notationInput.setSelection(next.length)
+        syncChipsWithNotation(next)
     }
 
     private fun clearPool() {
-        pool.clear()
-        renderPool()
+        notationInput.setText("")
+        notationInput.setSelection(0)
+        syncChipsWithNotation("")
     }
 
-    /** "2d6+1d20" / "4dF" / "2c" — mesma gramatica multi-termo do rules-engine. */
-    private fun poolNotation(): String =
-        pool.entries.joinToString("+") { (key, count) ->
-            if (key == "C") "${count}c" else if (key == "F") "${count}dF" else "${count}d$key"
+    private fun addDieToNotation(notation: String, key: String): String {
+        val trimmed = notation.trim()
+        val label = if (key == "C") "1c" else if (key == "F") "1dF" else "1d$key"
+
+        if (trimmed.isEmpty()) return label
+
+        // 1. Slot aberto no fim: ex: "1[", "2[", "3[", "... + 1[", "{2d6} vs {"
+        val openBracketRegex = Regex("""^(.*(?:\b[123]\[|\{))\s*$""")
+        val openMatch = openBracketRegex.find(trimmed)
+        if (openMatch != null) {
+            val prefix = openMatch.groupValues[1]
+            val closing = if (prefix.endsWith("{")) "}" else "]"
+            return "$prefix$label$closing"
         }
 
-    private fun renderPool() {
-        val notation = poolNotation()
+        // 2. Bloco de slot fechado no fim: ex: "1[2d6]" ou "1[2d6+1d4]"
+        val slotBlockRegex = Regex("""^(.*?\b[123]\[)([^\]]*?)(\])\s*$""")
+        val slotMatch = slotBlockRegex.find(trimmed)
+        if (slotMatch != null) {
+            val prefix = slotMatch.groupValues[1]
+            val inner = slotMatch.groupValues[2].trim()
+            val suffix = slotMatch.groupValues[3]
+            val innerUpdated = addDieToSimpleExpression(inner, key)
+            return "$prefix$innerUpdated$suffix"
+        }
+
+        // 3. Operador ou separador pendente no fim: ex: "2d6 +", "2d6+", "vs"
+        if (Regex("""[\+\-\*\/]\s*$""").containsMatchIn(trimmed) || Regex("""\bvs\s*$""", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)) {
+            val sep = if (trimmed.endsWith(" ")) "" else " "
+            return "$trimmed$sep$label"
+        }
+
+        // 4. Estado normal do compositor
+        return addDieToSimpleExpression(trimmed, key)
+    }
+
+    private fun addDieToSimpleExpression(expr: String, key: String): String {
+        val label = if (key == "C") "1c" else if (key == "F") "1dF" else "1d$key"
+        val diePattern = if (key == "C") Regex("""(\d+)c\b""", RegexOption.IGNORE_CASE)
+            else if (key == "F") Regex("""(\d+)dF\b""", RegexOption.IGNORE_CASE)
+            else Regex("""(\d+)d$key\b""", RegexOption.IGNORE_CASE)
+
+        val match = diePattern.find(expr)
+        if (match != null) {
+            val count = match.groupValues[1].toIntOrNull() ?: 1
+            val newCount = count + 1
+            val replacement = if (key == "C") "${newCount}c"
+                else if (key == "F") "${newCount}dF"
+                else "${newCount}d$key"
+            return expr.replaceFirst(diePattern, replacement)
+        }
+
+        if (expr.isEmpty()) return label
+        return "$expr+$label"
+    }
+
+    private fun removeDieFromNotation(notation: String, key: String): String {
+        val trimmed = notation.trim()
+        if (trimmed.isEmpty()) return ""
+
+        val slotBlockRegex = Regex("""^(.*?\b[123]\[)([^\]]*?)(\])\s*$""")
+        val slotMatch = slotBlockRegex.find(trimmed)
+        if (slotMatch != null) {
+            val prefix = slotMatch.groupValues[1]
+            val inner = slotMatch.groupValues[2].trim()
+            val suffix = slotMatch.groupValues[3]
+            val innerUpdated = removeDieFromSimpleExpression(inner, key)
+            if (innerUpdated.isEmpty()) {
+                return prefix.replace(Regex("""\b[123]\[$"""), "").trim().removeSuffix("+").trim()
+            }
+            return "$prefix$innerUpdated$suffix"
+        }
+
+        return removeDieFromSimpleExpression(trimmed, key)
+    }
+
+    private fun removeDieFromSimpleExpression(expr: String, key: String): String {
+        val diePattern = if (key == "C") Regex("""(\d+)c\b""", RegexOption.IGNORE_CASE)
+            else if (key == "F") Regex("""(\d+)dF\b""", RegexOption.IGNORE_CASE)
+            else Regex("""(\d+)d$key\b""", RegexOption.IGNORE_CASE)
+
+        val match = diePattern.find(expr) ?: return expr
+        val count = match.groupValues[1].toIntOrNull() ?: 1
+        if (count > 1) {
+            val newCount = count - 1
+            val replacement = if (key == "C") "${newCount}c"
+                else if (key == "F") "${newCount}dF"
+                else "${newCount}d$key"
+            return expr.replaceFirst(diePattern, replacement)
+        } else {
+            var updated = expr.replaceFirst(diePattern, "")
+            updated = updated.replace("++", "+")
+            return updated.trim().removePrefix("+").removeSuffix("+").trim()
+        }
+    }
+
+    private fun syncChipsWithNotation(notation: String) {
         val density = root.context.resources.displayMetrics.density
         for ((key, chip) in chips) {
-            val count = pool[key] ?: 0
+            val pattern = if (key == "C") Regex("""(\d+)c\b""", RegexOption.IGNORE_CASE)
+                else if (key == "F") Regex("""(\d+)dF\b""", RegexOption.IGNORE_CASE)
+                else Regex("""(\d+)d$key\b""", RegexOption.IGNORE_CASE)
+
+            var count = 0
+            for (match in pattern.findAll(notation)) {
+                count += match.groupValues[1].toIntOrNull() ?: 1
+            }
+
             val label = if (key == "C") "carta" else if (key == "F") "dF" else "d$key"
             chip.text = if (count > 0) {
                 if (key == "C") "${count}c" else "${count}$label"
@@ -1434,9 +1538,6 @@ class OverlayView(context: Context) {
             chip.setCompoundDrawablesWithIntrinsicBounds(null, iconDrawable, null, null)
             chip.background = chipBackground(active = active)
         }
-        // Dispara o TextWatcher, que atualiza o rotulo do ROLAR.
-        notationInput.setText(notation)
-        notationInput.setSelection(notation.length)
     }
 
     private fun updateRollButton() {
