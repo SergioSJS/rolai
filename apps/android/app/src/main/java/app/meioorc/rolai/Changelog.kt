@@ -12,6 +12,19 @@ data class ChangelogEntry(val version: String, val date: String, val notes: List
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            "1.3.0",
+            "2026-08-20",
+            listOf(
+                "Som de carta no Android: puxar carta no aparelho — ou receber a de outro jogador na sala — agora faz barulho. Antes era mudo nos dois sentidos.",
+                "Som no modo stream/OBS: o palco subia sem áudio quando a aba não estava em primeiro plano (o caso de toda Browser Source) e nunca mais tentava. Agora liga sozinho assim que a aba aparece, e a carta também toca.",
+                "Corrigido: arrastar o seletor de cor do dado dentro de uma sala derrubava quem mexeu para fora dela — cada movimento reabria a conexão e estourava o limite do servidor.",
+                "Corrigido: trocar a cor dos dados em sala anunciava só o slot 1, e a mesa continuava vendo os dados 2 e 3 na cor antiga até a próxima entrada.",
+                "Android: o campo Servidor (avançado) passa a aceitar um backend na rede local, não só via cabo USB.",
+                "Android: quando a sala cai, o motivo aparece no log em vez de só 'reconectando…'.",
+                "App mais leve para abrir: a cena 3D do baralho saiu do carregamento inicial (-30% no pacote de entrada).",
+            ),
+        ),
+        ChangelogEntry(
             "1.2.0",
             "2026-08-20",
             listOf(

@@ -4,7 +4,7 @@ Todas as mudanças notáveis neste projeto estão documentadas aqui.
 Formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/)
 e o projeto adere a [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
-## [Não lançado]
+## [1.3.0] — 2026-08-20
 
 ### Mudado
 - **Fatiamento dos arquivos grandes** (sem mudança de comportamento):
@@ -25,19 +25,61 @@ e o projeto adere a [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   overlay. O CI falha se o gerado divergir do commitado.
 - **Profiles varridos do diretório**: `apps/web/src/profiles.ts` usa
   `import.meta.glob` em vez de 21 imports escritos à mão.
+- `resolveSystemIndex` saiu da `SettingsActivity` para `SystemSpinner.kt`,
+  como função pura — guardava a correção de um bug que já apareceu duas
+  vezes e não tinha teste possível onde estava.
+
+### Adicionado
+- **Som de carta no Android**, nos dois sentidos: carta puxada no aparelho e
+  carta que chega da sala. Não havia caminho nenhum — o Service não tocava
+  nada em carta, `DiceSounds` só conhecia dado, e o palco roda com `sound=0`
+  de propósito (áudio de WebView pede foco e abaixa a música da mesa).
+- **Som de carta no modo stream/OBS**: `playCardDraw` só existia no App
+  principal; o `StreamApp` animava em silêncio.
 
 ### Corrigido
+- **Arrastar o seletor de cor derrubava quem mexeu para fora da sala**:
+  `<input type="color">` dispara a cada movimento, cada mudança reabria o
+  WebSocket (a aparência viaja no handshake), e 28 conexões em segundos
+  estouravam o `ws_connect_limit_per_minute`. O 4429 resultante é tratado
+  como recusa definitiva, então o cliente limpava o código da sala.
+  Agora há debounce de 300 ms e a reconexão é ignorada quando a aparência
+  não mudou de fato.
+- **Palco de stream subia mudo e nunca mais tentava**: aba em segundo plano
+  não carrega mídia (o caso de toda Browser Source do OBS), então o
+  `canplaythrough` que a lib espera nunca chegava e a corrida de 2,5 s
+  sempre perdia. O teto foi para 9 s, aba oculta não tenta (sobe mudo na
+  hora em vez de travar) e o áudio entra sozinho quando a aba aparece.
 - Trocar a cor dos dados dentro de uma sala reconectava mandando só o
   estilo do slot 1 no handshake — a mesa continuava vendo os dados 2 e 3 na
   cor antiga até o próximo join.
+- **Android: servidor na rede local era impossível.** O
+  `network_security_config` só liberava cleartext em loopback, então o campo
+  "Servidor (avançado)" só funcionava via `adb reverse`. Build de debug
+  passa a permitir; o release continua exigindo TLS.
+- **Android: queda de sala sem motivo.** `RoomClient.onFailure` engolia o
+  Throwable — só se via "conectando… / reconectando…" em loop. Agora loga
+  tipo, mensagem e código HTTP.
+- Backend deixa de estourar `Exception in ASGI application` quando o cliente
+  fecha no meio do handshake e o snapshot sai para um socket morto.
+- Toast de código curto era lido como recusa, mas a entrada nunca foi
+  bloqueada — texto reescrito para dizer o que de fato acontece.
+- Ferramentas de validação que estavam quebradas há tempos e ninguém sabia:
+  a suíte instrumentada não compilava desde a 1.1.1, `OfflineStageTest`
+  pedia `index.html/index.html` e o smoke de sala fim-a-fim comparava o
+  roster com um formato que mudou quando o dado ganhou cor.
 
 ### Desempenho
 - **three.js fora do chunk de entrada**: o palco 3D de cartas passou a ser
   import dinâmico. Entrada de 1,39 MB -> 915 KB (419 KB -> 293 KB gzip).
 
 ### Testes
-- 18 casos novos de JVM cobrindo a formatação rica do overlay
-  (`RichTextPlanTest`), que antes só dava pra conferir olhando o celular.
+- 18 casos de JVM cobrindo a formatação rica do overlay (`RichTextPlanTest`),
+  que antes só dava para conferir olhando o celular.
+- 17 casos cobrindo a sala como o App a usa (`useRoomSession`), incluindo os
+  dois de regressão conferidos por mutação.
+- 8 casos para `SystemSpinner`, a resolução de modo salvo que já quebrou
+  duas vezes.
 
 ## [1.2.0] — 2026-08-20
 
