@@ -2,66 +2,69 @@
 // versionados em packages/rules-engine/profiles via `?raw` do Vite — a UI
 // nunca parseia YAML por conta propria, quem valida e o rules-engine
 // (parseProfile). Ver docs/system-profiles.md.
+//
+// A lista e varrida do diretorio (import.meta.glob), nao escrita a mao:
+// eram 21 linhas de import mais um mapa de 21 entradas, e um profile novo
+// so aparecia se as DUAS fossem editadas. Agora basta o YAML existir.
 
 import { parseProfile } from "@rolai/rules-engine";
 import type { SystemProfile } from "@rolai/rules-engine";
-import ironswornYaml from "@rolai/rules-engine/profiles/ironsworn.yaml?raw";
-import pbtaYaml from "@rolai/rules-engine/profiles/pbta.yaml?raw";
-import pbta2d10Yaml from "@rolai/rules-engine/profiles/pbta2d10.yaml?raw";
-import fitdYaml from "@rolai/rules-engine/profiles/fitd.yaml?raw";
-import fateYaml from "@rolai/rules-engine/profiles/fate.yaml?raw";
-import d20Yaml from "@rolai/rules-engine/profiles/d20.yaml?raw";
-import d100Yaml from "@rolai/rules-engine/profiles/d100.yaml?raw";
-import rollUnderYaml from "@rolai/rules-engine/profiles/roll_under.yaml?raw";
-import poolD6Yaml from "@rolai/rules-engine/profiles/pool_d6.yaml?raw";
-import wod5Yaml from "@rolai/rules-engine/profiles/wod5.yaml?raw";
-import infaernumYaml from "@rolai/rules-engine/profiles/infaernum.yaml?raw";
-import infaernumSimOuNaoYaml from "@rolai/rules-engine/profiles/infaernum_sim_ou_nao.yaml?raw";
-import infaernumIdeiasYaml from "@rolai/rules-engine/profiles/infaernum_ideias.yaml?raw";
-import fractalYaml from "@rolai/rules-engine/profiles/fractal.yaml?raw";
-import firelightsYaml from "@rolai/rules-engine/profiles/firelights.yaml?raw";
-import yzeYaml from "@rolai/rules-engine/profiles/yze.yaml?raw";
-import yzeFblYaml from "@rolai/rules-engine/profiles/yze_fbl.yaml?raw";
-import yzeAlienYaml from "@rolai/rules-engine/profiles/yze_alien.yaml?raw";
-import yzeWduYaml from "@rolai/rules-engine/profiles/yze_wdu.yaml?raw";
-import trophyDarkYaml from "@rolai/rules-engine/profiles/trophy_dark.yaml?raw";
-import trophyGoldYaml from "@rolai/rules-engine/profiles/trophy_gold.yaml?raw";
 
-// A ordem aqui e a ordem do seletor de sistema na UI: do mais comum na
-// mesa pro mais especifico.
-const PROFILE_YAMLS: Record<string, string> = {
-  d20: d20Yaml,
-  fate: fateYaml,
-  pbta: pbtaYaml,
-  pbta2d10: pbta2d10Yaml,
-  fitd: fitdYaml,
-  ironsworn: ironswornYaml,
-  firelights: firelightsYaml,
-  trophy_dark: trophyDarkYaml,
-  trophy_gold: trophyGoldYaml,
-  d100: d100Yaml,
-  roll_under: rollUnderYaml,
-  pool_d6: poolD6Yaml,
-  wod5: wod5Yaml,
-  yze: yzeYaml,
-  yze_fbl: yzeFblYaml,
-  yze_alien: yzeAlienYaml,
-  yze_wdu: yzeWduYaml,
-  infaernum: infaernumYaml,
-  infaernum_sim_ou_nao: infaernumSimOuNaoYaml,
-  infaernum_ideias: infaernumIdeiasYaml,
-  fractal: fractalYaml,
-};
+const YAML_MODULES = import.meta.glob("../../../packages/rules-engine/profiles/*.yaml", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+}) as Record<string, string>;
 
-let cache: Map<string, SystemProfile> | null = null;
+// Ordem do seletor de sistema na UI: do mais comum na mesa pro mais
+// especifico. Era a ordem das chaves do mapa antigo — agora explicita,
+// porque a varredura devolve o diretorio em ordem alfabetica.
+//
+// Profile que nao estiver aqui entra no fim, em ordem alfabetica: um YAML
+// novo aparece na UI sozinho, so nao escolhe onde.
+const ORDER = [
+  "d20",
+  "fate",
+  "pbta",
+  "pbta2d10",
+  "fitd",
+  "ironsworn",
+  "firelights",
+  "trophy_dark",
+  "trophy_gold",
+  "d100",
+  "roll_under",
+  "pool_d6",
+  "wod5",
+  "yze",
+  "yze_fbl",
+  "yze_alien",
+  "yze_wdu",
+  "infaernum",
+  "infaernum_sim_ou_nao",
+  "infaernum_ideias",
+  "fractal",
+];
+
+function idFromPath(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1).replace(/\.yaml$/, "");
+}
+
+function rank(id: string): number {
+  const i = ORDER.indexOf(id);
+  return i === -1 ? ORDER.length : i;
+}
+
+let cache: SystemProfile[] | null = null;
 
 export function availableProfiles(): SystemProfile[] {
   if (cache === null) {
-    cache = new Map(
-      Object.entries(PROFILE_YAMLS).map(([id, yaml]) => [id, parseProfile(yaml)]),
-    );
+    cache = Object.entries(YAML_MODULES)
+      .map(([path, yaml]) => [idFromPath(path), yaml] as const)
+      .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+      .map(([, yaml]) => parseProfile(yaml));
   }
-  return [...cache.values()];
+  return cache;
 }
 
 export function getProfile(system: string): SystemProfile | undefined {
