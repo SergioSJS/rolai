@@ -35,6 +35,9 @@ class DiceSounds(context: Context) {
      */
     private val samples = mutableListOf<Int>()
 
+    /** Idem, pras cartas — ver [card]. */
+    private val cardSamples = mutableListOf<Int>()
+
     private val handler = Handler(Looper.getMainLooper())
     private val random = Random.Default
 
@@ -48,19 +51,44 @@ class DiceSounds(context: Context) {
         )
         .build()
 
+    /** id do SoundPool -> e carta? Preenchido no load, lido no callback. */
+    private val ehCarta = mutableMapOf<Int, Boolean>()
+
     init {
         pool.setOnLoadCompleteListener { _, sampleId, status ->
             if (status == 0) {
-                samples.add(sampleId)
+                if (ehCarta[sampleId] == true) cardSamples.add(sampleId) else samples.add(sampleId)
             } else {
-                android.util.Log.w("rolai", "som do dado: amostra $sampleId nao carregou")
+                android.util.Log.w("rolai", "som: amostra $sampleId nao carregou")
             }
         }
-        for (res in SAMPLES) {
-            runCatching { pool.load(context, res, 1) }.onFailure {
-                // Sem som o dado continua rolando — nunca derrubar a rolagem.
-                android.util.Log.w("rolai", "som do dado: recurso $res indisponivel", it)
-            }
+        for ((res, carta) in SAMPLES.map { it to false } + CARD_SAMPLES.map { it to true }) {
+            runCatching { pool.load(context, res, 1) }
+                .onSuccess { ehCarta[it] = carta }
+                .onFailure {
+                    // Sem som o dado continua rolando — nunca derrubar a rolagem.
+                    android.util.Log.w("rolai", "som: recurso $res indisponivel", it)
+                }
+        }
+    }
+
+    /**
+     * Carta pousando na mesa. Uma amostra por carta puxada, com um respiro
+     * entre elas quando vem mais de uma — puxar 3 de uma vez tocando tudo no
+     * mesmo instante vira um estalo so.
+     *
+     * Vale pra carta puxada AQUI e pra que chega da sala: os dois caminhos
+     * eram mudos, porque o som de carta so existia na web (deckSound.ts) e o
+     * palco do overlay roda com `&sound=0`.
+     */
+    fun card(count: Int = 1) {
+        if (cardSamples.isEmpty()) return
+        for (i in 0 until count.coerceIn(1, MAX_STREAMS)) {
+            val atraso = i * CARD_GAP_MS
+            handler.postDelayed({
+                val id = cardSamples[random.nextInt(cardSamples.size)]
+                pool.play(id, CARD_VOLUME, CARD_VOLUME, 1, 0, 1f)
+            }, atraso)
         }
     }
 
@@ -104,6 +132,12 @@ class DiceSounds(context: Context) {
     companion object {
         private const val MAX_STREAMS = 6
 
+        /** Respiro entre cartas de uma mesma puxada. */
+        private const val CARD_GAP_MS = 90L
+
+        /** Carta e mais discreta que dado batendo na mesa. */
+        private const val CARD_VOLUME = 0.7f
+
         /**
          * Amostras de plastico (o dado padrao do app), em WAV, em `res/raw`.
          *
@@ -123,6 +157,18 @@ class DiceSounds(context: Context) {
             R.raw.dice_hit2,
             R.raw.dice_hit3,
             R.raw.dice_hit4,
+        )
+
+        /**
+         * Carta na mesa. Mesmos arquivos Kenney CC0 que a web usa
+         * (public/sounds/cards/card-place-*.ogg) — copiados pra res/raw
+         * porque o palco vai MUDO no overlay e o audio aqui e nativo.
+         */
+        private val CARD_SAMPLES = listOf(
+            R.raw.card_place1,
+            R.raw.card_place2,
+            R.raw.card_place3,
+            R.raw.card_place4,
         )
 
         /**

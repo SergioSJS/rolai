@@ -62,10 +62,25 @@ type DiceColorsLike = {
 // Quanto engrossar o contorno do numero (ver makeOutlineVisible).
 const OUTLINE_WIDTH_BOOST = 3.5;
 
-// Teto pro initialize() COM som. Generoso pro caso lento (rede ruim, cache
-// frio) e curto o bastante pra ninguem ficar olhando pra mesa vazia — se
-// estourar, o palco sobe sem audio (ver init).
-const SOUND_INIT_TIMEOUT_MS = 2500;
+// Teto pro initialize() COM som. A lib carrega os 75 mp3 EM SERIE, cada um
+// esperando `canplaythrough` — em cache frio isso passa longe de 2.5s, que
+// era o valor antigo e derrubava o audio quase sempre. Generoso o bastante
+// pro caso lento e curto o bastante pra ninguem olhar pra mesa vazia: se
+// estourar, o palco sobe sem audio e tenta de novo depois (ver init).
+const SOUND_INIT_TIMEOUT_MS = 9000;
+
+/**
+ * Aba em segundo plano.
+ *
+ * O Chrome ADIA carregamento de midia em aba oculta: o `load()` do <audio>
+ * nem sai do `readyState: 0`, entao o `canplaythrough` que a lib espera
+ * nunca chega. Medido: arquivo servido em 200/audio/mpeg e mesmo assim
+ * nenhum evento em 4.4s. Como a Browser Source do OBS nunca e aba visivel,
+ * o palco de stream subia MUDO sempre.
+ */
+function documentoOculto(): boolean {
+  return typeof document !== "undefined" && document.hidden;
+}
 
 // Teto pra troca de tema entre rolagens (carrega a imagem da textura de
 // quem rolou). Curto: e o intervalo entre pedir a rolagem e ver o dado.
@@ -523,6 +538,20 @@ export class DiceBoxRenderer implements RollRenderer {
   // barato e evita a fonte mais provavel de "conectou mas o dado nao aparece".
   private disposed = false;
 
+  /**
+   * Subiu SEM audio mesmo tendo sido pedido com som.
+   *
+   * Aba oculta nao carrega midia: o Chrome adia o `load()` do <audio>, o
+   * `canplaythrough` nunca chega e a corrida abaixo sempre perde. Uma
+   * Browser Source do OBS NUNCA e aba visivel, entao o palco subia mudo
+   * pra sempre — e nao havia segunda chance, porque o fallback so rodava
+   * na montagem. Este campo e a segunda chance.
+   */
+  private soundPendente = false;
+  private aoVoltarVisivel: (() => void) | null = null;
+  /** Enquanto true, remontar tiraria dado da tela no meio da animacao. */
+  private rolando = false;
+
   constructor(private readonly options: DiceBoxOptions) {}
 
   async init(container: HTMLElement): Promise<void> {
@@ -566,8 +595,12 @@ export class DiceBoxRenderer implements RollRenderer {
     //
     // Por isso a corrida com relogio em vez de try/catch: `catch` nao pega
     // promise pendente. Estourou o tempo, remonta sem audio.
-    let box = build(this.options.sounds);
-    if (this.options.sounds) {
+    // Aba oculta nem tenta: o audio nao vai carregar e o unico efeito seria
+    // segurar o palco por SOUND_INIT_TIMEOUT_MS antes de desistir. Sobe
+    // mudo agora e liga o som quando a aba aparecer.
+    const podeAudio = this.options.sounds && !documentoOculto();
+    let box = build(podeAudio);
+    if (podeAudio) {
       const withSound = await Promise.race([
         box.initialize().then(() => true),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), SOUND_INIT_TIMEOUT_MS)),
@@ -577,11 +610,13 @@ export class DiceBoxRenderer implements RollRenderer {
         container.replaceChildren();
         box = build(false);
         await box.initialize();
+        this.soundPendente = true;
       }
     } else {
       // Sem som nao ha promise de audio pra travar — e o palco sobe antes,
-      // por nao carregar os 45 mp3.
+      // por nao carregar os 75 mp3.
       await box.initialize();
+      this.soundPendente = this.options.sounds;
     }
     if (this.disposed) return;
     // A lib cria TODO material de dado com `transparent: true` e
@@ -595,6 +630,28 @@ export class DiceBoxRenderer implements RollRenderer {
     this.box = box;
     this.mountBarrier(container);
     this.watchImpacts(box);
+    this.armarRecuperacaoDeSom(container);
+  }
+
+  /**
+   * Tenta o audio de novo quando a aba ficar visivel.
+   *
+   * Sem isto, quem carregou a pagina em segundo plano (OBS, aba aberta e
+   * deixada de lado) ficava mudo pro resto da sessao: o palco monta uma vez
+   * e nunca mais reavalia. Remonta so quando nao ha dado na tela — trocar o
+   * canvas no meio da animacao faria o dado sumir.
+   */
+  private armarRecuperacaoDeSom(container: HTMLElement): void {
+    if (this.aoVoltarVisivel !== null || typeof document === "undefined") return;
+    const tentar = () => {
+      if (this.disposed || !this.soundPendente || documentoOculto() || this.rolando) return;
+      this.soundPendente = false;
+      void this.init(container).catch(() => {
+        // Falhou remontar: segue com o palco mudo que ja esta na tela.
+      });
+    };
+    this.aoVoltarVisivel = tentar;
+    document.addEventListener("visibilitychange", tentar);
   }
 
   /** Uma faixa por borda. Vazias enquanto ninguem bate. */
@@ -721,6 +778,7 @@ export class DiceBoxRenderer implements RollRenderer {
     if (!this.box) return;
     const dice = diceFromResult(result);
     if (dice.length === 0) return;
+    this.rolando = true;
 
     // Resolve os estilos ativos pros slots 1, 2 e 3:
     const activeStyles: DiceStyles =
@@ -783,6 +841,10 @@ export class DiceBoxRenderer implements RollRenderer {
       await this.box.roll(buildBoxNotation(dice));
     } finally {
       this.slotColorResolver = null;
+      this.rolando = false;
+      // A rolagem pode ter sido justamente o que segurou a remontagem com
+      // audio — reavalia agora que a mesa esta parada.
+      this.aoVoltarVisivel?.();
     }
   }
 
@@ -808,6 +870,10 @@ export class DiceBoxRenderer implements RollRenderer {
   dispose(): void {
     // A lib nao expoe destroy; remover o canvas basta pra esta etapa.
     this.disposed = true;
+    if (this.aoVoltarVisivel !== null && typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.aoVoltarVisivel);
+      this.aoVoltarVisivel = null;
+    }
     this.box = null;
     this.barriers = {};
     this.container?.replaceChildren();

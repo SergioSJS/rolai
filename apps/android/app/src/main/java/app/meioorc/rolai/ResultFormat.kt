@@ -58,6 +58,10 @@ object ResultFormat {
             if (suit == "joker") "Curinga" else "${card.optString("rank")}${SUIT_SYMBOL[suit] ?: ""}"
         }
 
+    /** Quantas cartas vieram no evento — so pra dosar o som (DiceSounds.card). */
+    fun cardCountOf(cardsJson: String): Int =
+        runCatching { JSONArray(cardsJson).length().coerceAtLeast(1) }.getOrDefault(1)
+
     /** Sobrecarga pra quando as cartas chegam como JSON em string (eco da sala). */
     fun formatCards(cardsJson: String): String = try {
         formatCards(JSONArray(cardsJson))

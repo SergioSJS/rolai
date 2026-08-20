@@ -19,6 +19,7 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import app.meioorc.rolai.ResultFormat.cardCountOf
 import app.meioorc.rolai.ResultFormat.diceCountOf
 import app.meioorc.rolai.ResultFormat.formatCards
 import app.meioorc.rolai.ResultFormat.formatDeckConfigChange
@@ -559,6 +560,9 @@ class OverlayService : Service() {
 
         override fun onDeckDraw(player: String, cardsJson: String, remaining: Int) {
             overlay.addActivityLine("$player: ${formatDeckDrawAction(cardsJson)}")
+            // Carta de outro jogador tambem soa — o barulho e o aviso de que
+            // aconteceu algo na mesa, igual a rolagem dos outros.
+            diceSounds?.card(cardCountOf(cardsJson))
             // Mesmo empurrao direto do onRoll acima — o palco anima sem
             // depender de nenhuma WebView espectadora.
             diceStage.playCard(cardsJson)
@@ -997,6 +1001,10 @@ class OverlayService : Service() {
         val remaining = payload.optInt("remaining", deck.optJSONArray("drawPile")?.length() ?: 0)
         overlay.setDeckRemaining(remaining)
         val cards = payload.optJSONArray("cards") ?: return
+        // Carta puxada aqui: som nativo, igual ao do dado. O palco vai mudo
+        // (`&sound=0`) pra nao pedir foco de audio, entao sem isto a puxada
+        // era completamente silenciosa no aparelho.
+        diceSounds?.card(cards.length())
         overlay.showResult(formatCards(cards))
         // Mini-bolha "rolar" repete ISTO agora, nao a ultima rolagem de dado
         // — mesma logica de rollNotation/rollWithInputs, so que pra carta.

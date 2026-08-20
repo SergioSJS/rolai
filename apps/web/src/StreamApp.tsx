@@ -19,6 +19,7 @@ import type { DiceStyle, DiceStyles } from "./settings";
 import type { RollRenderer } from "./renderers/types";
 import { exceedsAnimationCap, cardsFromResult } from "./renderers/types";
 import { createRenderer } from "./renderers";
+import { playCardDraw } from "./deckSound";
 import { TextRenderer } from "./renderers/text";
 import { RoomClient } from "./room/client";
 import type { RoomEvent } from "./room/reducer";
@@ -153,9 +154,14 @@ export function StreamApp({ options }: { options: StreamOptions }) {
       rendererRef.current?.clear();
       setShown(null);
       setShownCards((prev) => ({ cards, seq: (prev?.seq ?? 0) + 1 }));
+      // O som da carta so existia no App principal (App.tsx/DeckPanel.tsx):
+      // aqui a carta entrava muda, tanto a puxada por outro jogador na sala
+      // quanto a empurrada pelo overlay do Android. `sound=0` na URL
+      // desliga, que e o que o palco do APK usa (la o audio e nativo).
+      if (options.sound) playCardDraw();
       scheduleCardClear();
     },
-    [scheduleCardClear],
+    [scheduleCardClear, options.sound],
   );
 
   // Sincroniza as variáveis CSS para chips dos slots 1, 2 e 3
