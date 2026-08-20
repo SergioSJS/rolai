@@ -38,4 +38,30 @@ object ProfileFamilies {
     /** Familia que contem `system`, se houver — usado pelo overlay pra
      *  mostrar as abas de modo dentro da propria caixa de rolar. */
     fun familyFor(system: String): ProfileFamily? = ALL.find { fam -> fam.members.any { it.system == system } }
+
+    /**
+     * Nome curto do sistema pra aba do overlay — o painel tem 300dp e o
+     * label inteiro ("Powered by the Apocalypse (2d6)") nao cabe.
+     *
+     * Familia manda (o shortLabel dela ja existe pra isso); depois os
+     * apelidos que a mesa usa; e por fim o proprio label cortado no primeiro
+     * separador, que cobre sistema novo sem ninguem precisar lembrar de
+     * cadastrar apelido.
+     */
+    fun shortLabelFor(system: String, label: String): String {
+        familyFor(system)?.let { return it.shortLabel }
+        return when (system) {
+            "roll_under" -> "Roll Under"
+            "wod5" -> "WoD v5"
+            "pbta", "pbta2d10" -> "PbtA"
+            "pool_d6" -> "Pool d6"
+            "fate" -> "Fate / Fudge"
+            else -> when {
+                label.contains(" — ") -> label.substringBefore(" — ").trim()
+                label.contains(" - ") -> label.substringBefore(" - ").trim()
+                label.contains(" (") -> label.substringBefore(" (").trim()
+                else -> label
+            }
+        }
+    }
 }

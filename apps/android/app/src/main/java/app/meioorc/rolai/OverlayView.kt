@@ -848,27 +848,8 @@ class OverlayView(context: Context) {
 
     // ---------- campos do sistema ativo (dentro do PANEL) ----------
 
-    private fun systemShortLabel(info: SystemInfo?): String {
-        if (info == null) return "Sistema"
-        val family = ProfileFamilies.familyFor(info.system)
-        if (family != null) return family.shortLabel
-        return when (info.system) {
-            "roll_under" -> "Roll Under"
-            "wod5" -> "WoD v5"
-            "pbta", "pbta2d10" -> "PbtA"
-            "pool_d6" -> "Pool d6"
-            "fate" -> "Fate / Fudge"
-            else -> {
-                val raw = info.label
-                when {
-                    raw.contains(" — ") -> raw.substringBefore(" — ").trim()
-                    raw.contains(" - ") -> raw.substringBefore(" - ").trim()
-                    raw.contains(" (") -> raw.substringBefore(" (").trim()
-                    else -> raw
-                }
-            }
-        }
-    }
+    private fun systemShortLabel(info: SystemInfo?): String =
+        if (info == null) "Sistema" else ProfileFamilies.shortLabelFor(info.system, info.label)
 
     /**
      * Abre o compositor (chips + notacao) com os campos do sistema ativo
