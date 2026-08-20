@@ -458,29 +458,22 @@ class SettingsActivity : Activity() {
     // ---------- preferencias ----------
 
     /**
-     * Posicao do sistema salvo no spinner principal.
+     * Posicao do sistema salvo no spinner principal, aplicando a troca de
+     * member ativo quando o salvo e um modo de familia.
      *
-     * Familia entra no spinner UMA vez, com o PRIMEIRO member como valor
-     * (`yze` pela "Year Zero", `infaernum` pelo "Infaernum") — entao um
-     * modo salvo que nao seja o primeiro ("yze_fbl", "infaernum_ideias")
-     * nao esta em `systemIds` e o `indexOf` devolvia -1. O fallback pro
-     * indice 0 e "Notação livre": abrir configuracoes escolhia sozinho
-     * "sem sistema", e o `saveFromViews` do proprio spinner GRAVAVA isso
-     * por cima — o modo do jogador sumia so de olhar a tela.
-     *
-     * Aqui o member salvo vira o valor ativo DA FAMILIA (`systemIds`/
-     * `systemInfos` sao mutaveis de proposito, e o spinner "Modo" ja le
-     * dali qual member marcar).
+     * A decisao mora em SystemSpinner (pura, testada); aqui fica so a
+     * mutacao das listas do spinner, que e o que exige a Activity.
      */
     private fun resolveSystemIndex(system: String): Int {
-        val direct = systemIds.indexOf(system)
-        if (direct >= 0) return direct
-        val family = ProfileFamilies.familyFor(system) ?: return 0
-        val position = familyAtPosition.entries.find { it.value.key == family.key }?.key ?: return 0
-        val info = systemInfoById[system] ?: return position
-        systemIds[position] = system
-        systemInfos[position] = info
-        return position
+        val r = SystemSpinner.resolve(system, systemIds, familyAtPosition, systemInfoById)
+        val member = r.activeMember
+        if (member != null) {
+            // `systemIds`/`systemInfos` sao mutaveis de proposito: o spinner
+            // "Modo" le dali qual member marcar.
+            systemIds[r.position] = member.system
+            systemInfos[r.position] = member
+        }
+        return r.position
     }
 
     private fun getActiveSlotStyle(): DiceSlotStyle = when (activeDiceSlot) {
