@@ -19,7 +19,10 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
+import org.json.JSONArray
+import org.json.JSONObject
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -272,12 +275,13 @@ class OverlayView(context: Context) {
         // (RESULT_FLASH_MS) ou ao toque. NAO abre o cartao de historico.
         resultFlash = TextView(context).apply {
             setTextColor(TEXT)
-            textSize = 16f
-            setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+            textSize = 15f
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             gravity = Gravity.CENTER
             background = cardBackground()
             elevation = 10.dp().toFloat()
             setPadding(14.dp(), 10.dp(), 14.dp(), 10.dp())
+            setLineSpacing(3.dp().toFloat(), 1f)
             visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -658,9 +662,10 @@ class OverlayView(context: Context) {
         // ---------- RESULTADO & LOG COMUM ----------
         panelResultView = TextView(context).apply {
             setTextColor(TEXT)
-            textSize = 20f
+            textSize = 18f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
+            setLineSpacing(3.dp().toFloat(), 1f)
         }
 
         activityView = TextView(context).apply {
@@ -1697,17 +1702,21 @@ class OverlayView(context: Context) {
     }
 
     fun showResult(text: CharSequence, tone: OutcomeTone = OutcomeTone.NEUTRAL) {
-        // Falha em vermelho: rolando por cima de outro app, a linha some no
-        // meio do que estiver embaixo se sucesso e falha tiverem a mesma cor.
-        val cor = when (tone) {
-            OutcomeTone.FAILURE -> FAILURE_TEXT
-            OutcomeTone.PARTIAL -> PARTIAL_TEXT
-            else -> TEXT
+        val formatted = if (text is String && text.startsWith("{") && text.contains("\"groups\"")) {
+            formatRichResult(text)
+        } else if (text is String) {
+            val cor = when (tone) {
+                OutcomeTone.FAILURE -> FAILURE_TEXT
+                OutcomeTone.PARTIAL -> PARTIAL_TEXT
+                else -> TEXT
+            }
+            panelResultView.setTextColor(cor)
+            historyResultView.setTextColor(cor)
+            resultFlash.setTextColor(cor)
+            formatRichLine(text)
+        } else {
+            text
         }
-        panelResultView.setTextColor(cor)
-        historyResultView.setTextColor(cor)
-        resultFlash.setTextColor(cor)
-        val formatted = if (text is String) formatRichLine(text) else text
         panelResultView.text = formatted
         historyResultView.text = formatted
         resultFlash.text = formatted
@@ -1869,6 +1878,132 @@ class OverlayView(context: Context) {
         private val SLOT_2_COLOR = Color.rgb(0xF8, 0x71, 0x71) // Sangue (#f87171)
         private val SLOT_3_COLOR = Color.rgb(0x38, 0xBD, 0xF8) // Gelo (#38bdf8)
         private val CARD_RED_COLOR = Color.rgb(0xFF, 0x6B, 0x6B)
+
+        /**
+         * Formata o resultado completo de uma rolagem com hierarquia visual e quebra
+         * de linhas limpa:
+         *  - Linha 1: Desfecho(s) / Total em destaque grande e colorido + Parâmetro testado em cinza discreto e fonte menor
+         *  - Linha 2: Detalhamento de dados / pools em fonte menor, com rótulos de slots coloridos e dados em negrito
+         */
+        fun formatRichResult(resultJson: String): SpannableStringBuilder {
+            return try {
+                val lines = OverlayService.formatDisplayLines(resultJson)
+                val ssb = SpannableStringBuilder()
+
+                // 1. LINHA 1 (Headline)
+                if (lines.flags.isNotEmpty()) {
+                    for (i in lines.flags.indices) {
+                        val (label, rawFlag) = lines.flags[i]
+                        if (i > 0) {
+                            val commaStart = ssb.length
+                            ssb.append(", ")
+                            ssb.setSpan(ForegroundColorSpan(MUTED), commaStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        }
+                        val flagStart = ssb.length
+                        ssb.append(label)
+                        val tone = outcomeTone(rawFlag)
+                        val flagColor = when (tone) {
+                            OutcomeTone.FAILURE -> FAILURE_TEXT
+                            OutcomeTone.PARTIAL -> PARTIAL_TEXT
+                            else -> ACCENT_BRIGHT
+                        }
+                        ssb.setSpan(ForegroundColorSpan(flagColor), flagStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        ssb.setSpan(StyleSpan(Typeface.BOLD), flagStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        ssb.setSpan(RelativeSizeSpan(1.1f), flagStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                } else {
+                    val headlineStart = ssb.length
+                    ssb.append(lines.headline)
+                    val tone = OverlayService.toneOf(resultJson)
+                    val headlineColor = when (tone) {
+                        OutcomeTone.FAILURE -> FAILURE_TEXT
+                        OutcomeTone.PARTIAL -> PARTIAL_TEXT
+                        OutcomeTone.SUCCESS -> ACCENT_BRIGHT
+                        else -> TEXT
+                    }
+                    ssb.setSpan(ForegroundColorSpan(headlineColor), headlineStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    ssb.setSpan(StyleSpan(Typeface.BOLD), headlineStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    ssb.setSpan(RelativeSizeSpan(1.25f), headlineStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+
+                // Parâmetros testados ao lado do headline em cinza discreto e fonte menor
+                if (!lines.tested.isNullOrEmpty()) {
+                    val testedStart = ssb.length
+                    ssb.append("  (${lines.tested})")
+                    ssb.setSpan(ForegroundColorSpan(MUTED), testedStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    ssb.setSpan(RelativeSizeSpan(0.75f), testedStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+
+                // 2. LINHA 2 (Detail)
+                if (!lines.detail.isNullOrEmpty()) {
+                    ssb.append("\n")
+                    val detailStart = ssb.length
+                    ssb.append(lines.detail)
+                    ssb.setSpan(RelativeSizeSpan(0.75f), detailStart, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    applyDetailSpans(ssb, detailStart)
+                }
+
+                ssb
+            } catch (e: Exception) {
+                SpannableStringBuilder(formatRichLine(resultJson.take(80)))
+            }
+        }
+
+        private fun applyDetailSpans(ssb: SpannableStringBuilder, start: Int) {
+            val text = ssb.substring(start)
+
+            // 1. Slot 1 (Esmeralda / Cyan): base, ação, acao, claros, grupo 1, regulares, verbo
+            val slot1Regex = Regex("""\b(base|ação|acao|claros|grupo 1|regulares|verbo)\b""", RegexOption.IGNORE_CASE)
+            for (m in slot1Regex.findAll(text)) {
+                val s = start + m.range.first
+                val e = start + m.range.last + 1
+                ssb.setSpan(ForegroundColorSpan(SLOT_1_COLOR), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // 2. Slot 2 (Sangue / Vermelho): perícia, pericia, desafio, escuros, fome/ira, fome, ira, grupo 2, substantivo
+            val slot2Regex = Regex("""\b(perícia|pericia|desafio|escuros|fome/ira|fome|ira|grupo 2|substantivo)\b""", RegexOption.IGNORE_CASE)
+            for (m in slot2Regex.findAll(text)) {
+                val s = start + m.range.first
+                val e = start + m.range.last + 1
+                ssb.setSpan(ForegroundColorSpan(SLOT_2_COLOR), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // 3. Slot 3 (Gelo / Azul): equipamento, ruína, ruina, estresse, grupo 3
+            val slot3Regex = Regex("""\b(equipamento|ruína|ruina|estresse|grupo 3)\b""", RegexOption.IGNORE_CASE)
+            for (m in slot3Regex.findAll(text)) {
+                val s = start + m.range.first
+                val e = start + m.range.last + 1
+                ssb.setSpan(ForegroundColorSpan(SLOT_3_COLOR), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // 4. Bracketed dice numbers [x, y, z] -> números em negrito
+            val bracketRegex = Regex("""\[([^\]]+)\]""")
+            for (m in bracketRegex.findAll(text)) {
+                val s = start + m.range.first
+                val e = start + m.range.last + 1
+                ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // 5. Cartas vermelhas (♥ e ♦)
+            val cardRedRegex = Regex("""(10|[A2-9JQK])([♥♦])""")
+            for (m in cardRedRegex.findAll(text)) {
+                val s = start + m.range.first
+                val e = start + m.range.last + 1
+                ssb.setSpan(ForegroundColorSpan(CARD_RED_COLOR), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ssb.setSpan(StyleSpan(Typeface.BOLD), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            // 6. Muted separators: "•", "vs"
+            val sepRegex = Regex("""(•|\bvs\b)""")
+            for (m in sepRegex.findAll(text)) {
+                val s = start + m.range.first
+                val e = start + m.range.last + 1
+                ssb.setSpan(ForegroundColorSpan(MUTED), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
 
         /**
          * Formata uma linha de histórico / atividade com destaque de cores nos

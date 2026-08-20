@@ -953,7 +953,7 @@ class OverlayService : Service() {
     private fun onRollCalculated(resultJson: String) {
         lastOwnResultJson = resultJson
         updatePushAvailability()
-        overlay.showResult(formatResult(resultJson), toneOf(resultJson))
+        overlay.showResult(resultJson, toneOf(resultJson))
         // Propaga o resultado JA calculado (relay burro — o backend nao
         // recalcula, ver docs/architecture.md). Em sala, quem anima e o eco
         // do servidor, pela WebView espectadora: empurrar TAMBEM aqui faria
@@ -1204,7 +1204,7 @@ class OverlayService : Service() {
          * pior versao do bug: passa no aparelho e falha em teste, ou vice
          * versa.
          */
-        private fun orderedGroupKeys(resultJson: String, groups: JSONObject): List<String> =
+        internal fun orderedGroupKeys(resultJson: String, groups: JSONObject): List<String> =
             groups.keys().asSequence().toList().sortedBy { key ->
                 resultJson.indexOf("\"$key\"").let { if (it < 0) Int.MAX_VALUE else it }
             }
@@ -1214,7 +1214,7 @@ class OverlayService : Service() {
          * `apps/web/src/format.ts` — id desconhecido cai nele mesmo, igual
          * na web.
          */
-        private fun groupLabel(name: String): String {
+        internal fun groupLabel(name: String): String {
             val lower = name.lowercase()
             val groupMatch = Regex("""^group(\d+)$""").find(lower)
             if (groupMatch != null) {
@@ -1272,6 +1272,148 @@ class OverlayService : Service() {
                 JSONObject(resultJson).optString("outcome", "")
             }.getOrDefault("")
             return if (outcome.isEmpty()) OutcomeTone.NEUTRAL else outcomeTone(outcome)
+        }
+        data class ResultDisplayLines(
+            val headline: String,
+            val tested: String?,
+            val detail: String?,
+            val flags: List<Pair<String, String>>,
+        )
+
+        fun formatDisplayLines(resultJson: String): ResultDisplayLines {
+            return try {
+                val result = JSONObject(resultJson)
+                val notation = result.optString("notation", "?")
+                val groupsObj = result.optJSONObject("groups")
+                val profile = result.optString("profile", "")
+
+                val groupNotations = Regex("""\{([^}]+)\}""").findAll(notation)
+                    .map { it.groupValues[1] }
+                    .toList()
+
+                val isVs = notation.contains(" vs ")
+                val isYze = listOf("yze", "yze_fbl", "yze_alien", "yze_wdu").contains(profile)
+                val joiner = if (isVs) " vs " else " • "
+
+                val flags = result.optJSONArray("outcome_flags")
+                val rawOutcome = result.optString("outcome", "")
+
+                // 1. Resolve lista de desfechos / flags
+                val outcomeList = mutableListOf<Pair<String, String>>() // label to rawFlag
+                if (flags != null && flags.length() > 0) {
+                    for (i in 0 until flags.length()) {
+                        val f = flags.getString(i)
+                        val label = outcomeLabel(f)
+                        if (label.isNotEmpty() && outcomeList.none { it.first == label }) {
+                            outcomeList.add(label to f)
+                        }
+                    }
+                } else if (rawOutcome.isNotEmpty()) {
+                    outcomeList.add(outcomeLabel(rawOutcome) to rawOutcome)
+                }
+
+                // 2. Resolve grupos de dados e totais
+                var totalCardIndex = 0
+                val groupStrings = mutableListOf<String>()
+                var grandTotal: Int? = if (!isVs && outcomeList.isEmpty() && !isYze) 0 else null
+
+                if (groupsObj != null) {
+                    val groupKeys = orderedGroupKeys(resultJson, groupsObj)
+                    for (gi in groupKeys.indices) {
+                        val groupKey = groupKeys[gi]
+                        val group = groupsObj.optJSONObject(groupKey) ?: continue
+                        val subNotation = groupNotations.getOrNull(gi) ?: notation
+                        val isCardGroup = Regex("""\b\d*c\b""").containsMatchIn(subNotation)
+                        val isFudgeGroup = Regex("""\b\d*dF\b""").containsMatchIn(subNotation)
+
+                        val rolls = group.optJSONArray("rolls")
+                        val rollsFormatted = if (rolls != null && rolls.length() > 0) {
+                            (0 until rolls.length()).joinToString(", ") { ri ->
+                                val v = rolls.getInt(ri)
+                                when {
+                                    isCardGroup -> cardFromRollValue(v, totalCardIndex++)
+                                    isFudgeGroup -> if (v > 0) "+" else if (v < 0) "−" else "0"
+                                    else -> v.toString()
+                                }
+                            }
+                        } else ""
+
+                        val mod = if (group.has("modifier")) group.getInt("modifier") else 0
+                        val modText = if (mod > 0) " + $mod" else if (mod < 0) " − ${kotlin.math.abs(mod)}" else ""
+                        val total = if (group.has("total")) {
+                            group.getInt("total")
+                        } else if (!isVs && rolls != null && rolls.length() > 0 && !isCardGroup && !isFudgeGroup) {
+                            (0 until rolls.length()).sumOf { rolls.getInt(it) } + mod
+                        } else null
+                        val totalText = if (total != null && !isCardGroup) " = $total" else ""
+                        if (total != null && grandTotal != null) {
+                            grandTotal += total
+                        } else if (isCardGroup || isFudgeGroup) {
+                            grandTotal = null
+                        }
+
+                        val label = if (groupKeys.size > 1) groupLabel(groupKey) else ""
+                        val rollsPart = if (rollsFormatted.isNotEmpty()) "[$rollsFormatted]" else "—"
+                        val fullGroupStr = buildString {
+                            if (label.isNotEmpty()) append("$label ")
+                            append(rollsPart)
+                            append(modText)
+                            append(totalText)
+                        }
+                        if (fullGroupStr.isNotEmpty()) {
+                            groupStrings.add(fullGroupStr)
+                        }
+                    }
+                }
+
+                val yzeSuccesses = if (isYze && groupsObj != null && groupsObj.length() > 1) {
+                    val keys = orderedGroupKeys(resultJson, groupsObj)
+                    keys.sumOf { groupsObj.optJSONObject(it)?.optInt("total", 0) ?: 0 }
+                } else null
+
+                val tested = result.optJSONArray("tested")?.let { arr ->
+                    (0 until arr.length()).joinToString(", ") { i ->
+                        val item = arr.getJSONObject(i)
+                        "${item.getString("label")}: ${item.get("value")}"
+                    }
+                }
+
+                if (outcomeList.isNotEmpty()) {
+                    val headline = outcomeList.joinToString(", ") { it.first }
+                    val detail = if (groupStrings.isNotEmpty()) {
+                        val isMultiNamedGroup = groupsObj != null && groupsObj.length() > 1
+                        if (!isMultiNamedGroup) {
+                            "$notation ${groupStrings.joinToString(joiner)}"
+                        } else {
+                            groupStrings.joinToString(joiner)
+                        }
+                    } else null
+                    ResultDisplayLines(headline, tested, detail, outcomeList)
+                } else if (yzeSuccesses != null) {
+                    val headline = "$yzeSuccesses ${if (yzeSuccesses == 1) "sucesso" else "sucessos"}"
+                    val detail = if (groupStrings.isNotEmpty()) groupStrings.joinToString(joiner) else null
+                    ResultDisplayLines(headline, tested, detail, emptyList())
+                } else if (isVs && groupStrings.size == 2) {
+                    val keys = orderedGroupKeys(resultJson, groupsObj ?: JSONObject())
+                    val t1 = groupsObj?.optJSONObject(keys.getOrNull(0) ?: "")?.optInt("total", 0) ?: 0
+                    val t2 = groupsObj?.optJSONObject(keys.getOrNull(1) ?: "")?.optInt("total", 0) ?: 0
+                    val headline = "$t1 vs $t2"
+                    val detail = groupStrings.joinToString(" vs ")
+                    ResultDisplayLines(headline, tested, detail, emptyList())
+                } else if (grandTotal != null && groupStrings.isNotEmpty()) {
+                    val headline = grandTotal.toString()
+                    val detail = if (groupStrings.size == 1 && (groupsObj?.length() ?: 0) == 1) {
+                        "$notation ${groupStrings.first()}"
+                    } else {
+                        groupStrings.joinToString(" + ")
+                    }
+                    ResultDisplayLines(headline, tested, detail, emptyList())
+                } else {
+                    ResultDisplayLines(notation, tested, null, emptyList())
+                }
+            } catch (e: Exception) {
+                ResultDisplayLines(resultJson.take(80), null, null, emptyList())
+            }
         }
 
         /** Formata o resultado completo de rolagem, cobrindo todos os grupos

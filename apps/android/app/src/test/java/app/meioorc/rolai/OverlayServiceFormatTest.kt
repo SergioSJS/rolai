@@ -2,6 +2,7 @@ package app.meioorc.rolai
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -155,5 +156,62 @@ class OverlayServiceFormatTest {
                 """{"dificuldade":1,"base":5}""",
             ),
         )
+    }
+
+    @Test
+    fun `formatDisplayLines divide infaernum em headline de flags e linha de dados`() {
+        val json = """{"notation":"3d6","groups":{"pool":{"rolls":[1,3,6]}},
+            "outcome":"milagre_x1","outcome_flags":["milagre_x1","desgraca_x1","vislumbre_x1"]}"""
+        val lines = OverlayService.formatDisplayLines(json)
+        assertEquals("1 milagre, 1 desgraça, 1 vislumbre", lines.headline)
+        assertEquals("3d6 [1, 3, 6] = 10", lines.detail)
+        assertNull(lines.tested)
+        assertEquals(3, lines.flags.size)
+    }
+
+    @Test
+    fun `formatDisplayLines divide forbidden lands com headline e pools limpos`() {
+        val json = """{"notation":"{2d6+1} + {0d6} + {1d6}",
+            "groups":{"base":{"rolls":[6,2],"modifier":1,"total":2},
+            "pericia":{"rolls":[],"total":0},
+            "equipamento":{"rolls":[1],"total":0}},
+            "outcome":"success","outcome_flags":["success","yze_dano_equipamento_x1"],
+            "tested":[{"label":"Dificuldade","value":1}]}"""
+        val lines = OverlayService.formatDisplayLines(json)
+        assertEquals("sucesso, 1 dano de equipamento", lines.headline)
+        assertEquals("base [6, 2] + 1 = 2 • perícia — = 0 • equipamento [1] = 0", lines.detail)
+        assertEquals("Dificuldade: 1", lines.tested)
+    }
+
+    @Test
+    fun `formatDisplayLines divide ironsworn em headline e acao vs desafio`() {
+        val json = """{"notation":"{1d6+2} vs {2d10}",
+            "groups":{"action":{"rolls":[4],"modifier":2,"total":6},
+            "challenge":{"rolls":[5,5]}},
+            "outcome":"strong_hit","outcome_flags":["strong_hit","match"]}"""
+        val lines = OverlayService.formatDisplayLines(json)
+        assertEquals("sucesso completo, combinação!", lines.headline)
+        assertEquals("ação [4] + 2 = 6 vs desafio [5, 5]", lines.detail)
+        assertNull(lines.tested)
+    }
+
+    @Test
+    fun `formatDisplayLines divide roll_under com headline e parametro testado`() {
+        val json = """{"notation":"1d20","groups":{"roll":{"rolls":[8],"total":8}},
+            "outcome":"success","outcome_flags":["success"],
+            "tested":[{"label":"Valor testado","value":10}]}"""
+        val lines = OverlayService.formatDisplayLines(json)
+        assertEquals("sucesso", lines.headline)
+        assertEquals("1d20 [8] = 8", lines.detail)
+        assertEquals("Valor testado: 10", lines.tested)
+    }
+
+    @Test
+    fun `formatDisplayLines divide rolagem livre com total grande e linha de dados`() {
+        val json = """{"notation":"2d6","groups":{"roll":{"rolls":[3,4]}}}"""
+        val lines = OverlayService.formatDisplayLines(json)
+        assertEquals("7", lines.headline)
+        assertEquals("2d6 [3, 4] = 7", lines.detail)
+        assertNull(lines.tested)
     }
 }
