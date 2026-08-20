@@ -220,8 +220,9 @@ function optionalNumber(value: number | null | undefined): number | undefined {
 // os numeros junto.
 export function summarizeDice(result: RollResult): string {
   const groups = displayGroups(result);
-  const joiner = result.notation.includes(" + ") ? " + " : " vs ";
-  const isSumNotation = !result.notation.includes(" vs ") && result.notation.includes(" + ");
+  const isVsNotation = result.notation.includes(" vs ");
+  const joiner = isVsNotation ? " vs " : " + ";
+  const isSumNotation = !isVsNotation && (result.notation.includes("+") || groups.length > 1);
   const parts = groups.map((g) => {
     // Pool de zero dados (Forçar do Year Zero pode zerar um deles): o motor
     // rola e descarta um dado so pra ter notacao valida — "[]" no historico

@@ -15,8 +15,9 @@ function HistoryRollResult({
   style?: DiceStyle | null;
 }) {
   const groups = displayGroups(result);
-  const joiner = result.notation.includes(" + ") ? " + " : " vs ";
-  const isSumNotation = !result.notation.includes(" vs ") && result.notation.includes(" + ");
+  const isVsNotation = result.notation.includes(" vs ");
+  const joiner = isVsNotation ? " vs " : " + ";
+  const isSumNotation = !isVsNotation && (result.notation.includes("+") || groups.length > 1);
   const grandTotal =
     isSumNotation && groups.length > 1 && typeof result.outcome !== "string"
       ? groups.reduce(

@@ -591,6 +591,9 @@ body.stream-mode .stage canvas {
    stream nao existe tema por baixo. */
 .stream-root .result-headline {
   color: #f4f7f5;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   text-shadow:
     -2px -2px 0 rgba(0, 0, 0, 0.9),
     2px -2px 0 rgba(0, 0, 0, 0.9),
@@ -598,6 +601,11 @@ body.stream-mode .stage canvas {
     2px 2px 0 rgba(0, 0, 0, 0.9),
     0 0 6px rgba(0, 0, 0, 0.9),
     0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+.stream-root .result-headline.is-long {
+  font-size: clamp(1.4rem, 4vw, 2.4rem);
+  line-height: 1.15;
 }
 
 .stream-root .result-headline.is-outcome {
@@ -1375,6 +1383,14 @@ button:disabled {
   line-height: 1.05;
   color: var(--text);
   text-shadow: var(--result-text-shadow);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.result-headline.is-long {
+  font-size: clamp(1.4rem, 4vw, 2.4rem);
+  line-height: 1.15;
 }
 
 /* Outcome e palavra, nao numero: "sucesso com estilo" no mesmo corpo do

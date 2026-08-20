@@ -45,8 +45,9 @@ export function ResultDisplay({
         single.rolls.reduce((sum, r) => sum + r.value, 0) + (single.modifier ?? 0))
       : undefined;
 
-  // Notação com múltiplos grupos somados com "+" (ex: "1[1d6] + 2[2d6] + 3[3d6]" ou "{1d6} + {2d6}"):
-  const isSumNotation = !result.notation.includes(" vs ") && result.notation.includes(" + ");
+  // Notação com múltiplos grupos somados (ex: "1[1d6] + 2[2d6]", "1[2d12]+2[1d20+2d12]", "{1d6} + {2d6}"):
+  const isVsNotation = result.notation.includes(" vs ");
+  const isSumNotation = !isVsNotation && !isYzeSystem(result.profile);
   const grandTotal =
     isSumNotation && groups.length > 1
       ? groups.reduce(
@@ -55,6 +56,12 @@ export function ResultDisplay({
             (g.total ?? g.rolls.reduce((s, r) => s + r.value, 0) + (g.modifier ?? 0)),
           0,
         )
+      : undefined;
+
+  // Em notação "vs" (ex: "{2d6} vs {1d10}"), o headline mostra os totais comparados se não houver outcome do sistema
+  const vsHeadline =
+    isVsNotation && groups.length === 2 && typeof result.outcome !== "string"
+      ? `${groups[0]?.total ?? groups[0]?.rolls.reduce((s, r) => s + r.value, 0) ?? 0} vs ${groups[1]?.total ?? groups[1]?.rolls.reduce((s, r) => s + r.value, 0) ?? 0}`
       : undefined;
 
   // Year Zero de varios pools (Base/Perícia/Equipamento, Base/Estresse): os
@@ -75,7 +82,9 @@ export function ResultDisplay({
           ? String(singleTotal)
           : grandTotal !== undefined
             ? String(grandTotal)
-            : result.notation;
+            : vsHeadline !== undefined
+              ? vsHeadline
+              : result.notation;
 
   return (
     // A caixa existe pro resultado sobreviver a fundo claro/colorido: o
@@ -118,7 +127,9 @@ export function ResultDisplay({
             className={
               typeof result.outcome === "string"
                 ? `result-headline is-outcome tone-${outcomeTone(result.outcome)}`
-                : "result-headline"
+                : headline.length > 6
+                  ? "result-headline is-long"
+                  : "result-headline"
             }
           >
             {headline}

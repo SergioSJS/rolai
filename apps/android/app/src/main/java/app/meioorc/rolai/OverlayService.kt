@@ -1288,10 +1288,22 @@ class OverlayService : Service() {
                     .map { it.groupValues[1] }
                     .toList()
 
-                val joiner = if (notation.contains(" + ")) " + " else " vs "
+                val isVs = notation.contains(" vs ")
+                val joiner = if (isVs) " vs " else " + "
+
+                // Mais de uma flag bateu (Infaernum: "1 milagre" + "2
+                // desgraças" na mesma rolagem; Ironsworn: "strong_hit" +
+                // "match"): mostra todas, juntas.
+                val flags = result.optJSONArray("outcome_flags")
+                val outcome = if (flags != null && flags.length() > 1) {
+                    (0 until flags.length()).joinToString(", ") { outcomeLabel(flags.getString(it)) }
+                } else {
+                    result.optString("outcome", "").let { if (it.isEmpty()) it else outcomeLabel(it) }
+                }
 
                 var totalCardIndex = 0
                 val groupStrings = mutableListOf<String>()
+                var grandTotal: Int? = if (!isVs && outcome.isEmpty()) 0 else null
 
                 if (groupsObj != null) {
                     val groupKeys = orderedGroupKeys(resultJson, groupsObj)
@@ -1318,10 +1330,15 @@ class OverlayService : Service() {
                         val modText = if (mod > 0) " + $mod" else if (mod < 0) " − ${kotlin.math.abs(mod)}" else ""
                         val total = if (group.has("total")) {
                             group.getInt("total")
-                        } else if (groupKeys.size == 1 && rolls != null && rolls.length() > 1 && !isCardGroup && !isFudgeGroup) {
-                            (0 until rolls.length()).sumOf { rolls.getInt(it) }
+                        } else if (!isVs && rolls != null && rolls.length() > 0 && !isCardGroup && !isFudgeGroup) {
+                            (0 until rolls.length()).sumOf { rolls.getInt(it) } + mod
                         } else null
                         val totalText = if (total != null && !isCardGroup) " = $total" else ""
+                        if (total != null && grandTotal != null) {
+                            grandTotal += total
+                        } else if (isCardGroup || isFudgeGroup) {
+                            grandTotal = null
+                        }
 
                         val groupStr = buildString {
                             // Tres pools de d6 iguais (Forbidden Lands) viravam
@@ -1342,16 +1359,11 @@ class OverlayService : Service() {
                     }
                 }
 
-                val allGroupsText = groupStrings.joinToString(joiner)
-
-                // Mais de uma flag bateu (Infaernum: "1 milagre" + "2
-                // desgraças" na mesma rolagem; Ironsworn: "strong_hit" +
-                // "match"): mostra todas, juntas.
-                val flags = result.optJSONArray("outcome_flags")
-                val outcome = if (flags != null && flags.length() > 1) {
-                    (0 until flags.length()).joinToString(", ") { outcomeLabel(flags.getString(it)) }
-                } else {
-                    result.optString("outcome", "").let { if (it.isEmpty()) it else outcomeLabel(it) }
+                val allGroupsText = buildString {
+                    append(groupStrings.joinToString(joiner))
+                    if (!isVs && outcome.isEmpty() && groupStrings.size > 1 && grandTotal != null) {
+                        append(" = $grandTotal")
+                    }
                 }
 
                 val tested = result.optJSONArray("tested")?.let { arr ->
