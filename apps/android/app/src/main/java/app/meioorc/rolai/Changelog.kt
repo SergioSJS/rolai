@@ -12,8 +12,19 @@ data class ChangelogEntry(val version: String, val date: String, val notes: List
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
-            "1.1.0",
+            "1.2.0",
             "2026-08-20",
+            listOf(
+                "Vampiro / WoD v5: contagem automática de sucessos (≥6), bônus de par de 10s (+2 cada par) e destaque visual de dados (borda verde ≥6, dourada 10, vermelha 1 na Fome).",
+                "Layout hierárquico no resultado do overlay: headline grande colorida pelo desfecho + detalhe menor com pools nomeados.",
+                "Corrigido: dados 3D perdiam cores de slot na segunda rolagem ao trocar de modo (ex.: Vampiro → livre → Vampiro).",
+                "Corrigido: compositor apagava notação de slot ao clicar botão de dado (1[d20]).",
+                "Corrigido: rolagem multi-grupo (1[1d6] + 2[2d6]) sem grand total.",
+            ),
+        ),
+        ChangelogEntry(
+            "1.1.1",
+            "2026-08-19",
             listOf(
                 "Personalização independente dos 3 Slots de Cores de Dados (Primário, Secundário e Terciário) nas preferências e sincronização em sala.",
                 "Suporte completo a dados 3D multi-cores por grupo e sistema (cada pool de dados cai com a sua respectiva cor e material na mesa).",

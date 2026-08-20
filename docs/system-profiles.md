@@ -253,6 +253,63 @@ grupo vira a CONTAGEM de dados que batem a regra (sucessos), não a soma —
 qualquer `outcome_rule` pode comparar `pool.total` direto em vez de
 repetir `count(pool, '>=5')` toda hora.
 
+## Exemplo — World of Darkness v5 (`multi`: dois pools com `success_rule`)
+
+```yaml
+system: wod5
+label: "Vampiro / WoD v5"
+roll_type: multi
+inputs:
+  - id: regular
+    label: "Dados regulares"
+    type: number
+  - id: hunger
+    label: "Dados de Fome/Ira"
+    type: number
+  - id: difficulty
+    label: "Dificuldade"
+    type: number
+    required: false
+fields:
+  - id: regular
+    dice: "{input.regular}d10"
+    compare_individually: true
+    success_rule: ">=6"
+    slot: 1
+  - id: hunger
+    dice: "{input.hunger}d10"
+    compare_individually: true
+    success_rule: ">=6"
+    slot: 2
+outcome_rules:
+  # Crítico sujo: par de 10 com pelo menos um na Fome
+  - condition: "(count(regular, '==10') + count(hunger, '==10')) >= 2 and count(hunger, '==10') >= 1"
+    result: messy_critical
+  # Crítico limpo: par de 10 sem nenhum na Fome
+  - condition: "(count(regular, '==10') + count(hunger, '==10')) >= 2 and count(hunger, '==10') == 0"
+    result: critical
+  # Fracasso bestial: zero sucessos + dado 1 na Fome
+  - condition: "(count(regular, '>=6') + count(hunger, '>=6')) == 0 and count(hunger, '==1') >= 1"
+    result: bestial_failure
+  # Sucesso vs dificuldade (com bônus de pares de 10)
+  - condition: "(...) >= {input.difficulty}"
+    result: success
+  - condition: "(...) < {input.difficulty}"
+    result: fail
+```
+
+Pontos que distinguem este profile:
+
+- **`success_rule: ">=6"` em ambos os campos**: o `total` de cada grupo é
+  a CONTAGEM de dados que passaram, não a soma. A UI mostra
+  `regulares [10, 8, 3] = 2 • fome/ira [10, 1] = 1`.
+- **Par de 10s como bônus**: o total de sucessos pra comparação com a
+  dificuldade inclui `+2` por cada par de 10 (somando regulares e fome).
+  Isso é calculado na condition via aritmética booleana
+  (`(bool >= 2) * 2`).
+- **UI calcula o total localmente** (`wod5Successes` em `format.ts` e
+  `OverlayService.kt`): o motor não tem um campo "total geral com bônus
+  de crítico" — isso é apresentação, como o tom de outcome.
 ## Invocação (camada de UI/atalho)
 
 A UI não precisa expor a notação bruta — monta a partir do profile e dos

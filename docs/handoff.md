@@ -432,3 +432,58 @@ Um percalço que vale lembrar: `pip install .` no CI deixa cópia do pacote em
   - Rótulos de grupos traduzidos (`AÇÃO`, `DESAFIO`, `VERBO`, `SUBSTANTIVO`, `REGULARES`, `FOME/IRA`) e outcomes (`combinação!`).
   - Modal de Ajuda da Notação atualizado com exemplos de cartas (`1c`, `2c`, `{2d6+2} vs {2c}`).
 
+## Sessões 2026-08-19/20 (Year Zero, Trophy, Overlay Layout, WOD5 Sucessos)
+
+### v1.1.1 — Year Zero Engine, Trophy, 3 slots de dados, logs ricos (2026-08-19)
+
+- **Família Year Zero Engine completa**: `yze` (genérico), `yze_fbl`
+  (Forbidden Lands — 3 pools: base/perícia/equipamento), `yze_alien`
+  (Alien — base + estresse), `yze_wdu` (Vaesen — base + estresse).
+  Empurrar rolagem (push) com `sucessos_anteriores` como modificador de
+  contagem de sucessos (campo `modifier` + `success_rule`).
+- **Perfis Trophy**: Trophy Dark e Trophy Gold (claros vs escuros, ruína
+  aumenta).
+- **Customização de 3 slots de dados**: web e Android passaram a suportar
+  corpo/número/contorno independentes para até 3 tipos de dado (ex.:
+  Base verde, Perícia azul, Equipamento cinza no Forbidden Lands; Regular
+  verde e Fome/Ira vermelho no Vampiro).
+- **Logs ricos no overlay Android**: histórico com `SpannableStringBuilder`,
+  cores de slot, negritos em nomes de jogadores, destaque colorido de
+  outcomes (verde/amarelo/vermelho conforme tom).
+- **Seleção de sistema movida**: as abas de modo (Infaernum, Ironsworn…)
+  saíram de dentro da caixa de rolagem e foram para a tela de Preferências
+  do Android. Decisão registrada no `AGENTS.md`.
+- Correções: abas do Infaernum restauradas, tabs uniformes, escala de
+  prévia, tipos TypeScript no build, botão de limpar reposicionado.
+
+### v1.2.0 — Overlay hierárquico, cores de dado, WOD5 sucessos (2026-08-20)
+
+- **Layout hierárquico do resultado no overlay Android**:
+  `ResultDisplayLines` divide o resultado em headline (grande, colorida
+  pelo tom do outcome) + linha de detalhe (menor, pools nomeados
+  separados por `•`) + parâmetros testados (muted). Implementado via
+  `formatDisplayLines` em `OverlayService.kt` e `formatRichResult` /
+  `applyDetailSpans` em `OverlayView.kt`.
+- **Cores de dado 3D corrigidas**: a segunda rolagem após trocar de modo
+  (ex.: Vampiro → livre → Vampiro) resetava todos os dados pra uma cor
+  só. `diceBox.updateConfig` não reaplicava os estilos de slot.
+- **Compositor preserva notação**: `1[` + clicar "d20" completava
+  corretamente em vez de limpar o campo.
+- **Grand total de multi-grupo**: `1[1d6] + 2[2d6]` agora mostra a soma
+  final.
+- **WOD5 — contagem de sucessos de Vampiro v5**:
+  - `success_rule: ">=6"` adicionado a `regular` e `hunger` em
+    `wod5.yaml`. Cada pool agora reporta o total de sucessos.
+  - Par de 10s soma +2 bônus (floor(totalTens / 2) * 2), refletido na
+    avaliação contra dificuldade e no total exibido.
+  - Headline: `4 sucessos — crítico manchado (Dificuldade: 2)`.
+  - Chips com status visual na web: borda verde (≥6), dourada (10),
+    vermelha (1 na Fome), opacidade reduzida (falha).
+  - No overlay Android: números em `[colchetes]` coloridos (verde ≥6,
+    dourado 10); outcomes como "fracasso bestial" e "crítico manchado"
+    classificados corretamente no destaque.
+  - `wod5Successes` em `format.ts` (web) e cálculo equivalente em
+    `OverlayService.kt` (Android) — apresentação, não regra do motor.
+  - Exemplo documentado em `docs/system-profiles.md`.
+  - 8 testes no `wod5.test.ts` (rules-engine) + 2 testes novos em
+    `OverlayServiceFormatTest.kt`.
