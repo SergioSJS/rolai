@@ -23,3 +23,6 @@ apps/android/local.properties
 apps/android/app/build/
 build/
 *.egg-info/
+
+# Cache incremental do tsc — artefato de build local, muda a cada `tsc -b`.
+*.tsbuildinfo
