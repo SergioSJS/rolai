@@ -64,7 +64,7 @@ class OverlayService : Service() {
      * HeadlessRoller e recriada a cada Service, entao quem persiste o
      * `DeckState` entre chamadas e este campo, salvo em SharedPreferences a
      * cada puxada/reembaralhada/config (ver KEY_DECK_STATE) pra sobreviver a
-     * um restart do processo, igual lastRollAction/KEY_LAST_ROLL.
+     * um restart do processo, igual lastRoll/KEY_LAST_ROLL.
      */
     private var deckStateJson: String? = null
 
@@ -81,10 +81,10 @@ class OverlayService : Service() {
     private var lastStageUrl: String? = null
     private var lastHandshakeUrl: String? = null
 
-    /** Acao da mini-bolha de rolagem do fan: repete a ultima rolagem por
-     *  notacao; null = ainda nao rolou (ou a config mudou) = rola a
-     *  rolagem rapida configurada. */
-    private var lastRollAction: (() -> Unit)? = null
+    /** O que a mini-bolha do fan repete; null = ainda nao rolou (ou a
+     *  config mudou) = dispara a rolagem rapida configurada. Descricao, nao
+     *  closure — ver LastRoll pro motivo. */
+    private var lastRoll: LastRoll.Action? = null
 
     /**
      * Ultima rolagem PROPRIA (nao o eco da sala) — base do Forçar do Year
@@ -187,7 +187,7 @@ class OverlayService : Service() {
             }
         }
         overlay.onRollClicked = ::rollNow
-        overlay.onQuickRoll = { (lastRollAction ?: ::rollNow).invoke() }
+        overlay.onQuickRoll = { lastRoll?.let(::repetir) ?: rollNow() }
         overlay.onDrawCard = { count -> drawCard(count) }
         overlay.onReshuffleDeck = ::reshuffleDeck
         overlay.onRollNotation = { notation -> rollNotation(notation) }
@@ -212,11 +212,7 @@ class OverlayService : Service() {
             // composer de propósito continua funcionando: isso passa por
             // rollNotation(), nao por aqui.
             if (RolaiSettings.load(this).system.isEmpty()) {
-                lastRollAction = { headlessRoller.roll(notation) }
-                getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-                    .edit()
-                    .putString(KEY_LAST_ROLL, notation)
-                    .apply()
+                setLastRoll(LastRoll.Action.Notation(notation))
             }
             overlay.setQuickNotation(notation)
         }
@@ -226,7 +222,7 @@ class OverlayService : Service() {
         // START_STICKY recria o service do zero quando o sistema mata o
         // processo — sem persistir, a mini-bolha "esquecia" a ultima rolagem
         // e voltava pra configurada. Sobrevive a restart.
-        loadLastRoll()?.let { saved -> lastRollAction = { headlessRoller.roll(saved) } }
+        loadLastRoll()?.let { saved -> lastRoll = LastRoll.Action.Notation(saved) }
         overlay.onOpenApp = { launchFromOverlay(TwaActivity.intentFor(this)) }
         overlay.onOpenSettings = { launchFromOverlay(Intent(this, SettingsActivity::class.java)) }
         // Acoes de sala do painel do overlay. Entrar/criar exigem digitar
@@ -436,11 +432,7 @@ class OverlayService : Service() {
             // Mudou a rolagem configurada: a "ultima rolagem" da mini-bolha
             // deixa de fazer sentido — ela volta a rolar a configurada.
             lastQuickKey = quickKey
-            lastRollAction = null
-            getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .remove(KEY_LAST_ROLL)
-                .apply()
+            setLastRoll(null)
         }
 
         val oldJokers = deckIncludeJokers
@@ -629,11 +621,7 @@ class OverlayService : Service() {
         if (trimmed.isEmpty()) return
 
         headlessRoller.roll(trimmed)
-        lastRollAction = { rollNotation(notation) }
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_LAST_ROLL, notation)
-            .apply()
+        setLastRoll(LastRoll.Action.Notation(trimmed))
     }
 
     /** Ultima rolagem por notacao, ou null se nunca rolou / config mudou. */
@@ -644,7 +632,33 @@ class OverlayService : Service() {
 
     /** Assinatura da rolagem configurada — pra detectar mudanca no reload. */
     private fun quickKeyOf(settings: RolaiSettings): String =
-        listOf(settings.system, settings.notation, settings.inputsJson).joinToString("|")
+        LastRoll.quickKey(settings.system, settings.notation, settings.inputsJson)
+
+    /**
+     * Registra (ou apaga, com null) o que a mini-bolha repete, mantendo a
+     * persistencia em sincronia. Era esta dupla — campo + KEY_LAST_ROLL —
+     * que vivia repetida em dez lugares, cada um lembrando de gravar ou
+     * remover por conta propria.
+     */
+    private fun setLastRoll(action: LastRoll.Action?) {
+        lastRoll = action
+        val prefs = getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE).edit()
+        val persistivel = LastRoll.persisted(action)
+        if (persistivel != null) prefs.putString(KEY_LAST_ROLL, persistivel) else prefs.remove(KEY_LAST_ROLL)
+        prefs.apply()
+    }
+
+    /** Traduz a descricao em chamada do motor. Unico lugar que sabe disso. */
+    private fun repetir(action: LastRoll.Action) {
+        when (action) {
+            is LastRoll.Action.Notation -> rollNotation(action.notation)
+            is LastRoll.Action.Profile ->
+                headlessRoller.rollWithProfile(action.system, action.inputsJson)
+            is LastRoll.Action.Overlay ->
+                headlessRoller.rollOverlay(action.system, action.notation, action.inputsJson)
+            is LastRoll.Action.DeckDraw -> drawCard(action.count)
+        }
+    }
 
     /** O campo de notacao do painel precisa de teclado: sem NOT_FOCUSABLE a
      *  janela pode ganhar foco, e NOT_TOUCH_MODAL devolve os toques fora
@@ -771,11 +785,7 @@ class OverlayService : Service() {
     private fun selectFamilyMember(system: String) {
         val settings = RolaiSettings.load(this)
         RolaiSettings.save(this, settings.copy(system = system, inputsJson = "{}"))
-        lastRollAction = null
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
+        setLastRoll(null)
         val info = systems[system]
         overlay.openComposer(info, ProfileForm.fromJson("{}"))
         updatePushAvailability()
@@ -788,13 +798,13 @@ class OverlayService : Service() {
      * salvam do mesmo jeito que cada toque na tela de configuracoes salva.
      * Sem isto, digitar um valor novo e minimizar nao mudava nada: o campo
      * ficava certo na TELA, mas o proximo "rolar" de fora (mini-bolha do
-     * fan) repetia o `lastRollAction` de uma rolagem anterior — com o valor
+     * fan) repetia o `lastRoll` de uma rolagem anterior — com o valor
      * ANTIGO. Vale pra qualquer sistema, nao so pro roll_under.
      *
-     * SO invalida o `lastRollAction` quando o campo (ou, no roll_under, a
+     * SO invalida o `lastRoll` quando o campo (ou, no roll_under, a
      * notacao do composer) de fato MUDOU desde o ultimo valor REALMENTE
      * rolado. Sem essa comparacao, fechar o painel DEPOIS de rolar (o fluxo
-     * normal: abre, rola, minimiza) tambem zerava o `lastRollAction` que o
+     * normal: abre, rola, minimiza) tambem zerava o `lastRoll` que o
      * proprio rollWithInputs/rollOverlayNow tinha acabado de setar certinho
      * — o botao de "repetir" voltava a abrir o formulario sempre, o MESMO
      * bug que ja tinha sido corrigido antes.
@@ -806,15 +816,9 @@ class OverlayService : Service() {
         // tela) — sem repor os salvos, fechar o painel depois de um Forçar
         // parecia edicao e derrubava o "repetir".
         val merged = mergePushBookkeeping(inputsJson, settings.inputsJson)
-        val inputsChanged = !sameInputs(merged, settings.inputsJson)
-        val notationChanged = notation != null && notation != lastOverlayNotation
-        if (!inputsChanged && !notationChanged) return
+        if (!LastRoll.invalidadaPorEdicao(merged, settings.inputsJson, notation, lastOverlayNotation)) return
         RolaiSettings.save(this, settings.copy(inputsJson = merged))
-        lastRollAction = null
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
+        setLastRoll(null)
     }
 
     /**
@@ -875,11 +879,7 @@ class OverlayService : Service() {
         RolaiSettings.save(this, settings.copy(inputsJson = inputsJson))
         overlay.updateSystemInputs(ProfileForm.fromJson(inputsJson))
         val system = settings.system
-        lastRollAction = { headlessRoller.rollWithProfile(system, inputsJson) }
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
+        setLastRoll(LastRoll.Action.Profile(system, inputsJson))
     }
 
     /**
@@ -905,11 +905,7 @@ class OverlayService : Service() {
         // sobre rolagem de profile: sempre cai no fallback rollNow(), que
         // pra sistema com input REABRE o formulario em vez de repetir —
         // parecia que o botao de rolar chamava configuracao.
-        lastRollAction = { headlessRoller.rollWithProfile(settings.system, inputsJson) }
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
+        setLastRoll(LastRoll.Action.Profile(settings.system, inputsJson))
     }
 
     /**
@@ -923,17 +919,12 @@ class OverlayService : Service() {
         if (settings.system.isEmpty()) return
         RolaiSettings.save(this, settings.copy(inputsJson = inputsJson))
         headlessRoller.rollOverlay(settings.system, notation, inputsJson)
-        lastRollAction = { headlessRoller.rollOverlay(settings.system, notation, inputsJson) }
+        // Overlay nao persiste (LastRoll.persisted): KEY_LAST_ROLL so sabe
+        // repetir por headlessRoller.roll(notation) CRU, sem avaliar as
+        // outcome_rules — repetir um roll_under assim devolveria numero sem
+        // desfecho, parecendo certo.
+        setLastRoll(LastRoll.Action.Overlay(settings.system, notation, inputsJson))
         lastOverlayNotation = notation
-        // NAO grava em KEY_LAST_ROLL: aquele campo alimenta loadLastRoll(),
-        // que so sabe repetir via headlessRoller.roll(notation) CRU — sem
-        // avaliar outcome_rules do overlay. Depois de matar o processo, e
-        // melhor cair no fallback de rollNow() (reabre o composer) do que
-        // repetir a notacao ignorando a regra "<= valor testado".
-        getSharedPreferences(RolaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_LAST_ROLL)
-            .apply()
     }
 
     /**
@@ -1011,7 +1002,7 @@ class OverlayService : Service() {
         // Sem KEY_LAST_ROLL: aquele campo so sabe repetir via
         // headlessRoller.roll(notation) cru, formato que nao serve aqui.
         val count = cards.length()
-        lastRollAction = { drawCard(count) }
+        setLastRoll(LastRoll.Action.DeckDraw(count))
         val timestamp = java.time.Instant.now().toString()
         val entregue = roomState == RoomState.CONNECTED &&
             roomClient?.sendDeckDraw(cards.toString(), remaining, timestamp) == true
