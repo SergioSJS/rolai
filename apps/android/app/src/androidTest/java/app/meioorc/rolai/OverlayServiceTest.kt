@@ -1,5 +1,6 @@
 package app.meioorc.rolai
 
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
@@ -32,11 +33,30 @@ class OverlayServiceTest {
 
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
+    /**
+     * Comeca de service MORTO, nao so de flag zerada.
+     *
+     * `overlayAttached` e estatico e o `onDestroy` da instancia velha o poe
+     * em `false` — se ele rodar DEPOIS de a instancia nova ja ter anexado,
+     * apaga o `true` que o teste esta esperando, e o teste reprova por
+     * sobra do teste anterior, nao pelo codigo. Era a causa do flaky: rodando
+     * a classe isolada, 2 de 3 execucoes reprovavam.
+     *
+     * Esperar a flag nao resolve (e justamente ela que mente). O sinal aqui
+     * e o service sumir da lista do ActivityManager — a partir da API 26
+     * `getRunningServices` so devolve os do proprio app, que e o caso.
+     */
     @Before
-    fun ligaPreferencia() {
-        // O service so sobe se o usuario tiver ligado o botao flutuante (a
-        // SettingsActivity grava a flag ANTES de dar start). Sem isto o
-        // onCreate faz stopSelf e nada monta — que e o comportamento certo.
+    fun comecaComOServiceMorto() {
+        RolaiSettings.setOverlayEnabled(context, false)
+        if (serviceNoAr()) context.startService(intentDe(OverlayService.ACTION_STOP))
+        assertTrue(
+            "service de um teste anterior nao encerrou a tempo",
+            esperarServiceEncerrar(),
+        )
+        // So agora liga: o service so sobe se o usuario tiver pedido o botao
+        // flutuante (a SettingsActivity grava a flag ANTES de dar start).
+        // Sem isto o onCreate faz stopSelf e nada monta — comportamento certo.
         RolaiSettings.setOverlayEnabled(context, true)
     }
 
@@ -44,11 +64,30 @@ class OverlayServiceTest {
     fun desligaOverlay() {
         RolaiSettings.setOverlayEnabled(context, false)
         context.startService(intentDe(OverlayService.ACTION_STOP))
-        esperar(esperado = false)
+        // Sem assert: quem cobra o encerramento e o @Before do proximo teste.
+        // Falhar aqui mascararia o resultado do teste que acabou de rodar.
+        esperarServiceEncerrar()
     }
 
     private fun intentDe(action: String) =
         Intent(context, OverlayService::class.java).setAction(action)
+
+    @Suppress("DEPRECATION") // Desde a API 26 devolve so os servicos do proprio app — o que queremos.
+    private fun serviceNoAr(): Boolean {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return am.getRunningServices(Int.MAX_VALUE).any {
+            it.service.className == OverlayService::class.java.name
+        }
+    }
+
+    /** Espera o processo do service sumir de verdade, nao so a flag cair. */
+    private fun esperarServiceEncerrar(segundos: Long = 10): Boolean {
+        val limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(segundos)
+        while ((serviceNoAr() || OverlayService.overlayAttached) && System.nanoTime() < limite) {
+            Thread.sleep(50)
+        }
+        return !serviceNoAr() && !OverlayService.overlayAttached
+    }
 
     /** Espera o overlay chegar ao estado pedido; devolve se chegou. */
     private fun esperar(esperado: Boolean, segundos: Long = 10): Boolean {
