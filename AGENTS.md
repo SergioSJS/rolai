@@ -67,6 +67,12 @@ Todo PR deve rodar limpo: `npm test` (rules-engine e web), `pytest`
 (backend), `ruff check` e `mypy` (backend), `./gradlew testDebugUnitTest`
 (Android, se o módulo for tocado).
 
+Antes de SUBIR VERSÃO, a suíte verde não basta: rode
+`docs/manual-test-checklist.md`. Ele cobre de propósito só o que nenhuma
+suíte alcança (som, palco 3D, sala com duas pontas, pixel do overlay) e
+começa preparando o ambiente — três armadilhas de ambiente já se
+disfarçaram de bug de produto numa sessão só.
+
 Os testes instrumentados do Android NÃO rodam no CI (emulador em Actions é
 lento e instável) — rode `apps/android/scripts/run-instrumented.sh` num
 aparelho antes de gerar release. Eles cobrem justamente o que teste JVM não
