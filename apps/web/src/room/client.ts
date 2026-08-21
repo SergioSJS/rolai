@@ -4,6 +4,7 @@
 import type { RollResult } from "@rolai/rules-engine";
 import type { Card, DeckConfig } from "@rolai/deck-engine";
 import { apiBaseUrl, roomWsUrl } from "../config";
+import { rememberRoomTtl } from "../roomTtl";
 import type { DiceStyle, DiceStyles } from "../settings";
 import type { HistoryEntry, RoomEvent, RosterMember } from "./reducer";
 
@@ -17,10 +18,13 @@ export async function createRoom(): Promise<string> {
   if (!response.ok) {
     throw new Error(`falha ao criar sala (HTTP ${response.status})`);
   }
-  const data = (await response.json()) as { code?: string };
+  const data = (await response.json()) as { code?: string; ttl_seconds?: number };
   if (typeof data.code !== "string") {
     throw new Error("resposta invalida ao criar sala");
   }
+  // O TTL vem de graca aqui e a UI avisa com ele; quem ENTRA numa sala nunca
+  // ve este corpo e acaba pegando o valor do /stats (ver ../roomTtl.ts).
+  rememberRoomTtl(data.ttl_seconds);
   return data.code;
 }
 

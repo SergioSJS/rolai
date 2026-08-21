@@ -4,6 +4,8 @@
 // Fica num modal em vez de tooltip: são ~15 formas, e quem está aprendendo
 // precisa comparar exemplos lado a lado.
 
+import { ttlPhrase, useRoomTtl } from "../roomTtl";
+
 interface Linha {
   exemplo: string;
   explica: string;
@@ -66,6 +68,7 @@ function Bloco({ titulo, linhas }: { titulo: string; linhas: Linha[] }) {
 }
 
 export function NotationHelp() {
+  const ttl = useRoomTtl();
   return (
     <div className="notation-help">
       <p className="notation-intro">
@@ -76,6 +79,16 @@ export function NotationHelp() {
       <Bloco titulo="Escolher e rerrolar" linhas={SELECAO} />
       <Bloco titulo="Combinar" linhas={COMBINADO} />
       <Bloco titulo="Cores diferentes" linhas={CORES} />
+      <section className="notation-block">
+        <h3>Salas</h3>
+        <p>
+          Rolar sozinho não precisa de sala nem de internet. Entrando numa,
+          as rolagens passam pelo servidor e ficam guardadas lá — mas a sala
+          inteira some depois de {ttlPhrase(ttl)}, histórico junto. Cada
+          rolagem renova o prazo, então mesa em andamento não expira no meio.
+          Exporte pela tela de <strong>Sala</strong> o que quiser guardar.
+        </p>
+      </section>
       <p className="notation-foot">
         Escolher sistema em <strong>Preferências</strong> troca o painel por
         campos prontos (Firelights, Ironsworn, PbtA, FitD, Fate, d20, d100) — a notação

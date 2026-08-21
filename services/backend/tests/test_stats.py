@@ -20,7 +20,8 @@ def test_stats_counts_rooms_rolls_and_connections(client: TestClient) -> None:
         next_event(ws)
 
         live = client.get("/stats").json()
-        assert live["rooms"] == {"active": 1, "created_since_boot": 1}
+        assert live["rooms"]["active"] == 1
+        assert live["rooms"]["created_since_boot"] == 1
         assert live["rolls_relayed_since_boot"] == 1
         assert live["connections"]["players_now"] == 1
         assert live["connections"]["players_since_boot"] == 1
@@ -70,3 +71,33 @@ def test_stats_leaks_nothing_identifiable(client: TestClient) -> None:
         assert code not in body
         assert "ApelidoSecreto" not in body
         assert "testclient" not in body  # nem IP
+
+
+def test_stats_counts_each_room_once(client: TestClient) -> None:
+    """Jogador e espectador na MESMA sala sao uma sala com gente, nao duas —
+    admitir qualquer conexao cria a entrada nos dois mapas de broadcast."""
+    code = client.post("/rooms").json()["code"]
+    with (
+        client.websocket_connect(f"/rooms/{code}?name=Ana") as ws,
+        client.websocket_connect(f"/rooms/{code}?spectator=1") as obs,
+    ):
+        next_event(ws)
+        next_event(obs)
+        assert client.get("/stats").json()["connections"]["rooms_with_someone"] == 1
+
+    # Saiu todo mundo: nenhum mapa pode ficar com sala vazia pendurada.
+    assert client.get("/stats").json()["connections"]["rooms_with_someone"] == 0
+
+
+def test_stats_forgets_room_after_only_player_leaves(client: TestClient) -> None:
+    code = client.post("/rooms").json()["code"]
+    with client.websocket_connect(f"/rooms/{code}?name=Ana") as ws:
+        next_event(ws)
+    assert client.get("/stats").json()["connections"]["rooms_with_someone"] == 0
+
+
+def test_stats_publishes_room_ttl(make_client: Callable[..., TestClient]) -> None:
+    """A UI diz "some depois de X sem uso" com o X do servidor, e nao um
+    numero escrito a mao que mente em instancia com outro TTL."""
+    with make_client(room_ttl_seconds=1800) as client:
+        assert client.get("/stats").json()["rooms"]["ttl_seconds"] == 1800

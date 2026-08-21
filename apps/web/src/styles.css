@@ -33,6 +33,8 @@
 @import "./styles/modal.css";
 /* Sala e histórico de rolagens. */
 @import "./styles/room.css";
+/* Painel "Servidor": tiles do /stats (specs/11-status-do-servidor.md). */
+@import "./styles/stats.css";
 /* Dado 2D e texto puro — os tiers sem WebGL, desenhados no palco. */
 @import "./styles/dice-fallback.css";
 /* Telas estreitas. Sobrescreve o que veio acima: mantenha perto do fim. */

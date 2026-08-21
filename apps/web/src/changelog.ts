@@ -12,6 +12,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.5.0",
+    date: "2026-08-21",
+    notes: [
+      "Tela Servidor nova, no menu: salas ativas, gente conectada agora, rolagens retransmitidas desde que o servidor ligou e limites de abuso atingidos. Atualiza sozinha a cada 20 segundos enquanto estiver aberta.",
+      "As salas somem depois de um tempo sem uso, e agora o app diz isso — na tela de Sala e na Ajuda, com o prazo que o servidor informa (6 horas no rolai.app). Cada rolagem renova o prazo, então mesa em andamento não expira no meio.",
+      "O aviso aparece também ao lado de Exportar histórico: o histórico vive no servidor e some junto com a sala, então exporte o que quiser guardar.",
+      "Corrigido: a contagem de “salas com gente” do servidor contava cada sala duas vezes, e continuava marcando sala ocupada depois que todo mundo tinha saído.",
+    ],
+  },
+  {
     version: "1.4.0",
     date: "2026-08-21",
     notes: [

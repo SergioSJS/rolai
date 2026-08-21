@@ -17,6 +17,7 @@ import {
   clampDiceScale,
 } from "../settings";
 import { customCodeIssue } from "../room/code";
+import { ttlPhrase, useRoomTtl } from "../roomTtl";
 import { PlayerTag } from "./PlayerTag";
 
 interface RoomPanelProps {
@@ -59,6 +60,7 @@ export function RoomPanel({
   // a Browser Source do OBS abre com localStorage proprio (vazio), entao sem
   // isso o `scale` que a pessoa configurou aqui no navegador nunca chega la.
   const [streamScale, setStreamScale] = useState(DEFAULT_DICE_SCALE);
+  const ttl = useRoomTtl();
 
   // Criar: campo vazio = codigo aleatorio do backend (sala privada). Campo
   // preenchido = a sala QUE VOCE ESCOLHEU. Entrar num codigo inexistente ja
@@ -126,6 +128,14 @@ export function RoomPanel({
             Entrar
           </button>
         </div>
+        {/* Expiracao dita ANTES de entrar: e o unico momento em que da pra
+            decidir usar codigo fixo em vez de aleatorio. O prazo conta
+            silencio, nao idade da sala — cada rolagem renova. */}
+        <p className="field-hint">
+          A sala some do servidor depois de {ttlPhrase(ttl)}; cada rolagem
+          renova o prazo. O código volta a funcionar se alguém entrar de novo
+          — o histórico não volta.
+        </p>
       </div>
     );
   }
@@ -216,6 +226,10 @@ export function RoomPanel({
         ))}
       </ul>
       <h3>Exportar histórico</h3>
+      <p className="field-hint">
+        O histórico vive no servidor e some junto com a sala, depois de{" "}
+        {ttlPhrase(ttl)}. Exporte o que quiser guardar.
+      </p>
       {hiddenBefore !== null && (
         <p className="field-hint">
           O export segue o que está à vista: o que você ocultou fica de fora.

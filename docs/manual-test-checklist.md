@@ -123,7 +123,7 @@ suíte percebe.
 
 Só depois de mexer no CSS ou no layout.
 
-- [ ] Menu, painéis, resultado, modal de Preferências, Sala, histórico
+- [ ] Menu, painéis, resultado, modal de Preferências, Sala, Servidor, histórico
 - [ ] Janela estreita (mobile)
 - [ ] Modo stream sobre fundo claro e sobre fundo escuro
 
