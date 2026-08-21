@@ -81,6 +81,12 @@ async def read_stats(request: Request) -> dict[str, object]:
         "rooms": {
             "active": active_rooms,
             "created_since_boot": stats.rooms_created,
+            # Config, nao contagem: a UI usa pra dizer em quanto tempo uma
+            # sala parada some, sem hardcodar "6 horas" num texto que vira
+            # mentira em instancia com ROOM_TTL_SECONDS diferente. O TTL
+            # RENOVA a cada atividade (room_store._refresh_ttl), entao e
+            # tempo de silencio, nao tempo desde a criacao.
+            "ttl_seconds": settings.room_ttl_seconds,
         },
         "connections": {
             "players_now": sum(len(v) for v in connections.values()),

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { App } from "../App";
+import { resetRoomTtlCache } from "../roomTtl";
 
 // Smoke do app shell inteiro (jsdom): menu, fluxo de rolagem sempre
 // visivel, modais de Sala/Preferências/Sobre. O renderer 3D falha sem
@@ -8,6 +9,8 @@ import { App } from "../App";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // Cache de modulo: sem zerar, o TTL de um caso vaza pro proximo.
+  resetRoomTtlCache();
 });
 
 describe("App shell", () => {
@@ -20,6 +23,21 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: "Sobre" })).toBeTruthy();
     // Compositor visivel no modo notacao livre (default)
     expect(screen.getByRole("button", { name: "Adicionar um d20" })).toBeTruthy();
+  });
+
+  it("a Ajuda avisa que a sala expira, com o prazo do servidor", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ rooms: { active: 0, created_since_boot: 0, ttl_seconds: 21600 } }),
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Ajuda" }));
+    expect(await screen.findByText(/6 horas sem ninguém rolar nada/)).toBeTruthy();
   });
 
   it("abre o modal do servidor pelo menu e consulta o /stats", async () => {

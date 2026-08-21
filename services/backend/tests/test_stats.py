@@ -94,3 +94,10 @@ def test_stats_forgets_room_after_only_player_leaves(client: TestClient) -> None
     with client.websocket_connect(f"/rooms/{code}?name=Ana") as ws:
         next_event(ws)
     assert client.get("/stats").json()["connections"]["rooms_with_someone"] == 0
+
+
+def test_stats_publishes_room_ttl(make_client: Callable[..., TestClient]) -> None:
+    """A UI diz "some depois de X sem uso" com o X do servidor, e nao um
+    numero escrito a mao que mente em instancia com outro TTL."""
+    with make_client(room_ttl_seconds=1800) as client:
+        assert client.get("/stats").json()["rooms"]["ttl_seconds"] == 1800

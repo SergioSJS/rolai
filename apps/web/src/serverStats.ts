@@ -10,7 +10,7 @@ import { apiBaseUrl } from "./config";
 
 export interface ServerStats {
   uptimeSeconds: number;
-  rooms: { active: number; createdSinceBoot: number };
+  rooms: { active: number; createdSinceBoot: number; ttlSeconds: number };
   connections: {
     playersNow: number;
     spectatorsNow: number;
@@ -54,7 +54,13 @@ export function parseServerStats(raw: unknown): ServerStats {
   const limits = branch(raw, "limits_hit_since_boot");
   return {
     uptimeSeconds: num(raw, "uptime_seconds"),
-    rooms: { active: num(rooms, "active"), createdSinceBoot: num(rooms, "created_since_boot") },
+    rooms: {
+      active: num(rooms, "active"),
+      createdSinceBoot: num(rooms, "created_since_boot"),
+      // Backend anterior a este campo devolve 0 — quem le trata como
+      // "nao sei" e escreve o texto sem numero, em vez de prometer "0h".
+      ttlSeconds: num(rooms, "ttl_seconds"),
+    },
     connections: {
       playersNow: num(connections, "players_now"),
       spectatorsNow: num(connections, "spectators_now"),
