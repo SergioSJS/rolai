@@ -69,9 +69,17 @@ export function roomWsUrl(
   return `${base}/rooms/${encodeURIComponent(code)}?${params.toString()}`;
 }
 
-export function exportUrl(code: string, format: "json" | "csv" | "md"): string {
+export function exportUrl(
+  code: string,
+  format: "json" | "csv" | "md",
+  // Corte do "ocultar daqui pra tras": o link tem que respeitar o filtro,
+  // senao o export entrega justamente o que a pessoa escondeu na tela
+  // (specs/09-limpar-historico.md).
+  hiddenBefore?: string | null,
+): string {
   const base = apiBaseUrl().replace(/\/$/, "");
-  return `${base}/rooms/${encodeURIComponent(code)}/export?format=${format}`;
+  const since = hiddenBefore ? `&since=${encodeURIComponent(hiddenBefore)}` : "";
+  return `${base}/rooms/${encodeURIComponent(code)}/export?format=${format}${since}`;
 }
 
 // Ultima versao do APK, sem hardcodar numero: o GitHub redireciona

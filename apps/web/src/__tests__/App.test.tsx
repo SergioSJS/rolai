@@ -33,6 +33,41 @@ describe("App shell", () => {
     expect(screen.queryByLabelText("Qualidade")).toBeNull();
   });
 
+  it("botões de histórico: ocultar some da tela, mostrar tudo traz de volta", () => {
+    render(<App />);
+    // Fora de sala: "Limpar histórico"; em sala vira "Limpar a sala".
+    expect(screen.getByRole("button", { name: /Limpar histórico/ })).toBeTruthy();
+    const ocultar = screen.getByRole("button", { name: /Ocultar/ });
+    // Histórico vazio: nada a ocultar, e "Mostrar tudo" nem aparece.
+    expect(ocultar.hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: /Mostrar tudo/ })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Notação"), { target: { value: "1d20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Rolar" }));
+
+    fireEvent.click(screen.getByRole("button", { name: /Ocultar/ }));
+    expect(screen.getByRole("button", { name: /Mostrar tudo/ })).toBeTruthy();
+    expect(screen.getByText(/Parte do histórico está oculta/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Mostrar tudo/ }));
+    expect(screen.queryByText(/Parte do histórico está oculta/)).toBeNull();
+  });
+
+  it("limpar fora de sala pede confirmação antes de apagar", () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("Notação"), { target: { value: "1d20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Rolar" }));
+
+    // Primeiro clique NÃO apaga: apagar sem volta atrás de um clique só é
+    // fácil demais de fazer sem querer.
+    fireEvent.click(screen.getByRole("button", { name: /Limpar histórico/ }));
+    expect(screen.getByRole("button", { name: /Confirmar\?/ })).toBeTruthy();
+    expect(screen.queryByText("Nenhuma rolagem ainda.")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar\?/ }));
+    expect(screen.getByText("Nenhuma rolagem ainda.")).toBeTruthy();
+  });
+
   it("abre o modal de sala (fora de sala: criar/entrar)", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Sala" }));

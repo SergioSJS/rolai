@@ -4,7 +4,7 @@ import { initialRoomState, roomReducer } from "../room/reducer";
 import { PendingRolls } from "../room/echo";
 import { isHeartbeatPing, parseServerMessage, RoomClient } from "../room/client";
 import type { RoomEvent } from "../room/reducer";
-import { apiBaseUrl, roomWsUrl, wsBaseUrl } from "../config";
+import { apiBaseUrl, exportUrl, roomWsUrl, wsBaseUrl } from "../config";
 
 function makeResult(overrides: Partial<RollResult> = {}): RollResult {
   return {
@@ -96,6 +96,36 @@ describe("roomReducer", () => {
   });
 });
 
+describe("roomReducer: history_cleared", () => {
+  const conectado = roomReducer(
+    roomReducer(initialRoomState, { type: "joining", code: "abc123" }),
+    SNAPSHOT,
+  );
+
+  it("zera o histórico quando o servidor avisa que limpou", () => {
+    expect(conectado.history).toHaveLength(1);
+    const limpo = roomReducer(conectado, {
+      type: "historyCleared",
+      player: "ana",
+      receivedAt: "2026-08-20T12:00:01+00:00",
+    });
+    expect(limpo.history).toEqual([]);
+    // A sala continua de pé — limpar apaga o log, não a mesa.
+    expect(limpo.code).toBe("abc123");
+    expect(limpo.status).toBe("connected");
+  });
+
+  it("ignora limpeza fora de sala", () => {
+    expect(
+      roomReducer(initialRoomState, {
+        type: "historyCleared",
+        player: "ana",
+        receivedAt: "2026-08-20T12:00:01+00:00",
+      }),
+    ).toEqual(initialRoomState);
+  });
+});
+
 describe("PendingRolls (dedupe do echo)", () => {
   it("echo da propria rolagem e consumido uma unica vez", () => {
     const pending = new PendingRolls();
@@ -139,6 +169,49 @@ describe("parseServerMessage", () => {
     });
     const event = parseServerMessage(raw);
     expect(event?.type).toBe("roll");
+  });
+
+  it("traz o carimbo do servidor pro broadcast e pro snapshot", () => {
+    // Sem `received_at` no broadcast, o cliente só veria o carimbo no próximo
+    // snapshot, e o corte do "ocultar" não pegaria o que chegou ao vivo
+    // (specs/09-limpar-historico.md).
+    const aoVivo = parseServerMessage(
+      JSON.stringify({
+        type: "roll",
+        player: "ana",
+        result: makeResult(),
+        received_at: "2026-08-20T12:00:00.100000+00:00",
+      }),
+    );
+    expect(aoVivo).toMatchObject({ receivedAt: "2026-08-20T12:00:00.100000+00:00" });
+
+    const snapshot = parseServerMessage(
+      JSON.stringify({
+        type: "snapshot",
+        roster: [],
+        history: [
+          { type: "roll", player: "ana", result: makeResult(), received_at: "2026-08-20T12:00:00.100000+00:00" },
+          // Entrada legada, gravada antes do campo existir: continua válida.
+          { type: "roll", player: "bia", result: makeResult() },
+        ],
+      }),
+    );
+    expect(snapshot?.type).toBe("snapshot");
+    const history = snapshot?.type === "snapshot" ? snapshot.history : [];
+    expect(history[0]).toMatchObject({ receivedAt: "2026-08-20T12:00:00.100000+00:00" });
+    expect(history[1]).not.toHaveProperty("receivedAt");
+  });
+
+  it("parseia history_cleared", () => {
+    expect(
+      parseServerMessage(
+        '{"type":"history_cleared","player":"ana","received_at":"2026-08-20T12:00:01+00:00"}',
+      ),
+    ).toEqual({
+      type: "historyCleared",
+      player: "ana",
+      receivedAt: "2026-08-20T12:00:01+00:00",
+    });
   });
 
   it("parseia erro do servidor", () => {
@@ -244,6 +317,19 @@ describe("roomWsUrl", () => {
 // Config de runtime: a MESMA imagem serve qualquer dominio, entao
 // window.__ROLAI_CONFIG__ (escrito pelo entrypoint do container) tem que
 // vencer o que o Vite inlinou no bundle.
+describe("exportUrl", () => {
+  it("sem corte, exporta a sala inteira", () => {
+    expect(exportUrl("abc123", "csv")).toContain("/rooms/abc123/export?format=csv");
+    expect(exportUrl("abc123", "csv")).not.toContain("since=");
+  });
+
+  it("com corte, o link leva o filtro", () => {
+    // Sem isso o arquivo entregaria justamente o que a pessoa ocultou na tela.
+    const url = exportUrl("abc123", "json", "2026-08-20T12:00:00.100000+00:00");
+    expect(url).toContain("since=2026-08-20T12%3A00%3A00.100000%2B00%3A00");
+  });
+});
+
 describe("config de runtime", () => {
   const env = { VITE_WS_URL: "wss://build.example", VITE_API_URL: "https://build.example" };
 

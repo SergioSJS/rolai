@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import type { ReactNode } from "react";
+import { TimesIcon } from "./Glyphs";
 
 interface ModalProps {
   title: string;
@@ -40,7 +41,7 @@ export function Modal({ title, onClose, children, size }: ModalProps) {
             aria-label="Fechar"
             onClick={onClose}
           >
-            ✕
+            <TimesIcon />
           </button>
         </div>
         <div className="modal-body">{children}</div>

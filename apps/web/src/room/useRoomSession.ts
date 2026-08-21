@@ -19,6 +19,12 @@ import { clearRoomCode, loadRoomCode, loadPlayerName, savePlayerName, saveRoomCo
 import { initialRoomState, roomReducer } from "./reducer";
 import type { HistoryEntry, RoomEvent, RoomState } from "./reducer";
 import { createRoom, RoomClient } from "./client";
+import {
+  cutoffForCurrent,
+  loadHiddenBefore,
+  LOCAL_HISTORY_SCOPE,
+  saveHiddenBefore,
+} from "./hidden";
 import { PendingDeckDraws, PendingRolls } from "./echo";
 
 /** Código que veio no link (`?room=`), pra pré-preencher o campo da Sala. */
@@ -74,6 +80,24 @@ export interface RoomSession {
   sendDeckConfig: (changes: Partial<DeckConfig>) => void;
   /** Cor nova: reconecta, porque o estilo viaja no handshake. */
   restyle: (styles: DiceStyles) => void;
+  /**
+   * Corte do "ocultar daqui pra trás" (specs/09-limpar-historico.md) — ISO
+   * do servidor, `null` quando não há nada oculto. Só filtra a exibição:
+   * ninguém mais na mesa percebe, e o servidor segue com tudo.
+   */
+  hiddenBefore: string | null;
+  /** Esconde tudo que está à vista. Sem efeito com histórico vazio. */
+  hideHistory: () => void;
+  /** Desfaz o corte. É o par obrigatório do hide — sem ele vira mão única. */
+  showAllHistory: () => void;
+  /**
+   * Apaga o histórico DE VERDADE: na sala, pra mesa inteira via WS (sem
+   * undo); fora dela, o histórico local. Coisa diferente de `hideHistory`.
+   * Em sala fora do ar não faz nada — ver `canClearHistory`.
+   */
+  clearHistory: () => void;
+  /** `false` = em sala sem conexão agora; não há como apagar na mesa. */
+  canClearHistory: boolean;
 }
 
 /**
@@ -96,6 +120,20 @@ export function useRoomSession(options: RoomSessionOptions): RoomSession {
     () => loadPlayerName(window.localStorage) || "anonymous",
   );
   const [localHistory, setLocalHistory] = useState<HistoryEntry[]>([]);
+  // Escopo do corte: por código de sala (cada mesa tem o seu) e um separado
+  // pro histórico local. Sem escopo, entrar em outra sala herdaria um corte
+  // que não tem nada a ver com ela.
+  const hiddenScope = room.code ?? LOCAL_HISTORY_SCOPE;
+  const [hiddenBefore, setHiddenBefore] = useState<string | null>(() =>
+    loadHiddenBefore(window.localStorage, LOCAL_HISTORY_SCOPE),
+  );
+
+  // Troca de escopo (entrou/saiu de sala) recarrega o corte daquele escopo.
+  // Persistido de propósito: sem isso um F5 desfaz o que a pessoa mandou
+  // esconder, sem ela pedir.
+  useEffect(() => {
+    setHiddenBefore(loadHiddenBefore(window.localStorage, hiddenScope));
+  }, [hiddenScope]);
 
   const clientRef = useRef<RoomClient | null>(null);
   const pendingRef = useRef(new PendingRolls());
@@ -236,7 +274,12 @@ export function useRoomSession(options: RoomSessionOptions): RoomSession {
     (result: RollResult): boolean => {
       const client = liveClient();
       if (client === null) {
-        setLocalHistory((prev) => [...prev, { type: "roll", player: "você", result }]);
+        setLocalHistory((prev) => [
+          // `receivedAt` local: uma ponta só, não existe skew entre pares — e
+          // sem ele o corte e o hint de hora não teriam o que ler fora de sala.
+          ...prev,
+          { type: "roll", player: "você", result, receivedAt: new Date().toISOString() },
+        ]);
         return false;
       }
       pendingRef.current.track(selfNameRef.current, result);
@@ -260,6 +303,7 @@ export function useRoomSession(options: RoomSessionOptions): RoomSession {
             cards: result.cards,
             remaining: result.remaining,
             timestamp,
+            receivedAt: new Date().toISOString(),
           },
         ]);
         return;
@@ -280,6 +324,42 @@ export function useRoomSession(options: RoomSessionOptions): RoomSession {
     },
     [liveClient],
   );
+
+  const hideHistory = useCallback(() => {
+    const entries = room.code !== null ? room.history : localHistory;
+    const cutoff = cutoffForCurrent(entries);
+    // Nada à vista: não há carimbo de servidor pra guardar, e usar o relógio
+    // local traria o skew de volta (ver room/hidden.ts).
+    if (cutoff === null) return;
+    saveHiddenBefore(window.localStorage, hiddenScope, cutoff);
+    setHiddenBefore(cutoff);
+  }, [room.code, room.history, localHistory, hiddenScope]);
+
+  const showAllHistory = useCallback(() => {
+    saveHiddenBefore(window.localStorage, hiddenScope, null);
+    setHiddenBefore(null);
+  }, [hiddenScope]);
+
+  const clearHistory = useCallback(() => {
+    if (room.code === null) {
+      // Fora de sala não há servidor pra discordar: apaga e pronto.
+      setLocalHistory([]);
+    } else {
+      // Em sala quem apaga é o backend; o `history_cleared` volta pro
+      // reducer e zera a lista aqui e na tela de todo mundo. Sem conexão
+      // AGORA não há o que apagar em lugar nenhum — cair no ramo local
+      // limparia um histórico local vazio e daria a impressão de que
+      // funcionou (AGENTS.md: "existe" não é "funcionou"). A UI desabilita
+      // o botão nesse estado; a guarda aqui é a que vale.
+      const client = liveClient();
+      if (client === null) return;
+      client.clearHistory();
+    }
+    // O corte perde o sentido com o histórico vazio, e mantê-lo esconderia
+    // as próximas entradas se elas viessem com carimbo menor.
+    saveHiddenBefore(window.localStorage, hiddenScope, null);
+    setHiddenBefore(null);
+  }, [liveClient, room.code, hiddenScope]);
 
   const restyle = useCallback(
     (next: DiceStyles) => {
@@ -332,5 +412,10 @@ export function useRoomSession(options: RoomSessionOptions): RoomSession {
     sendDeckShuffle,
     sendDeckConfig,
     restyle,
+    hiddenBefore,
+    hideHistory,
+    showAllHistory,
+    clearHistory,
+    canClearHistory: room.code === null || connected,
   };
 }

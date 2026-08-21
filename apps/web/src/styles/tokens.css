@@ -47,6 +47,12 @@
   --accent-glow: rgba(29, 158, 117, 0.35);
   --warn: #e5c07b;
   --error: #e06c75;
+  /* Botao destrutivo: PAR fundo+texto, nao so uma cor. `--error` sozinho e
+     tom de texto sobre painel — usado como cor de fonte num botao ele caia
+     em cima do fundo de acento (vermelho no verde, ilegivel). */
+  --danger: #b3454f;
+  --danger-strong: #c9505b;
+  --danger-fg: #fff;
   --chip-bg: rgba(255, 255, 255, 0.08);
   --input-bg: rgba(0, 0, 0, 0.35);
   --stage-bg: rgba(14, 38, 29, 0.45);
@@ -93,6 +99,9 @@
   --accent-glow: rgba(21, 119, 90, 0.25);
   --warn: #8a6d1f;
   --error: #b03a46;
+  --danger: #a8323e;
+  --danger-strong: #8d2a34;
+  --danger-fg: #fff;
   --chip-bg: rgba(23, 33, 28, 0.06);
   --input-bg: rgba(255, 255, 255, 0.7);
   --stage-bg: rgba(21, 119, 90, 0.08);

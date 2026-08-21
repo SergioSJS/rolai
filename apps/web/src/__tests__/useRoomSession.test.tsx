@@ -94,6 +94,124 @@ describe("useRoomSession", () => {
     vi.unstubAllGlobals();
   });
 
+  it("ocultar corta pelo carimbo do servidor e mostrar tudo desfaz", () => {
+    const view = montar();
+    entrar(view);
+    act(() =>
+      ultimoSocket().entregar({
+        type: "roll",
+        player: "bia",
+        result: makeResult(),
+        received_at: "2026-08-20T12:00:00.100000+00:00",
+      }),
+    );
+
+    act(() => view.result.current.hideHistory());
+    // O corte é o carimbo do SERVIDOR, não `new Date()` desta máquina —
+    // comparar contra o relógio local traria o skew de volta (room/hidden.ts).
+    expect(view.result.current.hiddenBefore).toBe("2026-08-20T12:00:00.100000+00:00");
+    // Ocultar é só filtro de exibição: o histórico da sala segue inteiro.
+    expect(view.result.current.room.history).toHaveLength(1);
+
+    act(() => view.result.current.showAllHistory());
+    expect(view.result.current.hiddenBefore).toBeNull();
+  });
+
+  it("corte é por sala e sobrevive ao F5", () => {
+    const view = montar();
+    entrar(view, "sala-de-teste-01");
+    act(() =>
+      ultimoSocket().entregar({
+        type: "roll",
+        player: "bia",
+        result: makeResult(),
+        received_at: "2026-08-20T12:00:00.100000+00:00",
+      }),
+    );
+    act(() => view.result.current.hideHistory());
+
+    // Outra sala não herda o corte da anterior.
+    entrar(view, "sala-de-teste-02");
+    expect(view.result.current.hiddenBefore).toBeNull();
+
+    // Voltar pra primeira reencontra o corte: sem persistir, um F5 desfaria
+    // o que a pessoa mandou esconder sem ela pedir.
+    entrar(view, "sala-de-teste-01");
+    expect(view.result.current.hiddenBefore).toBe("2026-08-20T12:00:00.100000+00:00");
+  });
+
+  it("ocultar sem nada à vista não guarda corte", () => {
+    const view = montar();
+    entrar(view);
+    act(() => view.result.current.hideHistory());
+    expect(view.result.current.hiddenBefore).toBeNull();
+  });
+
+  it("limpar em sala manda history_clear e o servidor zera o histórico", () => {
+    const view = montar();
+    entrar(view);
+    act(() =>
+      ultimoSocket().entregar({
+        type: "roll",
+        player: "bia",
+        result: makeResult(),
+        received_at: "2026-08-20T12:00:00.100000+00:00",
+      }),
+    );
+
+    act(() => view.result.current.clearHistory());
+    // O cliente NÃO apaga por conta própria: quem manda é o backend, senão a
+    // aba mostraria vazio enquanto a mesa continua com tudo.
+    expect(ultimoSocket().sent).toContain(JSON.stringify({ type: "history_clear" }));
+    expect(view.result.current.room.history).toHaveLength(1);
+
+    act(() =>
+      ultimoSocket().entregar({
+        type: "history_cleared",
+        player: "ana",
+        received_at: "2026-08-20T12:00:01.000000+00:00",
+      }),
+    );
+    expect(view.result.current.room.history).toHaveLength(0);
+  });
+
+  it("em sala fora do ar, limpar não cai no ramo local", () => {
+    // "Tem cliente" não é "está conectado" (AGENTS.md): sem a guarda, o
+    // clique limparia um localHistory vazio e pareceria ter funcionado,
+    // enquanto a mesa segue com o histórico inteiro.
+    const view = montar();
+    entrar(view);
+    act(() =>
+      ultimoSocket().entregar({
+        type: "roll",
+        player: "bia",
+        result: makeResult(),
+        received_at: "2026-08-20T12:00:00.100000+00:00",
+      }),
+    );
+    act(() => ultimoSocket().derrubar(1006));
+    expect(view.result.current.canClearHistory).toBe(false);
+
+    const enviadosAntes = ultimoSocket().sent.length;
+    act(() => view.result.current.clearHistory());
+    expect(ultimoSocket().sent).toHaveLength(enviadosAntes);
+    expect(view.result.current.room.history).toHaveLength(1);
+  });
+
+  it("fora de sala limpar apaga o histórico local de verdade", () => {
+    const view = montar();
+    act(() => {
+      view.result.current.sendRoll(makeResult());
+    });
+    expect(view.result.current.localHistory).toHaveLength(1);
+    // Carimbo local: fora de sala não há servidor, e sem ele o corte e o
+    // hint de hora não teriam o que ler.
+    expect(view.result.current.localHistory[0]!.receivedAt).toBeTruthy();
+
+    act(() => view.result.current.clearHistory());
+    expect(view.result.current.localHistory).toHaveLength(0);
+  });
+
   it("entrar guarda a sala e reflete o codigo na URL", () => {
     const view = montar();
     entrar(view);

@@ -18,6 +18,7 @@ import type { FormEvent } from "react";
 import { createDeck, draw, reshuffleDeck } from "@rolai/deck-engine";
 import type { DeckConfig, DeckState, DrawResult } from "@rolai/deck-engine";
 import { playCardDraw, playCardShuffle } from "../deckSound";
+import { DrawCardIcon, ShuffleIcon } from "./Glyphs";
 import { StepperInput } from "./StepperInput";
 
 interface DeckPanelProps {
@@ -112,9 +113,11 @@ export function DeckPanel({ config, onDraw, onReshuffle }: DeckPanelProps) {
         className="roll-button"
         disabled={deck.drawPile.length === 0 && !deck.config.autoReshuffleOnEmpty}
       >
+        <DrawCardIcon />
         Puxar
       </button>
       <button type="button" className="button-secondary deck-reshuffle-button" onClick={handleReshuffle}>
+        <ShuffleIcon />
         Reembaralhar
       </button>
 

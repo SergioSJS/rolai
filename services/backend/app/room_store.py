@@ -10,6 +10,7 @@
 #                        salas (settings.max_active_rooms), prunado a cada
 #                        criacao (sala expirada some do set)
 import secrets
+from datetime import UTC, datetime
 
 from pydantic import TypeAdapter
 from redis.asyncio import Redis
@@ -26,6 +27,16 @@ _HISTORY_ENTRY_ADAPTER: TypeAdapter[HistoryEntry] = TypeAdapter(HistoryEntry)
 
 class RoomCapReached(Exception):
     """Teto global de salas ativas (settings.max_active_rooms) atingido."""
+
+
+def server_timestamp() -> str:
+    """Hora do servidor em ISO 8601 UTC, com microssegundo.
+
+    Microssegundo importa: e a chave de corte do "ocultar daqui pra tras", e
+    a comparacao e `> corte`. Com precisao de segundo, duas rolagens no mesmo
+    segundo empatam e uma delas some sem ter sido ocultada.
+    """
+    return datetime.now(UTC).isoformat()
 
 
 def generate_room_code(length_bytes: int = 6) -> str:
@@ -125,12 +136,34 @@ class RoomStore:
         members = [RosterMember.model_validate_json(v) for v in values]
         return sorted(members, key=lambda m: m.name)
 
-    async def append_history(self, code: str, entry: HistoryEntry) -> None:
+    async def append_history(self, code: str, entry: HistoryEntry) -> str:
+        """Guarda a entrada carimbando `received_at` (hora do SERVIDOR).
+
+        O `timestamp` que veio no payload e do relogio de quem rolou e nao
+        serve como chave de ordem nem de corte: aparelho com hora torta
+        desordena o historico. `received_at` bate com a ordem real da lista e
+        e o que o "ocultar daqui pra tras" usa (specs/09-limpar-historico.md).
+
+        Devolve o carimbo pro chamador repetir no broadcast.
+        """
         key = self._key(code, ":history")
-        await self._redis.rpush(key, entry.model_dump_json())
+        received_at = server_timestamp()
+        stamped = entry.model_copy(update={"received_at": received_at})
+        await self._redis.rpush(key, stamped.model_dump_json())
         await self._redis.ltrim(key, -self._settings.history_max_entries, -1)
         await self._refresh_ttl(code)
+        # Devolvido pra ir junto no broadcast: sem isso o cliente so enxerga
+        # `received_at` no snapshot do proximo reconnect, e o corte nao pega
+        # nada do que chegou ao vivo.
+        return received_at
 
     async def history(self, code: str) -> list[HistoryEntry]:
         raw = await self._redis.lrange(self._key(code, ":history"), 0, -1)
         return [_HISTORY_ENTRY_ADAPTER.validate_json(item) for item in raw]
+
+    async def clear_history(self, code: str) -> None:
+        """Apaga o historico da sala pra todo mundo, sem undo. A sala segue
+        viva: marcador e roster intactos, TTL renovado como em qualquer
+        evento (specs/09-limpar-historico.md)."""
+        await self._redis.delete(self._key(code, ":history"))
+        await self._refresh_ttl(code)

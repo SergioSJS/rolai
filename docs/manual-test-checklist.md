@@ -59,6 +59,15 @@ coberto por teste automatizado.
 - [ ] Rolar com o backend fora do ar: aparece *"Sem conexão com a sala agora
       — essa rolagem ficou só com você"*. Rolagem que some calada é bug.
 - [ ] Entrar por link (`?room=CODIGO`) numa aba nova: entra direto, sem modal
+- [ ] **Ocultar** o histórico numa aba: some ali e **continua inteiro na
+      outra**. "Mostrar tudo" traz de volta, e F5 mantém oculto.
+- [ ] **Limpar a sala** numa aba (dois cliques, o segundo confirma): o
+      histórico esvazia **nas duas**, e quem entrar depois pelo link também
+      chega com a lista vazia.
+- [ ] Com parte oculta, abrir o link de export: o arquivo **não traz** o que
+      está oculto. Sem corte, traz tudo.
+- [ ] Hora de cada entrada bate com o relógio da máquina — inclusive com as
+      duas pontas em fusos diferentes, se der pra testar
 
 > Conferir no log do servidor: `grep rate_limited` tem que continuar vazio.
 > Rajada de reconexão é o mecanismo que já expulsou gente da própria mesa.

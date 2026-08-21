@@ -8,6 +8,7 @@
 import { useState } from "react";
 import type { RoomState } from "../room/reducer";
 import { exportUrl } from "../config";
+import { CopyIcon, EnterIcon, ExitIcon, PencilIcon, PlusIcon } from "./Glyphs";
 import {
   MAX_PLAYER_NAME,
   MIN_DICE_SCALE,
@@ -26,6 +27,9 @@ interface RoomPanelProps {
   onJoin: (code: string, name: string) => void;
   onLeave: () => void;
   onRename: (name: string) => void;
+  /** Corte do "ocultar" — vai no link de export pra não entregar no arquivo
+   * o que a pessoa escondeu na tela (specs/09-limpar-historico.md). */
+  hiddenBefore?: string | null;
 }
 
 const STATUS_LABELS: Record<RoomState["status"], string> = {
@@ -44,6 +48,7 @@ export function RoomPanel({
   onJoin,
   onLeave,
   onRename,
+  hiddenBefore = null,
 }: RoomPanelProps) {
   const [name, setName] = useState(playerName === "anonymous" ? "" : playerName);
   const [code, setCode] = useState(initialCode);
@@ -108,6 +113,7 @@ export function RoomPanel({
         </p>
         <div className="room-actions">
           <button type="button" onClick={() => criar(name || "anonymous")}>
+            <PlusIcon />
             Criar sala
           </button>
           <button
@@ -116,6 +122,7 @@ export function RoomPanel({
             disabled={code.trim() === ""}
             onClick={() => onJoin(code.trim(), name || "anonymous")}
           >
+            <EnterIcon />
             Entrar
           </button>
         </div>
@@ -155,6 +162,7 @@ export function RoomPanel({
             disabled={!renamed}
             onClick={() => onRename(name)}
           >
+            <PencilIcon />
             Trocar
           </button>
         </div>
@@ -165,6 +173,7 @@ export function RoomPanel({
           className="button-secondary"
           onClick={() => void navigator.clipboard?.writeText(shareLink)}
         >
+          <CopyIcon />
           Copiar link
         </button>
         {/* URL do modo stream: so os dados, fundo alpha — pra Browser
@@ -174,9 +183,11 @@ export function RoomPanel({
           className="button-secondary"
           onClick={() => void navigator.clipboard?.writeText(streamLink)}
         >
+          <CopyIcon />
           Copiar link pro OBS
         </button>
         <button type="button" className="button-secondary" onClick={onLeave}>
+          <ExitIcon />
           Sair da sala
         </button>
       </div>
@@ -205,11 +216,16 @@ export function RoomPanel({
         ))}
       </ul>
       <h3>Exportar histórico</h3>
+      {hiddenBefore !== null && (
+        <p className="field-hint">
+          O export segue o que está à vista: o que você ocultou fica de fora.
+        </p>
+      )}
       <div className="room-actions export-links">
         {(["json", "csv", "md"] as const).map((format) => (
           <a
             key={format}
-            href={exportUrl(room.code!, format)}
+            href={exportUrl(room.code!, format, hiddenBefore)}
             target="_blank"
             rel="noreferrer"
           >

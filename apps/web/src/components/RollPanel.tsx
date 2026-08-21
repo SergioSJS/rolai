@@ -20,7 +20,7 @@ import { rollFromNotation, rollFromOverlay, rollFromProfile } from "../roll";
 import { isYzeSystem, planYzePush } from "../yzePush";
 import { isTrophy, planTrophyPush } from "../trophyPush";
 import { ComposerBar } from "./ComposerBar";
-import { TimesIcon } from "./Glyphs";
+import { PushIcon, RollIcon, TimesIcon } from "./Glyphs";
 import { StepperInput } from "./StepperInput";
 
 export const INFAERNUM_ACTIONS = [
@@ -394,6 +394,7 @@ export function RollPanel({
             aria-label="Rolar sistema"
             disabled={disabled || profileRolling}
           >
+            <RollIcon />
             Rolar
           </button>
           {canPush && (
@@ -403,6 +404,7 @@ export function RollPanel({
               onClick={() => void handlePush()}
               disabled={disabled || profileRolling}
             >
+              <PushIcon />
               Forçar
             </button>
           )}
@@ -431,6 +433,7 @@ export function RollPanel({
           aria-label={twoForms ? "Rolar dados" : undefined}
           disabled={disabled || freeRolling || notationEmpty}
         >
+          <RollIcon />
           Rolar
         </button>
         {freeError !== null && <p className="error">{freeError}</p>}
