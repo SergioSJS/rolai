@@ -4,6 +4,37 @@ Todas as mudanças notáveis neste projeto estão documentadas aqui.
 Formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/)
 e o projeto adere a [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.5.0] — 2026-08-21
+
+### Adicionado
+- **Painel Servidor** (`specs/11-status-do-servidor.md`): item novo no menu
+  abrindo os agregados do `GET /stats` — salas ativas, jogadores e
+  espectadores conectados agora, contadores desde o boot, uptime e limites
+  de abuso atingidos. Atualiza a cada 20s, mas só com o modal aberto, aba
+  visível e navegador online: `/stats` divide com a criação de sala o teto
+  de 120 req/min por IP.
+- **Aviso de expiração de sala** (`specs/12-aviso-de-expiracao-de-sala.md`)
+  na tela de Sala (antes de entrar e junto do Exportar histórico) e na
+  Ajuda. O prazo vem do servidor, não de texto escrito à mão: `POST /rooms`
+  já devolvia `ttl_seconds` (era descartado) e o `GET /stats` passou a
+  publicar `rooms.ttl_seconds`. Sem esse número — servidor fora do ar,
+  protegido por token ou velho demais pro campo — a frase sai sem prazo, em
+  vez de prometer "0 hora".
+- **`rooms.ttl_seconds` no `GET /stats`**: é config, não contagem, e nada
+  identificável.
+
+### Corrigido
+- **`rooms_with_someone` contava cada sala duas vezes**: admitir qualquer
+  conexão cria a entrada da sala nos dois mapas de broadcast, e o gauge
+  somava os tamanhos. O `finally` também só limpava o mapa do próprio
+  papel, deixando um dict vazio pendurado por código de sala — era o que
+  fazia o número voltar 1 com zero conexões abertas.
+- **Painel Servidor não mente sobre o que está fazendo**: "Carregando…" só
+  com busca em voo (aba em segundo plano suspende o polling de propósito), e
+  timeout deixou de ser confundido com cancelamento — os dois chegam como
+  `AbortError`, e tratar todo abort como "cancelei" prendia a tela em
+  "carregando" pra sempre contra servidor que aceita e não responde.
+
 ## [1.4.0] — 2026-08-21
 
 ### Adicionado
