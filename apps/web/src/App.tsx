@@ -50,6 +50,9 @@ import { DeckPanel } from "./components/DeckPanel";
 import { RoomPanel } from "./components/RoomPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { HistoryList } from "./components/HistoryList";
+import { HistoryActions } from "./components/HistoryActions";
+import { CardsIcon, DiceSectionIcon } from "./components/Glyphs";
+import { visibleEntries } from "./room/hidden";
 import { ResultDisplay } from "./components/ResultDisplay";
 import { CardStack } from "./components/CardStack";
 import { LazyCardStage3D, preloadCardStage3D } from "./components/LazyCardStage3D";
@@ -264,6 +267,11 @@ export function App() {
     sendDeckShuffle,
     sendDeckConfig,
     restyle,
+    hiddenBefore,
+    hideHistory,
+    showAllHistory,
+    clearHistory,
+    canClearHistory,
   } = useRoomSession({ animate, animateCards, diceStyle, diceStyles });
 
   // Previa REAL: com Preferências aberto, qualquer mudanca na aparencia ou
@@ -405,6 +413,10 @@ export function App() {
   );
 
   const inRoom = room.code !== null;
+  // Histórico da sala ou o local, com o corte do "ocultar" aplicado só na
+  // exibição — o servidor (e o resto da mesa) continua com tudo.
+  const historyEntries = inRoom ? room.history : localHistory;
+  const visibleHistory = visibleEntries(historyEntries, hiddenBefore);
   const online = useOnline();
 
   return (
@@ -431,8 +443,33 @@ export function App() {
       <div className="layout">
         <div className="main-col">
           <section className="panel history-panel">
-            <h2>Histórico{inRoom ? "" : " (local)"}</h2>
-            <HistoryList entries={inRoom ? room.history : localHistory} />
+            <div className="history-header">
+              <h2>Histórico{inRoom ? "" : " (local)"}</h2>
+              <HistoryActions
+                hasEntries={historyEntries.length > 0}
+                hiddenBefore={hiddenBefore}
+                inRoom={inRoom}
+                canClear={canClearHistory}
+                onHide={hideHistory}
+                onShowAll={showAllHistory}
+                onClear={clearHistory}
+              />
+            </div>
+            {inRoom && room.error !== null && (
+              // O erro do servidor só aparecia dentro do modal de Sala. Com o
+              // backend recusando um evento (versão velha, por exemplo), o
+              // clique não fazia nada e a tela não dizia por quê — a família
+              // de bug que o AGENTS.md manda desconfiar primeiro.
+              <p className="history-error" role="status">
+                {room.error}
+              </p>
+            )}
+            {hiddenBefore !== null && (
+              <p className="history-hidden-note" role="status">
+                Parte do histórico está oculta — só pra você, a mesa continua vendo tudo.
+              </p>
+            )}
+            <HistoryList entries={visibleHistory} />
           </section>
         </div>
 
@@ -445,6 +482,7 @@ export function App() {
               className={sidebarView === "dice" ? "family-tab is-active" : "family-tab"}
               onClick={() => setSidebarView("dice")}
             >
+              <DiceSectionIcon />
               Dados
             </button>
             <button
@@ -460,6 +498,7 @@ export function App() {
                 if (tier === "3d-full" || tier === "3d-light") preloadCardStage3D();
               }}
             >
+              <CardsIcon />
               Baralho
             </button>
           </div>
@@ -540,6 +579,7 @@ export function App() {
             onJoin={joinRoom}
             onLeave={handleLeave}
             onRename={handleRename}
+            hiddenBefore={hiddenBefore}
           />
         </Modal>
       )}

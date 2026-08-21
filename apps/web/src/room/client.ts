@@ -65,6 +65,17 @@ function parseHistory(raw: unknown[]): HistoryEntry[] {
 // ao vivo, mesma forma nos dois.
 function parseDataEvent(data: unknown): HistoryEntry | null {
   if (!isRecord(data)) return null;
+  const entry = parseDataEventBody(data);
+  if (entry === null) return null;
+  // Carimbo do servidor: vem no broadcast E no snapshot. Ausente em entrada
+  // gravada antes do campo existir — quem consome cai no timestamp do
+  // payload (specs/09-limpar-historico.md).
+  const receivedAt = data["received_at"];
+  if (typeof receivedAt === "string") entry.receivedAt = receivedAt;
+  return entry;
+}
+
+function parseDataEventBody(data: Record<string, unknown>): HistoryEntry | null {
   switch (data["type"]) {
     case "roll": {
       const player = data["player"];
@@ -151,6 +162,12 @@ export function parseServerMessage(raw: string): RoomEvent | null {
       if (!Array.isArray(roster)) return null;
       return { type: "roster", roster: parseRoster(roster) };
     }
+    case "history_cleared": {
+      const player = data["player"];
+      const receivedAt = data["received_at"];
+      if (typeof player !== "string" || typeof receivedAt !== "string") return null;
+      return { type: "historyCleared", player, receivedAt };
+    }
     case "error": {
       const message = data["message"];
       return {
@@ -231,6 +248,13 @@ export class RoomClient {
   // que volta no broadcast, e a propria puxada animaria duas vezes.
   sendDeckDraw(cards: Card[], remaining: number, timestamp: string): void {
     this.sendEnvelope({ type: "deck_draw", cards, remaining, timestamp });
+  }
+
+  // Apaga o historico da sala pra TODO MUNDO, sem undo — diferente do
+  // "ocultar daqui pra tras", que e filtro local (specs/09-limpar-historico.md).
+  // Espectador nao passa: sendEnvelope ja barra, e o backend barra de novo.
+  clearHistory(): void {
+    this.sendEnvelope({ type: "history_clear" });
   }
 
   sendDeckShuffle(): void {

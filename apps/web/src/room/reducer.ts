@@ -14,9 +14,17 @@ import type { RollResult } from "@rolai/rules-engine";
 import type { Card, DeckConfig } from "@rolai/deck-engine";
 import type { DiceStyle, DiceStyles } from "../settings";
 
+// `receivedAt` e o carimbo do SERVIDOR na hora em que o relay recebeu o
+// evento (specs/09-limpar-historico.md). Nao substitui o `timestamp` do
+// payload (relogio de quem rolou): um diz quando rolou no aparelho, o outro
+// quando chegou na sala. E o segundo que serve de chave pro corte do
+// "ocultar daqui pra tras" — aparelho com hora torta desordena o primeiro.
+// Opcional porque entrada gravada antes deste campo existir nao tem, e
+// porque fora de sala nao ha servidor pra carimbar.
 export interface RollHistoryEntry {
   type: "roll";
   player: string;
+  receivedAt?: string;
   result: RollResult;
   // Aparencia dos dados de quem rolou (pode faltar: cliente antigo ou
   // estilo invalido) — usada pra colorir o nome e animar na cor certa.
@@ -27,6 +35,7 @@ export interface RollHistoryEntry {
 export interface DeckDrawHistoryEntry {
   type: "deck_draw";
   player: string;
+  receivedAt?: string;
   cards: Card[];
   remaining: number;
   timestamp: string;
@@ -35,12 +44,14 @@ export interface DeckDrawHistoryEntry {
 export interface DeckShuffleHistoryEntry {
   type: "deck_shuffle";
   player: string;
+  receivedAt?: string;
   timestamp: string;
 }
 
 export interface DeckConfigHistoryEntry {
   type: "deck_config";
   player: string;
+  receivedAt?: string;
   includeJokers?: boolean;
   removalMode?: DeckConfig["removalMode"];
   autoReshuffleOnEmpty?: boolean;
@@ -82,6 +93,7 @@ export type RoomEvent =
   | DeckDrawHistoryEntry
   | DeckShuffleHistoryEntry
   | DeckConfigHistoryEntry
+  | { type: "historyCleared"; player: string; receivedAt: string }
   | { type: "serverError"; message: string }
   // Recusa no handshake (sala inexistente, cheia, origem barrada): nunca
   // chegamos a entrar, entao o estado de sala tem que sumir — senao a UI
@@ -128,6 +140,12 @@ export function roomReducer(state: RoomState, event: RoomEvent): RoomState {
       if (state.status !== "connected") return state;
       return { ...state, history: [...state.history, event] };
     }
+    case "historyCleared":
+      // Limpar e da MESA: o Redis ja apagou, aqui so espelha. Nao mexe no
+      // corte local do "ocultar" — o que vier depois tem carimbo maior que
+      // ele e aparece normalmente.
+      if (state.status !== "connected") return state;
+      return { ...state, history: [] };
     case "serverError":
       return { ...state, error: event.message };
     case "rejected":

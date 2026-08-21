@@ -96,6 +96,75 @@
   flex-wrap: wrap;
 }
 
+/* Hora local da entrada: empurrada pra direita pra virar coluna, e discreta
+   — e referencia, nao conteudo (specs/09-limpar-historico.md). */
+.history-time {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+/* Cabecalho do painel com os botoes de ocultar/limpar ao lado do titulo. */
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.history-header h2 {
+  margin: 0;
+  flex: 1;
+}
+
+.history-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.history-actions button {
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.55rem;
+}
+
+/* Menores que o padrão: são botões de 0.72rem no cabeçalho do painel. */
+.history-actions .menu-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+/* Confirmação do "Limpar": vermelho só no segundo clique, pra separar
+   visualmente o que apaga de verdade do que só esconde. Troca o FUNDO, não
+   só a cor da fonte: o botão base já vem com `background: var(--accent)`, e
+   recolorir só o texto deixava vermelho sobre verde. */
+.history-actions button.is-danger {
+  background: var(--danger);
+  color: var(--danger-fg);
+}
+
+.history-actions button.is-danger:hover:not(:disabled) {
+  background: var(--danger-strong);
+}
+
+/* Falha vinda do servidor no painel de histórico: sem isto o backend
+   respondia erro e a tela não mostrava NADA — foi exatamente o que fez
+   "limpar a sala" parecer quebrado contra um backend desatualizado
+   (AGENTS.md: quando algo "simplesmente não acontece", suspeite disto). */
+.history-error {
+  margin: 0.35rem 0 0;
+  font-size: 0.74rem;
+  color: var(--error);
+}
+
+.history-hidden-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
 .history li:last-child {
   border-bottom: none;
 }

@@ -24,7 +24,7 @@ import {
 import type { ComposerState } from "../composer";
 import { StepperInput } from "./StepperInput";
 import { DiceIcon } from "./DiceIcon";
-import { MinusIcon, TimesIcon } from "./Glyphs";
+import { EraserIcon, MinusIcon, TimesIcon } from "./Glyphs";
 
 interface ComposerBarProps {
   notation: string;
@@ -139,6 +139,7 @@ export function ComposerBar({ notation, onChange }: ComposerBarProps) {
           disabled={isEmpty && notation.trim() === ""}
           onClick={() => onChange(toNotation(clearComposer()))}
         >
+          <EraserIcon />
           Limpar
         </button>
       </div>

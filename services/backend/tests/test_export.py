@@ -56,7 +56,9 @@ def test_export_csv(client: TestClient) -> None:
     resp = client.get(f"/rooms/{code}/export?format=csv")
     assert resp.status_code == 200
     lines = resp.text.strip().splitlines()
-    assert lines[0] == "timestamp,player,type,notation,profile,outcome,outcome_flags,detail"
+    assert lines[0] == (
+        "received_at,timestamp,player,type,notation,profile,outcome,outcome_flags,detail"
+    )
     assert len(lines) == 4
     assert "Ana" in lines[1] and "2d6" in lines[1]
     assert "ironsworn" in lines[2] and "weak_hit" in lines[2]

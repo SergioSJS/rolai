@@ -61,7 +61,7 @@ from app.limits import client_ip, within_limit
 from app.logs import log
 from app.rate_limit import TokenBucket
 from app.room_deps import _redis_of, _settings_of, _stats_of, _store_of
-from app.room_store import RoomCapReached, RoomStore
+from app.room_store import RoomCapReached, RoomStore, server_timestamp
 from app.schemas import (
     ClientEventIn,
     DeckConfigEventIn,
@@ -71,6 +71,7 @@ from app.schemas import (
     DeckShuffleEventIn,
     DeckShuffleHistoryEntry,
     DiceStyle,
+    HistoryClearEventIn,
     HistoryEntry,
     RollEventIn,
     RollHistoryEntry,
@@ -408,9 +409,23 @@ async def room_ws(
             if event_in is None:
                 continue  # erro ja enviado ao remetente
             if spectator:
-                # Espectador nunca rola nem mexe no proprio baralho em sala:
-                # erro ao remetente, nada vai pro broadcast nem pro historico.
+                # Espectador nunca rola, nem mexe no proprio baralho em sala,
+                # nem apaga o historico da mesa: erro ao remetente, nada vai
+                # pro broadcast nem pro historico.
                 await _send_error(websocket, "spectator_cannot_roll")
+                continue
+            if isinstance(event_in, HistoryClearEventIn):
+                # Nao passa por append_history: apaga tudo e avisa a mesa.
+                # Sem undo — o nome do botao ja diz (specs/09-limpar-historico.md).
+                await store.clear_history(code)
+                cleared: dict[str, object] = {
+                    "type": "history_cleared",
+                    "player": name,
+                    "received_at": server_timestamp(),
+                }
+                log.info("event=history_cleared code=%s player=%s", code, name)
+                await _broadcast(_room_dict(websocket.app.state.room_connections, code), cleared)
+                await _broadcast(_room_dict(websocket.app.state.room_spectators, code), cleared)
                 continue
             entry: HistoryEntry
             event: dict[str, object]
@@ -466,11 +481,15 @@ async def room_ws(
                     "timestamp": event_in.timestamp,
                 }
             else:
-                # Inalcancavel: ClientEventIn cobre exatamente estes 4 tipos
-                # (schemas.py). Explicito em vez de um `else` silencioso pra
-                # nao esconder um tipo novo esquecido aqui se a uniao crescer.
+                # Inalcancavel: ClientEventIn cobre exatamente estes tipos
+                # (schemas.py) e history_clear ja saiu por `continue` acima.
+                # Explicito em vez de um `else` silencioso pra nao esconder um
+                # tipo novo esquecido aqui se a uniao crescer.
                 raise TypeError(f"tipo de evento nao tratado: {event_in.type}")
-            await store.append_history(code, entry)
+            # O carimbo do servidor volta do append e vai junto no broadcast:
+            # sem isso o cliente so veria `received_at` no proximo snapshot, e
+            # o corte do "ocultar" nao pegaria o que chegou ao vivo.
+            event["received_at"] = await store.append_history(code, entry)
             # Espectadores recebem o broadcast tambem — e o que alimenta a
             # animacao da Browser Source do OBS. `_room_dict` de novo aqui
             # (nao os `connections`/`spectators` capturados la em cima): esta

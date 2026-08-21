@@ -41,6 +41,10 @@ def test_deck_shuffle_and_config_broadcast_and_log_the_actor(client: TestClient)
 
         ws.send_json({"type": "deck_shuffle", "timestamp": "2026-01-01T00:00:01Z"})
         shuffle_event = next_event(ws)
+        # `received_at` e carimbo do servidor (specs/09-limpar-historico.md):
+        # sai do dict pra comparacao exata, mas TEM que estar la — e o que o
+        # corte do "ocultar" usa no que chega ao vivo.
+        assert isinstance(shuffle_event.pop("received_at"), str)
         assert shuffle_event == {
             "type": "deck_shuffle",
             "player": "Ana",

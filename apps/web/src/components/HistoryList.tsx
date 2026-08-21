@@ -3,6 +3,7 @@ import type { RollResult } from "@rolai/rules-engine";
 import { dieFaceLabel, displayGroups, groupLabel, outcomeLabel, outcomeTone } from "../format";
 import { cardLabel, deckConfigChangeLabel, isRedSuit } from "../cardFormat";
 import { PlayerTag } from "./PlayerTag";
+import { entryStamp } from "../room/hidden";
 import type { DiceStyle, DiceStyles } from "../settings";
 
 function HistoryRollResult({
@@ -169,6 +170,17 @@ function entryDetail(entry: HistoryEntry) {
   }
 }
 
+// Hora no fuso de QUEM ESTA OLHANDO, a partir do carimbo do servidor: a
+// mesa inteira ve a mesma ordem, cada um no proprio fuso
+// (specs/09-limpar-historico.md). Carimbo invalido nao mostra nada — hora
+// errada engana mais que hora ausente.
+function localTimeLabel(entry: HistoryEntry): string | null {
+  const stamp = entryStamp(entry);
+  const date = new Date(stamp);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
 export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
   if (entries.length === 0) {
     return (
@@ -193,12 +205,20 @@ export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
   }
   return (
     <ul className="history">
-      {[...entries].reverse().map((entry, i) => (
-        <li key={`${entry.type}-${i}`}>
-          <PlayerTag name={entry.player} style={entry.type === "roll" ? entry.style : undefined} />
-          {entryDetail(entry)}
-        </li>
-      ))}
+      {[...entries].reverse().map((entry, i) => {
+        const hora = localTimeLabel(entry);
+        return (
+          <li key={`${entry.type}-${i}`}>
+            <PlayerTag name={entry.player} style={entry.type === "roll" ? entry.style : undefined} />
+            {entryDetail(entry)}
+            {hora !== null && (
+              <time className="history-time" dateTime={entryStamp(entry)}>
+                {hora}
+              </time>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

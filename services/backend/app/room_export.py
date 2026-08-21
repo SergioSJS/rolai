@@ -11,6 +11,13 @@ from app.schemas import (
 )
 
 
+def entry_timestamp(entry: HistoryEntry) -> str:
+    """Hora do payload do cliente — quando rolou no aparelho."""
+    if isinstance(entry, RollHistoryEntry):
+        return entry.result.timestamp
+    return entry.timestamp
+
+
 def _history_row(entry: HistoryEntry) -> list[str]:
     if isinstance(entry, RollHistoryEntry):
         r = entry.result
@@ -52,6 +59,7 @@ def _history_row(entry: HistoryEntry) -> list[str]:
 
 
 _CSV_HEADER = [
+    "received_at",
     "timestamp",
     "player",
     "type",
@@ -68,13 +76,27 @@ def _history_csv(history: list[HistoryEntry]) -> str:
     writer = csv.writer(buf)
     writer.writerow(_CSV_HEADER)
     for entry in history:
-        writer.writerow(_history_row(entry))
+        writer.writerow([entry.received_at or "", *_history_row(entry)])
     return buf.getvalue()
+
+
+def filter_since(history: list[HistoryEntry], since: str | None) -> list[HistoryEntry]:
+    """Aplica o mesmo corte que o "ocultar daqui pra tras" da UI.
+
+    Compara `received_at > since` — string ISO em UTC, entao comparacao
+    lexicografica basta. Entrada legada sem `received_at` (gravada antes deste
+    campo existir) cai no `timestamp` do cliente: relogio menos confiavel, mas
+    a alternativa seria vazar no export justamente o que foi ocultado.
+    """
+    if not since:
+        return history
+    return [e for e in history if (e.received_at or entry_timestamp(e)) > since]
 
 
 def _history_markdown(code: str, history: list[HistoryEntry]) -> str:
     lines = [f"# Sala {code}", "", "| " + " | ".join(_CSV_HEADER) + " |"]
     lines.append("| " + " | ".join("---" for _ in _CSV_HEADER) + " |")
     for entry in history:
-        lines.append("| " + " | ".join(_history_row(entry)) + " |")
+        row = [entry.received_at or "", *_history_row(entry)]
+        lines.append("| " + " | ".join(row) + " |")
     return "\n".join(lines) + "\n"

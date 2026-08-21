@@ -17,7 +17,7 @@ from fastapi.responses import PlainTextResponse
 from app.limits import client_ip, within_limit
 from app.logs import log
 from app.room_deps import _redis_of, _settings_of, _stats_of, _store_of
-from app.room_export import _history_csv, _history_markdown
+from app.room_export import _history_csv, _history_markdown, filter_since
 from app.room_store import RoomCapReached
 from app.room_ws import ROOM_CODE_PATTERN
 from app.room_ws import router as ws_router
@@ -72,11 +72,15 @@ async def export_room(
     request: Request,
     code: str,
     format: Literal["json", "csv", "md"] = Query(default="json"),
+    # Corte do "ocultar daqui pra tras" da UI (specs/09-limpar-historico.md):
+    # o export tem que respeitar o filtro, senao o link entrega justamente o
+    # que a pessoa escondeu. Teto de tamanho porque e string de query crua.
+    since: str | None = Query(default=None, max_length=64),
 ) -> PlainTextResponse:
     store = _store_of(request)
     if not ROOM_CODE_PATTERN.match(code) or not await store.exists(code):
         raise HTTPException(status_code=404, detail="sala nao encontrada")
-    history = await store.history(code)
+    history = filter_since(await store.history(code), since)
     if format == "json":
         payload = {
             "room": code,

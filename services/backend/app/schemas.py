@@ -94,8 +94,19 @@ class DeckConfigEventIn(BaseModel):
     timestamp: str
 
 
+class HistoryClearEventIn(BaseModel):
+    """Envelope client -> server: apagar o historico da sala pra TODO MUNDO
+    (specs/09-limpar-historico.md). Nao tem undo e nao tem dono de sala —
+    a defesa e a confirmacao na UI, o token bucket por conexao e o bloqueio
+    de espectador em room_ws."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["history_clear"]
+
+
 ClientEventIn = Annotated[
-    RollEventIn | DeckDrawEventIn | DeckShuffleEventIn | DeckConfigEventIn,
+    RollEventIn | DeckDrawEventIn | DeckShuffleEventIn | DeckConfigEventIn | HistoryClearEventIn,
     Field(discriminator="type"),
 ]
 
@@ -129,7 +140,24 @@ class RosterMember(BaseModel):
     styles: DiceStyles | None = None
 
 
-class RollHistoryEntry(BaseModel):
+class HistoryEntryBase(BaseModel):
+    """Campos comuns a toda entrada de historico.
+
+    `received_at` e carimbado pelo SERVIDOR em RoomStore.append_history — nao
+    substitui o `timestamp` do cliente, convive com ele: um e quando rolou no
+    aparelho, o outro e quando o relay recebeu (a diferenca mede skew de
+    relogio). Carimbar hora de chegada nao e recalcular rolagem, entao a
+    regra de ouro do relay burro segue intacta (specs/09-limpar-historico.md).
+
+    `| None` NAO e preguica: sala viva no Redis ja tem entrada serializada sem
+    o campo. Se fosse obrigatorio, validate_json levantaria dentro de
+    RoomStore.history() e o snapshot quebraria a mesa em andamento no deploy.
+    """
+
+    received_at: str | None = None
+
+
+class RollHistoryEntry(HistoryEntryBase):
     """Entrada do historico da sala: quem rolou, o resultado e a aparencia
     dos dados de quem rolou (pra reproduzir a cor certa no replay)."""
 
@@ -140,7 +168,7 @@ class RollHistoryEntry(BaseModel):
     styles: DiceStyles | None = None
 
 
-class DeckDrawHistoryEntry(BaseModel):
+class DeckDrawHistoryEntry(HistoryEntryBase):
     """Log de uma puxada de baralho — quem puxou, quais cartas, quantas
     ficaram (specs/08-baralho.md, "log de quem reembaralhar e operar")."""
 
@@ -151,7 +179,7 @@ class DeckDrawHistoryEntry(BaseModel):
     timestamp: str
 
 
-class DeckShuffleHistoryEntry(BaseModel):
+class DeckShuffleHistoryEntry(HistoryEntryBase):
     """Log de um reembaralhar — so quem e quando; a composicao nao muda."""
 
     type: Literal["deck_shuffle"] = "deck_shuffle"
@@ -159,7 +187,7 @@ class DeckShuffleHistoryEntry(BaseModel):
     timestamp: str
 
 
-class DeckConfigHistoryEntry(BaseModel):
+class DeckConfigHistoryEntry(HistoryEntryBase):
     """Log de uma mudanca de config do baralho."""
 
     type: Literal["deck_config"] = "deck_config"
