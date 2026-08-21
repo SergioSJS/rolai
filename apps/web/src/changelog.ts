@@ -12,6 +12,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.4.0",
+    date: "2026-08-21",
+    notes: [
+      "Ocultar o histórico daqui pra trás: some da SUA tela e volta com um clique em “Mostrar tudo”. O resto da mesa continua vendo tudo, e um F5 não desfaz o que você escondeu.",
+      "Limpar a sala: apaga o histórico para todo mundo, sem desfazer, com confirmação em dois cliques. Fora de sala, apaga o histórico local.",
+      "Exportar passa a respeitar o que está à vista: o que você ocultou fica de fora do arquivo.",
+      "Hora de cada rolagem no histórico, no seu fuso — carimbada pelo servidor, então a mesa inteira vê a mesma ordem mesmo com relógio torto em algum aparelho.",
+      "Ícones nos botões que eram só texto: Rolar, Forçar, Puxar, Reembaralhar, Criar sala, Entrar, Copiar link, Sair da sala e os do histórico.",
+      "Corrigido: quando o servidor recusava uma ação, o clique não fazia nada e a tela não dizia o motivo. Agora o erro aparece no painel de histórico.",
+    ],
+  },
+  {
     version: "1.3.0",
     date: "2026-08-20",
     notes: [

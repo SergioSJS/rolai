@@ -4,6 +4,51 @@ Todas as mudanças notáveis neste projeto estão documentadas aqui.
 Formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/)
 e o projeto adere a [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.4.0] — 2026-08-21
+
+### Adicionado
+- **Ocultar histórico daqui pra trás**: filtro local e desfazível, com
+  "Mostrar tudo" sempre à mão. Some só da sua tela — o resto da mesa
+  continua vendo tudo. O corte é guardado por código de sala, então um F5
+  não desfaz o que a pessoa mandou esconder.
+- **Limpar a sala**: apaga o histórico no servidor pra todo mundo, sem
+  desfazer, com confirmação em dois cliques. Fora de sala, "Limpar
+  histórico" apaga o local. Os dois nomes são parte do desenho: "limpar"
+  que só esconde pra você era a armadilha a evitar.
+- **`received_at` carimbado pelo servidor** em cada entrada do histórico
+  (`specs/09-limpar-historico.md`). Convive com o `timestamp` do payload —
+  um diz quando rolou no aparelho, o outro quando o relay recebeu — e é o
+  que torna o corte estável e a hora exibida confiável.
+- **Hora local em cada entrada do histórico**, no fuso de quem está
+  olhando.
+- **Export respeita o corte**: `GET /rooms/{code}/export?since=…`, com
+  coluna `received_at` no CSV e no Markdown.
+- **Ícones em 11 botões** que eram só texto: Ocultar, Mostrar tudo, Limpar,
+  Rolar, Forçar, Puxar, Reembaralhar, Criar sala, Entrar, Trocar, Copiar
+  link (e o pro OBS), Sair da sala e o Limpar do compositor.
+
+### Corrigido
+- **Erro de sala invisível**: o backend recusava um evento e a tela não
+  dizia nada — o clique simplesmente não fazia efeito. `room.error` agora
+  aparece no painel de histórico.
+- **Fechar do modal** usava o caractere `✕` cru, contrariando a regra do
+  próprio `Glyphs.tsx` (o glifo tipográfico desalinha dentro de botão
+  redondo). Passou a usar `TimesIcon`.
+- **Limpar em sala fora do ar** caía no ramo local e apagava um histórico
+  local vazio, parecendo ter funcionado enquanto a mesa seguia intacta.
+  Agora o botão desabilita e a guarda vale no hook.
+
+### Segurança
+- `history_clear` é barrado para espectador (mesmo caminho do
+  `spectator_cannot_roll`), e consome ficha do token bucket por conexão como
+  qualquer outra mensagem.
+
+### Testes
+- Backend 68 -> 76 (carimbo, entrada legada sem o campo, limpeza com duas
+  pontas, espectador barrado, corte no export).
+- Web 293 -> 315 (`room/hidden.ts`, corte por sala com persistência,
+  `history_cleared` no reducer e no parser, e os botões no `App.test.tsx`).
+
 ## [1.3.0] — 2026-08-20
 
 ### Mudado
