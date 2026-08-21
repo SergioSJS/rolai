@@ -111,7 +111,11 @@ DEFAULT now()`.
   apelido ou IP; há teste que trava isso. Contadores são em memória e zeram
   no restart: servem pra responder "está sendo atacado agora?", não pra
   contabilidade. Com `STATS_TOKEN` definido, o endpoint exige
-  `Authorization: Bearer <token>`; sem token, fica aberto.
+  `Authorization: Bearer <token>`; sem token, fica aberto. O painel
+  **Servidor** da web (`specs/11-status-do-servidor.md`) lê esse mesmo
+  endpoint do navegador, sem token nenhum — se o operador ligar
+  `STATS_TOKEN`, o painel mostra "protegido" e para de consultar. Nunca
+  embutir o token no bundle pra "resolver" isso: ele iria pro cliente.
 
 **Ainda em aberto** (aceito por ora, revisar se o projeto crescer): nada
 do bloco 2 — os três itens acima estão implementados.

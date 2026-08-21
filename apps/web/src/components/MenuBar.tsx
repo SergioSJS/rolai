@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ConnectionStatus } from "../room/reducer";
-import { AboutIcon, HelpIcon, RoomIcon, SettingsIcon } from "./Glyphs";
+import { AboutIcon, HelpIcon, RoomIcon, ServerIcon, SettingsIcon } from "./Glyphs";
 
 interface MenuBarProps {
   roomCode: string | null;
@@ -17,6 +17,7 @@ interface MenuBarProps {
   onOpenRoom: () => void;
   onOpenHelp: () => void;
   onOpenSettings: () => void;
+  onOpenStats: () => void;
   onOpenAbout: () => void;
 }
 
@@ -34,6 +35,7 @@ export function MenuBar({
   onOpenRoom,
   onOpenHelp,
   onOpenSettings,
+  onOpenStats,
   onOpenAbout,
 }: MenuBarProps) {
   const [aberto, setAberto] = useState(false);
@@ -108,7 +110,9 @@ export function MenuBar({
         </button>
 
         {/* Ordem por FREQUENCIA de uso: Sala (mexe toda sessao) ->
-            Preferencias -> Ajuda -> Sobre. O APK sai da barra: e acao de
+            Preferencias -> Ajuda -> Servidor -> Sobre. Servidor e
+            diagnostico: olhada rara, mas quem procura procura no menu, nao
+            enterrado dentro do Sobre. O APK sai da barra: e acao de
             uma vez so na vida, e disputava espaco com o que se usa sempre.
             Mora no Sobre, que e onde se procura "o que mais tem aqui". */}
         <div className={`menu-links${aberto ? " is-open" : ""}`}>
@@ -128,6 +132,15 @@ export function MenuBar({
           >
             <HelpIcon />
             Ajuda
+          </button>
+          <button
+            type="button"
+            className="menu-button"
+            onClick={item(onOpenStats)}
+            title="Status do servidor"
+          >
+            <ServerIcon />
+            Servidor
           </button>
           <button type="button" className="menu-button" onClick={item(onOpenAbout)}>
             <AboutIcon />

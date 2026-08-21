@@ -301,3 +301,16 @@ export function StreamIcon() {
     </svg>
   );
 }
+
+/** Servidor: rack de duas gavetas com a luzinha de atividade — é o status do
+ * backend que o item abre, não uma métrica de negócio (nada de gráfico). */
+export function ServerIcon() {
+  return (
+    <svg {...MENU}>
+      <rect x="3" y="3.4" width="14" height="5.4" rx="1.4" />
+      <rect x="3" y="11.2" width="14" height="5.4" rx="1.4" />
+      <line x1="6" y1="6.1" x2="6" y2="6.1" />
+      <line x1="6" y1="13.9" x2="6" y2="13.9" />
+    </svg>
+  );
+}

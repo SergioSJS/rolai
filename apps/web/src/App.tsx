@@ -64,9 +64,10 @@ import { NotationHelp } from "./components/NotationHelp";
 import { checkCooldown, initialCooldown } from "./rollCooldown";
 import { MenuBar } from "./components/MenuBar";
 import { Modal } from "./components/Modal";
+import { ServerStatsPanel } from "./components/ServerStatsPanel";
 import { useOnline } from "./useOnline";
 
-type ModalKind = "room" | "settings" | "about" | "help" | null;
+type ModalKind = "room" | "settings" | "about" | "help" | "stats" | null;
 
 export function App() {
   const profiles = useMemo(() => availableProfiles(), []);
@@ -429,6 +430,7 @@ export function App() {
         onOpenRoom={() => openModal("room")}
         onOpenHelp={() => openModal("help")}
         onOpenSettings={() => openModal("settings")}
+        onOpenStats={() => openModal("stats")}
         onOpenAbout={() => openModal("about")}
       />
 
@@ -614,6 +616,13 @@ export function App() {
       {modal === "help" && (
         <Modal title="Como escrever uma rolagem" size="lg" onClose={() => setModal(null)}>
           <NotationHelp />
+        </Modal>
+      )}
+      {/* `open` liga o polling do painel: o componente so existe com o modal
+          aberto, mas passar a flag deixa isso explicito no contrato dele. */}
+      {modal === "stats" && (
+        <Modal title="Servidor" size="lg" onClose={() => setModal(null)}>
+          <ServerStatsPanel open />
         </Modal>
       )}
 
