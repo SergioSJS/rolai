@@ -67,7 +67,7 @@ async def test_entrada_legada_sem_received_at_nao_quebra_snapshot(
                 "timestamp": "2026-01-01T00:00:00Z",
             },
         }
-        await redis_client.rpush(f"room:{code}:history", json.dumps(legada))  # type: ignore[misc]
+        await redis_client.rpush(f"room:{code}:history", json.dumps(legada))
         with client.websocket_connect(f"/rooms/{code}?name=Bia") as ws:
             snapshot = next_event(ws)
         assert len(snapshot["history"]) == 1
