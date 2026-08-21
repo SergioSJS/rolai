@@ -70,6 +70,12 @@ async def read_stats(request: Request) -> dict[str, object]:
     # proprio (que dessincroniza quando uma conexao cai sem passar pelo
     # finally).
     active_rooms = int(await request.app.state.redis.scard(ACTIVE_ROOMS_KEY))
+    # Uma sala aparece nos DOIS mapas (room_ws faz setdefault em ambos ao
+    # admitir qualquer conexao), entao somar os tamanhos contava a mesma sala
+    # duas vezes. Uniao das chaves com gente dentro, ignorando mapa vazio.
+    rooms_with_someone = {code for code, members in connections.items() if members} | {
+        code for code, members in spectators.items() if members
+    }
     return {
         "uptime_seconds": stats.uptime_seconds(),
         "rooms": {
@@ -79,7 +85,7 @@ async def read_stats(request: Request) -> dict[str, object]:
         "connections": {
             "players_now": sum(len(v) for v in connections.values()),
             "spectators_now": sum(len(v) for v in spectators.values()),
-            "rooms_with_someone": len(connections) + len(spectators),
+            "rooms_with_someone": len(rooms_with_someone),
             "players_since_boot": stats.ws_opened_players,
             "spectators_since_boot": stats.ws_opened_spectators,
         },

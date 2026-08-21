@@ -508,13 +508,16 @@ async def room_ws(
         if spectator:
             current_spectators = _room_dict(websocket.app.state.room_spectators, code)
             current_spectators.pop(member_id, None)
-            if not current_spectators:
-                websocket.app.state.room_spectators.pop(code, None)
         else:
             current_connections = _room_dict(websocket.app.state.room_connections, code)
             current_connections.pop(member_id, None)
-            if not current_connections:
-                websocket.app.state.room_connections.pop(code, None)
+        # Admitir uma conexao cria a entrada da sala nos DOIS mapas
+        # (setdefault la em cima), entao limpar so o mapa do proprio papel
+        # deixava um dict vazio pendurado pra sempre no outro.
+        for mapa in (websocket.app.state.room_connections, websocket.app.state.room_spectators):
+            if code in mapa and not mapa[code]:
+                mapa.pop(code, None)
+        if not spectator:
             await store.remove_member(code, member_id)
             if current_connections:
                 await _broadcast(
